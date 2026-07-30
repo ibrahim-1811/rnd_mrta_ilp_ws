@@ -7,3 +7,16 @@ __pycache__/
 data/raw/
 data/processed/
 data/results/
+
+# ROS 2 / colcon build artifacts
+build/
+install/
+log/
+
+# Old workspace being migrated (to be removed later)
+ilp_ws/
+ilp_ws.zip
+*.zip
+
+# Generated experiment output
+Mrta_experiments/

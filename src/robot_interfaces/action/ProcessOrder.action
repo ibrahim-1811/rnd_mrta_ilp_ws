@@ -1,0 +1,14 @@
+# ProcessOrder.action
+
+# Goal
+int32 order_id
+Product[] product_list
+---
+# Result
+bool success
+string message
+---
+# Feedback
+int32 order_id
+string status  # "Pending", "Processing", "Completed", "Failed"
+float32 progress  # 0.0 to 1.0
