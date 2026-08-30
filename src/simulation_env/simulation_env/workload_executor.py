@@ -38,7 +38,7 @@ from simulation_env.fleet_engine import EventType, FleetSimulationEngine
 from simulation_env.grid_robot import GridRobotStatus
 from simulation_env.mapf import MapfFailure, TimedReservations
 from simulation_env.mapf_planner import MapfMissionPlanner, timing
-from simulation_env.mission_planner import RouteCache, plan_from_cell
+from mrta_core.warehouse_routing import RouteCache, plan_from_cell
 
 
 # An order visits at most three shelves and one drop-off.

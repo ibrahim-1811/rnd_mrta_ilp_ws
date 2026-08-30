@@ -23,13 +23,11 @@ setup(
     zip_safe=True,
     maintainer='Mohammad Ibrahim Memon',
     maintainer_email='immemon1811@gmail.com',
-    description='Headless grid-based warehouse simulator (A* motion + congestion).',
+    description='Grid warehouse fleet execution and Gazebo visualization.',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'mock_fleet_manager = simulation_env.mock_fleet_manager:main',
-            'mission_executor = simulation_env.mission_executor:main',
             'fleet_node = simulation_env.fleet_node:main',
         ],
     },

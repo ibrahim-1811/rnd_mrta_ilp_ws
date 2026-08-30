@@ -1,6 +1,6 @@
 """Customer orders loaded from CSV.
 
-Pure data plus a focused loader: no ROS, so both ``shared_memory_node``
+Pure data plus a focused loader with no ROS dependency
 (which owns order state) and ``simulation_env`` (which executes it) can
 share one definition.
 

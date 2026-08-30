@@ -1,8 +1,0 @@
-# srv/GetOrderStates.srv
-#
-# Query the shared-memory order registry.
-# Leave status_filter empty to get every order.
-
-string status_filter
----
-OrderState[] orders

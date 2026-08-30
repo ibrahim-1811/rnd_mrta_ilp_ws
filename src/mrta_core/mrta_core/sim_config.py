@@ -2,7 +2,7 @@
 
 One YAML file is authoritative for map, fleet, service durations,
 orders and Gazebo. Kept here in ``mrta_core`` -- plain Python, no ROS --
-so ``shared_memory_node`` and ``simulation_env`` read the same file
+so the workload and simulation components read the same file
 through the same code instead of each carrying its own constants.
 """
 

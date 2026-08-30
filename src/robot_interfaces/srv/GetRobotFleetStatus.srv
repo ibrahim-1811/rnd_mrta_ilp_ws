@@ -1,4 +1,0 @@
-# srv/GetRobotFleetStatus.srv
----
-# Response
-RobotStatus[] robot_status_list

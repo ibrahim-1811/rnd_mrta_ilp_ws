@@ -3,17 +3,11 @@
 <package format="3">
   <name>task_management</name>
   <version>0.1.0</version>
-  <description>Core MRTA orchestration: online task manager, allocation strategies
-  (grid-aware, physics cost model), trace/metrics loggers, and the seeded order
-  generator.</description>
+  <description>Batch MRTA allocation strategies and grid-aware decision features.</description>
   <maintainer email="immemon1811@gmail.com">Mohammad Ibrahim Memon</maintainer>
   <license>Apache-2.0</license>
 
-  <depend>rclpy</depend>
-  <depend>robot_interfaces</depend>
   <depend>mrta_core</depend>
-  <depend>geometry_msgs</depend>
-  <depend>std_msgs</depend>
 
   <test_depend>python3-pytest</test_depend>
 

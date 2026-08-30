@@ -38,7 +38,7 @@ from mrta_core.warehouse_map import WarehouseMap, ZoneType
 
 from simulation_env.execution_buffer import RollingExecutionBuffer
 from simulation_env.grid_robot import GridRobot, GridRobotStatus
-from simulation_env.mission_planner import MissionPlan
+from mrta_core.warehouse_routing import MissionPlan
 from simulation_env.mapf import MOVE, RETREAT, SERVICE, WAIT
 from simulation_env.reservations import EDGE, VERTEX, ReservationTable
 

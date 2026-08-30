@@ -5,7 +5,7 @@ station, mirrors the poses into Gazebo once, and publishes the whole
 fleet on /mrta/robot_states at a configured rate.
 
 State is owned by GridRobot and is never read back from Gazebo.
-Order execution is not started here.
+The selected FIFO/MRTA workload is executed here.
 """
 
 from time import perf_counter, sleep
@@ -20,7 +20,6 @@ from rclpy.qos import (
 )
 
 from robot_interfaces.msg import RobotState, RobotStateArray
-from robot_interfaces.srv import UpdateOrderState
 
 from mrta_core.order_queue import OrderQueue
 from mrta_core.sim_config import load_sim_config
@@ -30,11 +29,7 @@ from simulation_env.fleet import build_fleet, home_stations
 from simulation_env.grid_robot import GridRobotStatus
 from simulation_env.workload_executor import WorkloadExecutor
 from simulation_env.fleet_engine import FleetSimulationEngine
-from simulation_env.mission_planner import (
-    plan_return_to_zone,
-    plan_zone_mission,
-    service_cells,
-)
+from mrta_core.warehouse_routing import plan_return_to_zone, service_cells
 from simulation_env.gazebo_bridge import (
     DEFAULT_ROBOT_Z,
     FleetPoseSink,
@@ -54,12 +49,6 @@ DEFAULT_CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
 # How much of the FIFO workload to echo at startup.
 PREVIEW_ORDERS = 18
 
-# Two non-conflicting test missions on opposite sides of the
-# warehouse. A harness for validating the clock, not an allocator.
-DEMO_MISSIONS = {
-    "robot_001": ["staging_001", "shelf_001", "dropoff_001"],
-    "robot_010": ["staging_010", "shelf_028", "dropoff_011"],
-}
 
 
 class FleetNode(Node):
@@ -85,8 +74,6 @@ class FleetNode(Node):
         self.declare_parameter(
             "gazebo_playback_hz", DEFAULT_PLAYBACK_HZ
         )
-        self.declare_parameter("run_demo_missions", False)
-        self.declare_parameter("run_mapf_demo", False)
         self.declare_parameter("load_orders", False)
         self.declare_parameter("run_workload", False)
         self.declare_parameter("strategy", "nearest_astar")
@@ -103,8 +90,6 @@ class FleetNode(Node):
         self.publish_hz = float(get("publish_hz"))
         self.wait_for_gazebo = float(get("wait_for_gazebo"))
         self.gazebo_playback_hz = float(get("gazebo_playback_hz"))
-        self.run_demo = bool(get("run_demo_missions"))
-        self.run_mapf = bool(get("run_mapf_demo"))
         self.load_orders = bool(get("load_orders"))
         self.run_workload = bool(get("run_workload"))
         self.strategy_name = str(get("strategy"))
@@ -136,13 +121,6 @@ class FleetNode(Node):
             qos,
         )
 
-        # Order lifecycle is owned by shared_memory_node; this node
-        # reports transitions to it and keeps no second copy.
-        self.order_client = (
-            self.create_client(UpdateOrderState, "/update_order_state")
-            if self.run_workload
-            else None
-        )
 
         self.warehouse = load_warehouse_xlsx(config.map_path)
 
@@ -163,11 +141,7 @@ class FleetNode(Node):
 
         self.publish_fleet()
 
-        if self.run_mapf:
-            self.run_mapf_demo()
-        elif self.run_demo:
-            self.run_concurrent_demo()
-        elif self.run_workload and self.orders is not None:
+        if self.run_workload and self.orders is not None:
             self.run_order_workload()
 
         period = 1.0 / max(self.publish_hz, 1e-6)
@@ -395,200 +369,6 @@ class FleetNode(Node):
 
         self.states_pub.publish(msg)
 
-    # -- concurrent execution ---------------------------
-
-    def run_concurrent_demo(self) -> None:
-        """Drive two robots on the shared clock, live."""
-
-        config = self.config
-
-        by_id = {r.robot_id: r for r in self.robots}
-
-        engine = FleetSimulationEngine(
-            warehouse=self.warehouse,
-            resolution=config.resolution_m,
-            service_seconds={
-                ZoneType.SHELF: config.shelf_pick_s,
-                ZoneType.DROPOFF: config.dropoff_s,
-            },
-            on_advance=self.on_advance,
-            on_tick=self.on_tick,
-            on_mission_complete=self.park_policy,
-        )
-
-        self.engine = engine
-
-        for robot in self.robots:
-            engine.add_robot(robot)
-
-        print()
-        print("=" * 62)
-        print("CONCURRENT MISSIONS (clock validation harness)")
-        print("=" * 62)
-
-        for robot_id, zones in DEMO_MISSIONS.items():
-            plan = plan_zone_mission(self.warehouse, zones)
-            engine.assign_mission(robot_id, plan)
-            print(f"{robot_id}: {' -> '.join(zones)}")
-
-        print()
-
-        wall_start = perf_counter()
-
-        engine.run()
-
-        wall = perf_counter() - wall_start
-
-        print()
-        print("=" * 62)
-        print("CONCURRENT FLEET SIMULATION")
-        print("=" * 62)
-        print()
-        print(f"global simulated time : {engine.sim_time:.4f} s")
-        print(f"wall time             : {wall:.2f} s")
-        print()
-
-        for robot_id in DEMO_MISSIONS:
-            robot = by_id[robot_id]
-            print(f"{robot_id}:")
-            print(f"  travel distance : {robot.distance_m:.1f} m")
-            print(f"  travel time     : {robot.travel_time_s:.4f} s")
-            print(f"  service time    : {robot.service_time_s:.4f} s")
-            print(
-                f"  completion time : "
-                f"{engine.completion_time(robot_id):.4f} s"
-            )
-            parked = engine.parked_time(robot_id)
-            print(
-                "  parked at       : "
-                + (f"{parked:.4f} s" if parked is not None
-                   else "did not park")
-                + f"  ({self.homes[robot_id]})"
-            )
-            print(f"  final cell      : {robot.cell}")
-
-        idle = len(self.robots) - len(DEMO_MISSIONS)
-
-        print()
-        print("fleet:")
-        print(f"  robots              : {len(self.robots)}")
-        print(f"  robots executed     : {len(DEMO_MISSIONS)}")
-        print(f"  robots idle         : {idle}")
-        print(f"  events processed    : {engine.processed}")
-        print()
-        print("[OK] one global clock")
-        print("[OK] concurrent moves share timestamps")
-        print("[OK] service overlaps other robot movement")
-        print("[OK] deterministic event ordering")
-        print("[OK] ROS states use global simulation timestamp")
-        print()
-
-    def run_mapf_demo(self) -> None:
-        """18 robots crossing the warehouse, planned with MAPF."""
-
-        from simulation_env.mapf_demo import plan_scenario
-
-        config = self.config
-
-        print()
-        print("=" * 62)
-        print("18-ROBOT MAPF CROSSING SCENARIO")
-        print("=" * 62)
-
-        planned = perf_counter()
-
-        by_id, homes, goals, missions, planner, plan = plan_scenario(
-            config, self.warehouse
-        )
-
-        plan_wall = perf_counter() - planned
-
-        if plan.failures:
-            for robot_id, reason in sorted(plan.failures.items()):
-                print(f"  UNPLANNED {robot_id}: {reason}")
-
-        # Reuse the already-placed fleet objects so Gazebo and ROS
-        # keep reporting the same robots.
-        live = {r.robot_id: r for r in self.robots}
-
-        engine = FleetSimulationEngine(
-            warehouse=self.warehouse,
-            resolution=config.resolution_m,
-            service_seconds={
-                ZoneType.SHELF: config.shelf_pick_s,
-                ZoneType.DROPOFF: config.dropoff_s,
-            },
-            on_advance=self.on_advance,
-            on_tick=self.on_tick,
-        )
-
-        self.engine = engine
-
-        if self.use_gazebo:
-            self.playback = FleetTrajectoryPlayback(
-                trajectories=plan.trajectories,
-                resolution=self.resolution,
-                z=self.robot_z,
-                frame_hz=self.gazebo_playback_hz,
-            )
-
-        for robot in self.robots:
-            engine.add_robot(robot)
-
-        for robot_id in sorted(plan.trajectories):
-            live[robot_id].static_distance_m = by_id[
-                robot_id
-            ].static_distance_m
-            engine.assign_trajectory(
-                robot_id, plan.trajectories[robot_id]
-            )
-
-        print(
-            f"planned {len(plan.trajectories)}/{len(self.robots)} "
-            f"robots in {plan_wall:.3f}s, "
-            f"{plan.expansions} expansions"
-        )
-        print()
-
-        wall_start = perf_counter()
-
-        engine.run()
-
-        wall = perf_counter() - wall_start
-
-        distance = sum(r.distance_m for r in self.robots)
-        static = sum(r.static_distance_m for r in self.robots)
-        waiting = sum(r.waiting_time_s for r in self.robots)
-
-        print()
-        print("=" * 62)
-        print("MAPF SUMMARY")
-        print("=" * 62)
-        print(f"robots                : {len(self.robots)}")
-        print(f"makespan              : {engine.sim_time:.4f} s")
-        print(f"total distance        : {distance:.1f} m")
-        print(f"static shortest total : {static:.1f} m")
-        print(f"traffic overhead      : {distance - static:.1f} m")
-        print(f"total actual waiting  : {waiting:.4f} s")
-        print(f"space-time expansions : {plan.expansions}")
-        print(
-            f"replans               : "
-            f"{sum(r.replan_count for r in self.robots)}"
-        )
-        print(f"MAPF planning runtime : {plan_wall:.3f} s")
-        print(f"wall time (playback)  : {wall:.2f} s")
-        print()
-        for robot in self.robots:
-            done = engine.completion_time(robot.robot_id)
-            print(
-                f"  {robot.robot_id}  {homes[robot.robot_id]:<12s}"
-                f"-> {goals[robot.robot_id]:<12s}"
-                f"{robot.distance_m:>6.1f}m "
-                f"wait {robot.waiting_time_s:>6.3f}s "
-                f"done {done:.3f}s"
-            )
-        print()
-
     def park_zone_for(self, robot_id: str) -> str | None:
         """Where this robot parks when it has nothing to do."""
 
@@ -648,9 +428,9 @@ class FleetNode(Node):
     def load_workload(self) -> OrderQueue | None:
         """Load the configured deterministic FIFO workload.
 
-        Order *state* is owned by shared_memory_node; this is the
-        queue the executor needs locally so it never has to ask a
-        service what work exists. Every order is loaded PENDING.
+        The OrderQueue is the authoritative workload state.
+        Every configured order is loaded PENDING in deterministic FIFO
+        sequence.
         """
 
         try:
@@ -809,26 +589,13 @@ class FleetNode(Node):
     def announce_order_status(
         self, order_id: str, status, sim_time: float, robot_id: str
     ) -> None:
-        """Mirror one order transition into shared memory."""
+        """Report one order lifecycle transition."""
 
         if status.value == "COMPLETED":
             print(
                 f"  t={sim_time:8.3f}  DONE    {robot_id} "
                 f"completed {order_id}"
             )
-
-        if self.order_client is None:
-            return
-
-        request = UpdateOrderState.Request()
-        request.order_id = order_id
-        request.status = status.value
-        request.assigned_robot = robot_id
-        request.sim_time = float(sim_time)
-
-        # Fire and forget: shared memory owns the state, but the
-        # simulation clock must never wait on a service round trip.
-        self.order_client.call_async(request)
 
     def report_workload(self, executor, result, wall: float) -> None:
 

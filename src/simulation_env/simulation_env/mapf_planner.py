@@ -26,7 +26,7 @@ from simulation_env.mapf import (
     Trajectory,
     frac_gcd,
 )
-from simulation_env.mission_planner import (
+from mrta_core.warehouse_routing import (
     MissionPlan,
     navigation_grid,
     service_cells,

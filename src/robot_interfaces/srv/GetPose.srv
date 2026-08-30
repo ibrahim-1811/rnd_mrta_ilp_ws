@@ -1,4 +1,0 @@
-# srv/GetPose.srv
----
-# Response
-geometry_msgs/Pose pose

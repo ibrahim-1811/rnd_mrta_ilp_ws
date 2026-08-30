@@ -3,8 +3,7 @@
 <package format="3">
   <name>simulation_env</name>
   <version>0.1.0</version>
-  <description>Headless grid-based warehouse simulator: robots move on a shared
-  WorldGrid via A*, with live occupancy-driven congestion and a battery model.</description>
+  <description>Grid warehouse fleet execution and Gazebo visualization.</description>
   <maintainer email="immemon1811@gmail.com">Mohammad Ibrahim Memon</maintainer>
   <license>Apache-2.0</license>
 
@@ -12,9 +11,6 @@
   <depend>robot_interfaces</depend>
   <depend>mrta_core</depend>
   <depend>task_management</depend>
-  <depend>geometry_msgs</depend>
-  <depend>std_msgs</depend>
-  <depend>std_srvs</depend>
 
   <exec_depend>gazebo_fleet_pose_transport</exec_depend>
 

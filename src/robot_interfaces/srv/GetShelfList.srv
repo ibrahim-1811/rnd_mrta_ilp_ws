@@ -1,4 +1,0 @@
-# srv/GetShelfList.srv
----
-# Response
-ShelfStatus[] shelf_status_list

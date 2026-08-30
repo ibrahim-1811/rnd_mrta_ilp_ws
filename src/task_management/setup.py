@@ -19,15 +19,8 @@ setup(
     zip_safe=True,
     maintainer='Mohammad Ibrahim Memon',
     maintainer_email='immemon1811@gmail.com',
-    description='MRTA task manager, allocation strategies, loggers, order generator.',
+    description='Batch MRTA allocation strategies and grid-aware decision features.',
     license='Apache-2.0',
     tests_require=['pytest'],
-    entry_points={
-        'console_scripts': [
-            'task_manager_node = task_management.task_manager:main',
-            'ilp_dataset_logger = task_management.ilp_dataset_logger:main',
-            'metrics_logger = task_management.metrics_logger:main',
-            'order_generator = task_management.order_generator:main',
-        ],
-    },
+    entry_points={'console_scripts': []},
 )
