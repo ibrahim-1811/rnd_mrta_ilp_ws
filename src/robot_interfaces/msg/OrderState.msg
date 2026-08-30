@@ -10,9 +10,6 @@
 
 string order_id
 
-float64 release_time
-float64 deadline
-
 string dropoff_id
 
 string status

@@ -32,7 +32,8 @@ class SimConfig:
     orders_mode: str
 
     start_zone: str
-    return_to_start_when_idle: bool
+    park_when_idle: bool
+    park_zone_mode: str
 
     deterministic: bool
     seed: int
@@ -145,9 +146,8 @@ def load_sim_config(path: str | Path) -> SimConfig:
         orders_path=orders_path,
         orders_mode=str(orders.get("mode", "replay")),
         start_zone=str(mission.get("start_zone", "collection_001")),
-        return_to_start_when_idle=bool(
-            mission.get("return_to_start_when_idle", True)
-        ),
+        park_when_idle=bool(mission.get("park_when_idle", True)),
+        park_zone_mode=str(mission.get("park_zone_mode", "home")),
         deterministic=bool(simulation.get("deterministic", True)),
         seed=int(simulation.get("seed", 42)),
         visualization_time_scale=float(

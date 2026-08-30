@@ -54,7 +54,7 @@ from simulation_env.mission_planner import (
     plan_zone_mission,
     service_cells,
 )
-from simulation_env.order_assignment import FirstReleasedAssigner
+from simulation_env.order_assignment import FirstPendingAssigner
 
 
 DEFAULT_CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
@@ -246,7 +246,7 @@ class MissionExecutor(Node):
         self.wait_for_gazebo = float(get("wait_for_gazebo"))
         self.wait_for_shared_memory = float(get("wait_for_shared_memory"))
 
-        self.assigner = FirstReleasedAssigner()
+        self.assigner = FirstPendingAssigner()
 
         # Depth 1: hand a late monitor the current state, not a
         # backlog of stale ones.
@@ -327,8 +327,6 @@ class MissionExecutor(Node):
             orders.append(
                 Order(
                     order_id=state.order_id,
-                    release_time=state.release_time,
-                    deadline=state.deadline,
                     dropoff_id=state.dropoff_id,
                     items=items,
                     status=OrderStatus(state.status),
@@ -687,8 +685,6 @@ class MissionExecutor(Node):
         for order in orders:
             print()
             print(f"  {order.order_id}")
-            print(f"    release  = {order.release_time}")
-            print(f"    deadline = {order.deadline}")
             print(f"    dropoff  = {order.dropoff_id}")
             print(f"    status   = {order.status.value}")
             print("    items:")
@@ -743,13 +739,13 @@ class MissionExecutor(Node):
 
         if assignment is None:
             print()
-            print("  ERROR: no order released at t=0")
+            print("  ERROR: the workload holds no PENDING order")
             return 6
 
         order, robot_id = assignment
 
         print()
-        print(f"ORDER RELEASED: {order.order_id}")
+        print(f"ORDER SELECTED: {order.order_id}")
 
         self.report_order(
             order.order_id,
@@ -822,7 +818,7 @@ class MissionExecutor(Node):
 
         self.current_order = ""
 
-        if config.return_to_start_when_idle:
+        if config.park_when_idle:
 
             self.target = config.start_zone
 
@@ -857,13 +853,16 @@ class MissionExecutor(Node):
 
         execution_time = completion_time - start_time
 
-        lateness = max(0.0, completion_time - order.deadline)
-
-        success = lateness == 0.0
-
         final = self.fetch_orders()
 
         final_status = {o.order_id: o.status.value for o in final}
+
+        # With no deadline, success is simply whether the order
+        # reached COMPLETED in shared memory.
+        success = (
+            final_status.get(order.order_id)
+            == OrderStatus.COMPLETED.value
+        )
 
         print()
         print("=" * 78)
@@ -871,11 +870,8 @@ class MissionExecutor(Node):
         print("=" * 78)
         print(f"  order_id              : {order.order_id}")
         print(f"  assigned_robot        : {robot_id}")
-        print(f"  release_time          : {order.release_time:.3f} s")
         print(f"  start_time            : {start_time:.3f} s")
         print(f"  completion_time       : {completion_time:.3f} s")
-        print(f"  deadline              : {order.deadline:.3f} s")
-        print(f"  lateness              : {lateness:.3f} s")
         print(f"  travel_distance       : {order_distance:.1f} m")
         print(f"  travel_time           : {order_travel:.3f} s")
         print(f"  pickup_service_time   : {pickup_time:.3f} s")

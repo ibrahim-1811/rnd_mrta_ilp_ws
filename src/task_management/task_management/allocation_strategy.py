@@ -14,11 +14,30 @@ C_ij = l1 T + l2 D + l3 G + l4 E + l5 W - l6 q via task_management.features.task
 
 Batch/optimization (hungarian, genetic) and symbolic/learned (prolog, ILP variants)
 allocators are added in later passes.
+
+A second, batch interface lives at the bottom of this module:
+:class:`BatchAllocationStrategy` pairs a set of *available robots* with a set of
+*eligible FIFO orders* in one decision, which is what a warehouse fleet actually
+needs -- eighteen robots freeing up over time, each wanting the best of several
+multi-shelf orders. The online selectors above answer a narrower question (one
+task, which robot) and are kept unchanged.
+
+Both interfaces share one rule: allocation decides only *which robot takes which
+order*. Which orders are eligible at all is FIFO, owned by
+``mrta_core.order_queue.OrderQueue``, and no strategy may reach past it.
 """
 
 import random
+from dataclasses import dataclass
 
-from task_management.features import Candidate, CostWeights, task_cost
+from task_management.features import (
+    Candidate,
+    CostWeights,
+    OrderCandidate,
+    OrderRoute,
+    build_order_candidates,
+    task_cost,
+)
 
 STRATEGIES: dict[str, type["AllocationStrategy"]] = {}
 
@@ -263,3 +282,170 @@ class AuctionAllocator(_AuctionBase):
     @property
     def _weights(self) -> CostWeights:
         return self.cost_weights
+
+
+# ======================================================================
+# Batch allocation: available robots x eligible FIFO orders
+# ======================================================================
+
+
+@dataclass(frozen=True)
+class OrderAssignment:
+    """One robot-order pairing, with the route the allocator predicted."""
+
+    robot_id: str
+    order_id: str
+    cost: float          # C_static(r, o), metres
+    route: OrderRoute    # includes the chosen shelf visiting order
+
+    @property
+    def zone_sequence(self) -> tuple[str, ...]:
+        """Zones the executor must drive, in order."""
+        return self.route.zone_sequence
+
+
+BATCH_STRATEGIES: dict[str, type["BatchAllocationStrategy"]] = {}
+
+
+def register_batch(cls):
+    BATCH_STRATEGIES[cls.name] = cls
+    return cls
+
+
+def get_batch_strategy(name: str, **kwargs) -> "BatchAllocationStrategy":
+    key = name.lower()
+    if key not in BATCH_STRATEGIES:
+        raise KeyError(
+            f'unknown batch strategy {name!r}; '
+            f'known: {sorted(BATCH_STRATEGIES)}'
+        )
+    return BATCH_STRATEGIES[key](**kwargs)
+
+
+class BatchAllocationStrategy:
+    """Pairs available robots with eligible orders.
+
+    One call is one allocation decision. The caller supplies:
+
+      warehouse       grid + zone state, for grid-aware costing
+      robots          (robot_id, cell) for every AVAILABLE robot
+      orders          the eligible FIFO batch, already capped at
+                      min(available_robots, pending_orders)
+      fifo_position   order_id -> FIFO index, for deterministic ties
+
+    and gets back a list of :class:`OrderAssignment`. A strategy may
+    return fewer assignments than robots (an unreachable order defers),
+    but never more than one order per robot or one robot per order, and
+    never an order outside ``orders``.
+    """
+
+    name = 'batch_base'
+
+    def __init__(self, seed: int = 0, cost_weights: CostWeights | None = None):
+        self.seed = seed
+        self.cost_weights = cost_weights or CostWeights()
+        self.reset()
+
+    def reset(self):
+        """Reset any per-trial internal state."""
+
+    def score(
+        self, warehouse, robots, orders, fifo_position, cache=None
+    ) -> list[OrderCandidate]:
+        """Cost every (robot, order) pair. Shared by every strategy."""
+        return build_order_candidates(
+            warehouse, robots, orders, fifo_position, cache
+        )
+
+    def assign(
+        self, warehouse, robots, orders, fifo_position, cache=None
+    ) -> list[OrderAssignment]:
+        raise NotImplementedError
+
+    def explain(self, assignments: list[OrderAssignment]) -> str:
+        if not assignments:
+            return f'{self.name}: nothing assignable -> defer'
+        return f'{self.name}: {len(assignments)} assignment(s)'
+
+
+@register_batch
+class NearestAStarAllocator(BatchAllocationStrategy):
+    """Greedy minimum static-A*-cost pairing.
+
+    C_static(r, o) is the shortest static grid route taking robot r
+    from where it stands, through every shelf of order o in the best
+    visiting order, to o's drop-off. Grid distance through the aisle
+    network -- never Euclidean, never a straight line through racking.
+
+    Pairing is greedy and deterministic:
+
+      1. take the cheapest remaining (robot, order) pair
+      2. assign it
+      3. drop that robot and that order
+      4. repeat until one side runs out
+
+    Greedy is not optimal -- the Hungarian assignment would be, and is
+    a later milestone. It is stated here as the baseline it is.
+
+    Ties break on (cost, order FIFO position, robot_id), so an equal
+    cost always resolves to the older order, and then to the
+    lower-numbered robot. Two runs of the same workload therefore
+    produce byte-identical assignments.
+    """
+
+    name = 'nearest_astar'
+
+    def assign(self, warehouse, robots, orders, fifo_position, cache=None):
+
+        candidates = [
+            candidate
+            for candidate in self.score(
+                warehouse, robots, orders, fifo_position, cache
+            )
+            if candidate.reachable
+        ]
+
+        # One total order over every pair, so the greedy sweep below is
+        # fully determined by the data and never by dict iteration.
+        candidates.sort(
+            key=lambda c: (c.cost, c.fifo_position, c.robot_id)
+        )
+
+        taken_robots: set[str] = set()
+        taken_orders: set[str] = set()
+
+        assignments: list[OrderAssignment] = []
+
+        for candidate in candidates:
+
+            if candidate.robot_id in taken_robots:
+                continue
+
+            if candidate.order_id in taken_orders:
+                continue
+
+            taken_robots.add(candidate.robot_id)
+            taken_orders.add(candidate.order_id)
+
+            assignments.append(
+                OrderAssignment(
+                    robot_id=candidate.robot_id,
+                    order_id=candidate.order_id,
+                    cost=candidate.cost,
+                    route=candidate.route,
+                )
+            )
+
+        # Report in FIFO order: the oldest order first, whichever robot
+        # happened to win it.
+        assignments.sort(key=lambda a: fifo_position[a.order_id])
+
+        return assignments
+
+    def explain(self, assignments):
+        if not assignments:
+            return f'{self.name}: no reachable robot-order pair -> defer'
+        return ', '.join(
+            f'{a.robot_id}->{a.order_id} ({a.cost:.1f} m)'
+            for a in assignments
+        )

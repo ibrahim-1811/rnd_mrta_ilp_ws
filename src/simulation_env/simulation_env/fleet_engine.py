@@ -14,23 +14,38 @@ accumulation and silently stop being concurrent.
 Concurrency rule: events sharing a timestamp advance the clock once.
 Two 2/3 s moves starting together take the clock 0 -> 2/3, never 4/3.
 
+Events sharing a timestamp are applied in two phases: every robot
+first releases what it is leaving, and only then does any robot claim
+what it is entering. Without that split, a robot whose event happens
+to be handled first sees a cell that a simultaneous robot is about to
+vacate as still occupied, and reports a conflict that does not exist.
+
+Every move is gated by a ReservationTable. A robot that cannot move
+safely becomes WAITING, keeps its cell, and is retried whenever the
+occupancy changes -- in sorted robot order, so arbitration between
+simultaneous conflicts is reproducible.
+
 Nothing here sleeps, publishes or talks to Gazebo. Callbacks let an
 owner observe; observation never advances the clock.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
 from heapq import heappop, heappush
 
 from mrta_core.warehouse_map import WarehouseMap, ZoneType
 
+from simulation_env.execution_buffer import RollingExecutionBuffer
 from simulation_env.grid_robot import GridRobot, GridRobotStatus
 from simulation_env.mission_planner import MissionPlan
+from simulation_env.mapf import MOVE, RETREAT, SERVICE, WAIT
+from simulation_env.reservations import EDGE, VERTEX, ReservationTable
 
 
 class EventType(str, Enum):
     MOVE_COMPLETE = "MOVE_COMPLETE"
+    WAIT_COMPLETE = "WAIT_COMPLETE"
     SERVICE_COMPLETE = "SERVICE_COMPLETE"
     RETREAT_COMPLETE = "RETREAT_COMPLETE"
     MISSION_COMPLETE = "MISSION_COMPLETE"
@@ -63,6 +78,17 @@ class _Assignment:
     segment_index: int = 0
     retreating: bool = False
     completion_time: Fraction | None = None
+    # Parking runs are follow-up work, not the mission itself, so
+    # they must not overwrite the mission's completion time.
+    is_parking: bool = False
+
+
+class DeadlockError(RuntimeError):
+    """Every remaining robot is waiting for another. Nothing can move.
+
+    Reservations prevent collisions; they do not resolve deadlock.
+    Detecting it loudly beats silently ending a run early.
+    """
 
 
 class FleetSimulationEngine:
@@ -76,6 +102,7 @@ class FleetSimulationEngine:
         on_advance=None,
         on_tick=None,
         on_event=None,
+        on_mission_complete=None,
     ) -> None:
 
         self.warehouse = warehouse
@@ -98,15 +125,42 @@ class FleetSimulationEngine:
         # Called per individual event, for tracing.
         self.on_event = on_event
 
+        # Called when a robot finishes. Returning a MissionPlan sends
+        # it straight on, which is how the idle-parking policy works.
+        # Returning None leaves the robot idle where it stands. The
+        # policy lives in the caller, never in the clock.
+        self.on_mission_complete = on_mission_complete
+
         self.time = Fraction(0)
 
         self.robots: dict[str, GridRobot] = {}
         self.assignments: dict[str, _Assignment] = {}
+        self.mission_completion: dict[str, Fraction] = {}
+        self.park_completion: dict[str, Fraction] = {}
 
         self._queue: list = []
         self._seq = 0
 
         self.processed = 0
+
+        self.reservations = ReservationTable()
+
+        # robot_id -> (event kind it is waiting to schedule, since)
+        self._waiting: dict[str, tuple] = {}
+
+        # The complete timed trajectory remains owned by each rolling buffer;
+        # only a six-cell delivery window is exposed to execution.
+        self._trajectories: dict[str, RollingExecutionBuffer] = {}
+
+        # Robots that finished an action this timestamp and must pick
+        # their next one, once every release in the batch is applied.
+        self._pending: list = []
+
+        # Called when a planned move is refused at runtime. Must
+        # return a fresh Trajectory from the robot's current cell and
+        # the current time, or None to give up. Replanning, never a
+        # blind retry loop.
+        self.replanner = None
 
     # -- clock ------------------------------------------
 
@@ -151,8 +205,14 @@ class FleetSimulationEngine:
     def add_robot(self, robot: GridRobot) -> None:
         self.robots[robot.robot_id] = robot
         robot.set_sim_time(self.sim_time)
+        self.reservations.occupy(robot.cell, robot.robot_id, self.time)
 
-    def assign_mission(self, robot_id: str, plan: MissionPlan) -> None:
+    def assign_mission(
+        self,
+        robot_id: str,
+        plan: MissionPlan,
+        is_parking: bool = False,
+    ) -> None:
 
         robot = self.robots[robot_id]
 
@@ -162,9 +222,165 @@ class FleetSimulationEngine:
                 f"starts at {plan.path[0]}"
             )
 
-        self.assignments[robot_id] = _Assignment(plan=plan)
+        self.assignments[robot_id] = _Assignment(
+            plan=plan, is_parking=is_parking
+        )
 
         self._begin_segment(robot_id)
+
+    # -- MAPF trajectory execution ----------------------
+
+    ACTION_EVENT = {
+        MOVE: EventType.MOVE_COMPLETE,
+        RETREAT: EventType.RETREAT_COMPLETE,
+        WAIT: EventType.WAIT_COMPLETE,
+        SERVICE: EventType.SERVICE_COMPLETE,
+    }
+
+    def assign_trajectory(self, robot_id: str, trajectory) -> None:
+        """Execute a pre-planned timed path instead of a raw mission."""
+
+        robot = self.robots[robot_id]
+
+        if trajectory.start_cell != robot.cell:
+            raise ValueError(
+                f"{robot_id} is at {robot.cell} but its trajectory "
+                f"starts at {trajectory.start_cell}"
+            )
+
+        robot.planned_wait_time_s += float(trajectory.planned_wait)
+        robot.space_time_expansions += trajectory.expansions
+
+        self._trajectories[robot_id] = RollingExecutionBuffer(
+            trajectory, now=self.time
+        )
+
+        self._start_action(robot_id)
+
+    def _start_action(self, robot_id: str) -> None:
+
+        robot = self.robots[robot_id]
+
+        execution = self._trajectories[robot_id]
+        action = execution.current_action
+
+        if action is None:
+            self._schedule(
+                robot_id, EventType.MISSION_COMPLETE, Fraction(0)
+            )
+            return
+
+        delay = action.end - self.time
+
+        if delay < 0:
+            delay = Fraction(0)
+
+        if action.kind in (MOVE, RETREAT):
+
+            conflict = self.reservations.check_move(
+                robot_id, robot.cell, action.cell
+            )
+
+            if conflict is not None:
+                self._replan(robot_id, conflict)
+                return
+
+            self.reservations.begin_move(
+                robot_id,
+                robot.cell,
+                action.cell,
+                self.time,
+                delay,
+            )
+
+            robot.status = GridRobotStatus.MOVING
+
+        elif action.kind == WAIT:
+            # A planned wait: stationary, still holding its cell.
+            robot.status = GridRobotStatus.WAITING
+
+        elif action.kind == SERVICE:
+            zone_type = self.warehouse.zone_by_id(
+                action.zone
+            ).zone_type
+            robot.status = SERVICE_STATUS[zone_type]
+
+        self._schedule(
+            robot_id,
+            self.ACTION_EVENT[action.kind],
+            delay,
+            detail=action.zone,
+        )
+
+    def _replan(self, robot_id: str, conflict: str) -> None:
+        """The environment moved under a planned trajectory."""
+
+        robot = self.robots[robot_id]
+
+        if conflict == VERTEX:
+            robot.vertex_conflict_count += 1
+        elif conflict == EDGE:
+            robot.edge_conflict_count += 1
+
+        robot.replan_count += 1
+
+        if self.replanner is None:
+            raise RuntimeError(
+                f"{robot_id} hit a {conflict} conflict at "
+                f"{robot.cell} t={self.sim_time:.4f} and no "
+                f"replanner is configured"
+            )
+
+        trajectory = self.replanner(robot, self.time)
+
+        if trajectory is None:
+            raise DeadlockError(
+                f"{robot_id} could not be replanned from "
+                f"{robot.cell} at t={self.sim_time:.4f}"
+            )
+
+        self._trajectories[robot_id] = RollingExecutionBuffer(
+            trajectory, now=self.time
+        )
+
+        robot.space_time_expansions += trajectory.expansions
+        robot.planned_wait_time_s += float(trajectory.planned_wait)
+
+        self._start_action(robot_id)
+
+    def _advance_trajectory(self, event: Event) -> None:
+        """Apply one finished action. Claims happen later in the batch."""
+
+        robot = self.robots[event.robot_id]
+
+        execution = self._trajectories[event.robot_id]
+        action = execution.current_action
+
+        if action is None:
+            raise RuntimeError(
+                f"{event.robot_id} completed an action with an empty buffer"
+            )
+
+        duration = float(action.duration)
+
+        if action.kind in (MOVE, RETREAT):
+            source = robot.cell
+            robot.move_to(action.cell, float(self.resolution))
+            robot.book_travel(duration)
+            self.reservations.complete_move(
+                event.robot_id, source, robot.cell, self.time
+            )
+
+        elif action.kind == WAIT:
+            robot.book_wait(duration)
+
+        elif action.kind == SERVICE:
+            robot.book_service(duration, robot.status)
+
+        # Refill happens before phase two starts the next action.  It adds no
+        # event or delay, so consecutive cell waypoints remain continuous
+        # MOVING rather than becoming implicit stop commands.
+        execution.complete_current(self.time)
 
     # -- mission progression ----------------------------
 
@@ -188,11 +404,8 @@ class FleetSimulationEngine:
         if robot.finished:
             self._arrive(robot_id)
         else:
-            self._schedule(
-                robot_id,
-                EventType.MOVE_COMPLETE,
-                self._move_duration(robot),
-                detail=segment.to_zone,
+            self._try_move(
+                robot_id, EventType.MOVE_COMPLETE, segment.to_zone
             )
 
     def _arrive(self, robot_id: str) -> None:
@@ -222,9 +435,105 @@ class FleetSimulationEngine:
             detail=segment.to_zone,
         )
 
+    def _try_move(
+        self,
+        robot_id: str,
+        kind: EventType,
+        detail: str = "",
+    ) -> bool:
+        """Schedule one move if the reservation table allows it.
+
+        Returns False if the robot must wait. A waiting robot keeps
+        its cell, so it goes on blocking others, which is what makes
+        the guarantees hold.
+        """
+
+        robot = self.robots[robot_id]
+
+        source = robot.cell
+        target = robot.path[robot.path_index + 1]
+
+        conflict = self.reservations.check_move(
+            robot_id, source, target
+        )
+
+        if conflict is not None:
+
+            if conflict == VERTEX:
+                robot.vertex_conflict_count += 1
+            elif conflict == EDGE:
+                robot.edge_conflict_count += 1
+
+            if robot_id not in self._waiting:
+                robot.wait_event_count += 1
+                self._waiting[robot_id] = (kind, detail, self.time)
+
+            robot.status = GridRobotStatus.WAITING
+
+            return False
+
+        # Clearing a wait: bill the stationary time, not travel.
+        pending = self._waiting.pop(robot_id, None)
+
+        if pending is not None:
+            robot.book_wait(float(self.time - pending[2]))
+
+        duration = self._move_duration(robot)
+
+        self.reservations.begin_move(
+            robot_id, source, target, self.time, duration
+        )
+
+        robot.status = GridRobotStatus.MOVING
+
+        self._schedule(robot_id, kind, duration, detail=detail)
+
+        return True
+
+    def _retry_waiting(self) -> None:
+        """Wake blocked robots in a stable order.
+
+        Sorted by robot_id so that when several robots are freed by
+        the same event, the winner is always the same.
+        """
+
+        while True:
+
+            blocked = sorted(self._waiting)
+
+            if not blocked:
+                return
+
+            progressed = False
+
+            for robot_id in blocked:
+
+                if robot_id not in self._waiting:
+                    continue
+
+                kind, detail, _ = self._waiting[robot_id]
+
+                if self._try_move(robot_id, kind, detail):
+                    progressed = True
+
+            if not progressed:
+                return
+
     def _handle(self, event: Event) -> None:
 
         robot = self.robots[event.robot_id]
+
+        if event.robot_id in self._trajectories:
+
+            if event.kind is EventType.MISSION_COMPLETE:
+                robot.status = GridRobotStatus.IDLE
+                self.mission_completion[event.robot_id] = self.time
+                return
+
+            self._advance_trajectory(event)
+            self._pending.append((event.robot_id, event.kind))
+            return
+
         assignment = self.assignments.get(event.robot_id)
 
         if event.kind in (
@@ -233,26 +542,18 @@ class FleetSimulationEngine:
         ):
             duration = self._move_duration(robot)
 
+            source = robot.cell
+
             robot.advance_cell(float(self.resolution))
             robot.book_travel(float(duration))
 
-            if event.kind is EventType.RETREAT_COMPLETE:
-                assignment.segment_index += 1
-                self._begin_segment(event.robot_id)
+            self.reservations.complete_move(
+                event.robot_id, source, robot.cell, self.time
+            )
 
-            elif robot.finished:
-                self._arrive(event.robot_id)
-
-            else:
-                segment = assignment.plan.segments[
-                    assignment.segment_index
-                ]
-                self._schedule(
-                    event.robot_id,
-                    EventType.MOVE_COMPLETE,
-                    duration,
-                    detail=segment.to_zone,
-                )
+            # Deciding the next move is deferred so every release in
+            # this batch lands first.
+            self._pending.append((event.robot_id, event.kind))
 
         elif event.kind is EventType.SERVICE_COMPLETE:
 
@@ -269,23 +570,85 @@ class FleetSimulationEngine:
                 robot.status,
             )
 
-            # Back out one cell into the aisle.
             assignment.retreating = True
 
             robot.assign_path([robot.cell, segment.exit_cell])
 
-            self._schedule(
-                event.robot_id,
-                EventType.RETREAT_COMPLETE,
-                self._move_duration(robot),
-                detail=segment.to_zone,
-            )
+            self._pending.append((event.robot_id, event.kind))
 
         elif event.kind is EventType.MISSION_COMPLETE:
+
             robot.status = GridRobotStatus.IDLE
+
             assignment.completion_time = self.time
 
+            if assignment.is_parking:
+                self.park_completion[event.robot_id] = self.time
+                return
+
+            self.mission_completion[event.robot_id] = self.time
+
+            # No work left: the caller may send the robot home.
+            if self.on_mission_complete is None:
+                return
+
+            follow_up = self.on_mission_complete(robot)
+
+            if follow_up is not None:
+                self.assign_mission(
+                    event.robot_id, follow_up, is_parking=True
+                )
+
     # -- driving ----------------------------------------
+
+    def _continue_pending(self) -> None:
+        """Second phase: everyone picks their next action.
+
+        Sorted so that when two robots contend for the same freed
+        cell, the winner is always the same.
+        """
+
+        pending, self._pending = self._pending, []
+
+        for robot_id, kind in sorted(pending):
+
+            if robot_id in self._trajectories:
+                self._start_action(robot_id)
+                continue
+
+            assignment = self.assignments.get(robot_id)
+
+            if assignment is None:
+                continue
+
+            robot = self.robots[robot_id]
+
+            if kind is EventType.SERVICE_COMPLETE:
+                segment = assignment.plan.segments[
+                    assignment.segment_index
+                ]
+                self._try_move(
+                    robot_id,
+                    EventType.RETREAT_COMPLETE,
+                    segment.to_zone,
+                )
+
+            elif kind is EventType.RETREAT_COMPLETE:
+                assignment.segment_index += 1
+                self._begin_segment(robot_id)
+
+            elif robot.finished:
+                self._arrive(robot_id)
+
+            else:
+                segment = assignment.plan.segments[
+                    assignment.segment_index
+                ]
+                self._try_move(
+                    robot_id,
+                    EventType.MOVE_COMPLETE,
+                    segment.to_zone,
+                )
 
     def _stamp_all(self) -> None:
         """Every robot reports the one authoritative timestamp."""
@@ -327,6 +690,13 @@ class FleetSimulationEngine:
                 self.on_event(event)
             self._handle(event)
 
+        # Phase two: now that every release in this batch has landed,
+        # robots may claim what they are entering.
+        self._continue_pending()
+
+        # Occupancy changed, so blocked robots may now be able to go.
+        self._retry_waiting()
+
         self._stamp_all()
 
         if self.on_tick is not None:
@@ -348,15 +718,35 @@ class FleetSimulationEngine:
                     f"the simulation is probably looping"
                 )
 
+        if self._waiting:
+            stuck = ", ".join(
+                f"{rid}@{self.robots[rid].cell}"
+                for rid in sorted(self._waiting)
+            )
+            raise DeadlockError(
+                f"no events left but {len(self._waiting)} robot(s) "
+                f"still waiting at t={self.sim_time:.4f}: {stuck}"
+            )
+
     # -- reporting --------------------------------------
 
     def completion_time(self, robot_id: str) -> float | None:
-        assignment = self.assignments.get(robot_id)
+        """When the robot finished its mission, excluding parking."""
 
-        if assignment is None or assignment.completion_time is None:
-            return None
+        done = self.mission_completion.get(robot_id)
 
-        return float(assignment.completion_time)
+        return None if done is None else float(done)
+
+    def parked_time(self, robot_id: str) -> float | None:
+        """When the robot reached its park zone, if it parked."""
+
+        done = self.park_completion.get(robot_id)
+
+        return None if done is None else float(done)
+
+    def blocked_by_others(self, robot_id: str) -> frozenset:
+        """Cells currently held by other robots."""
+        return self.reservations.cells_held_by_others(robot_id)
 
     def busy_robots(self) -> list[str]:
         return [

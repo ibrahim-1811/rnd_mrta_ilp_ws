@@ -16,7 +16,12 @@ from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from simulation_env.fleet import build_fleet
 from simulation_env.fleet_engine import EventType, FleetSimulationEngine
 from simulation_env.grid_robot import GridRobotStatus
-from simulation_env.mission_planner import plan_zone_mission
+from simulation_env.mission_planner import (
+    plan_return_to_zone,
+    plan_zone_mission,
+    service_cells,
+)
+from simulation_env.fleet import home_stations
 
 
 CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
@@ -208,6 +213,58 @@ again_events, again_ticks = trace_of(again)
 check(
     again_events == events and again_ticks == ticks,
     "deterministic event ordering across identical runs",
+)
+
+# 11. idle robots go home, without corrupting mission metrics
+homes = home_stations(config, warehouse)
+
+
+parked = build(config, warehouse)
+
+
+def park(robot):
+    zone_id = homes[robot.robot_id]
+    home_cell = min(warehouse.zone_by_id(zone_id).cells)
+    if robot.cell == home_cell:
+        return None
+    # Parked robots are static obstacles: route around them.
+    blocked = service_cells(warehouse) | parked.blocked_by_others(
+        robot.robot_id
+    )
+    return plan_return_to_zone(
+        warehouse, robot.cell, zone_id,
+        from_label=robot.robot_id, occupied=blocked,
+    )
+
+
+parked.on_mission_complete = park
+trace_of(parked)
+
+check(
+    all(
+        parked.robots[r].cell
+        == min(warehouse.zone_by_id(homes[r]).cells)
+        for r in MISSIONS
+    ),
+    "idle robots return to their own park zone "
+    + ", ".join(f"{r}->{homes[r]}" for r in MISSIONS),
+)
+
+check(
+    all(
+        parked.completion_time(r) == engine.completion_time(r)
+        for r in MISSIONS
+    ),
+    "parking does not change mission completion time "
+    f"({engine.completion_time('robot_001'):.4f} s)",
+)
+
+check(
+    all(
+        parked.parked_time(r) > parked.completion_time(r)
+        for r in MISSIONS
+    ),
+    "park time is recorded separately and comes after completion",
 )
 
 rule("CONCURRENT FLEET SIMULATION")

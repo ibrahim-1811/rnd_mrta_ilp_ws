@@ -67,6 +67,22 @@ class GridRobot:
     travel_time_s: float = 0.0
     service_time_s: float = 0.0
 
+    # Time lost to reservation conflicts. Waiting is not travel: it
+    # adds no distance and no travel time.
+    waiting_time_s: float = 0.0
+    wait_event_count: int = 0
+    vertex_conflict_count: int = 0
+    edge_conflict_count: int = 0
+
+    # MAPF accounting. planned_wait_time_s is waiting the planner
+    # scheduled up front; waiting_time_s is what actually happened.
+    # static_distance_m is the free-running shortest path, kept apart
+    # so traffic overhead can be measured as the difference.
+    planned_wait_time_s: float = 0.0
+    static_distance_m: float = 0.0
+    space_time_expansions: int = 0
+    replan_count: int = 0
+
     def move_duration(self, resolution: float) -> float:
         """Simulated seconds for one grid edge. Pure."""
         return resolution / self.speed_mps
@@ -77,6 +93,14 @@ class GridRobot:
 
     def book_travel(self, duration_s: float) -> None:
         self.travel_time_s += duration_s
+
+    def book_wait(self, duration_s: float) -> None:
+        """Account for a stationary wait. No distance, no travel."""
+
+        if duration_s < 0.0:
+            raise ValueError("wait duration must not be negative")
+
+        self.waiting_time_s += duration_s
 
     def book_service(
         self,
@@ -93,32 +117,40 @@ class GridRobot:
         self.status = status
         self.service_time_s += duration_s
 
-    def advance_cell(self, resolution: float) -> Cell:
-        """Move one grid edge. State transition only, no time.
+    def move_to(self, cell: Cell, resolution: float) -> Cell:
+        """Move one grid edge to an explicit cell. No time.
 
-        Raises if the edge is not a Manhattan step.
+        Used when a MAPF trajectory, rather than a stored path, says
+        where the robot goes next.
         """
+
+        if (
+            abs(cell[0] - self.cell[0])
+            + abs(cell[1] - self.cell[1])
+        ) != 1:
+            raise ValueError(
+                f"non-Manhattan move {self.cell} -> {cell}"
+            )
+
+        self.cell = cell
+        self.distance_m += resolution
+        self.status = GridRobotStatus.MOVING
+
+        return self.cell
+
+    def advance_cell(self, resolution: float) -> Cell:
+        """Move one grid edge along the stored path. No time."""
 
         if self.finished:
             raise RuntimeError(
                 f"{self.robot_id} has no edge left to advance"
             )
 
-        current = self.path[self.path_index]
         next_cell = self.path[self.path_index + 1]
 
-        if (
-            abs(next_cell[0] - current[0])
-            + abs(next_cell[1] - current[1])
-        ) != 1:
-            raise ValueError(
-                f"non-Manhattan move {current} -> {next_cell}"
-            )
+        self.move_to(next_cell, resolution)
 
-        self.cell = next_cell
         self.path_index += 1
-        self.distance_m += resolution
-        self.status = GridRobotStatus.MOVING
 
         return self.cell
 

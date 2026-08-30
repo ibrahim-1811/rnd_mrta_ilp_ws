@@ -47,6 +47,16 @@ def generate_launch_description():
         DeclareLaunchArgument("headless", default_value="false"),
         DeclareLaunchArgument("run_mission", default_value="false"),
         DeclareLaunchArgument("demo", default_value="false"),
+        DeclareLaunchArgument("mapf", default_value="false"),
+        DeclareLaunchArgument("orders", default_value="false"),
+        # Allocation strategy for the order workload. Naming one
+        # implies orders:=true.
+        DeclareLaunchArgument(
+            "strategy", default_value="nearest_astar"
+        ),
+        # 0.0 keeps fleet.speed_mps from the YAML; any positive
+        # value overrides it for this run only.
+        DeclareLaunchArgument("speed", default_value="0.0"),
 
         # Authoritative dynamic state: orders, shelves, fleet cache.
         Node(
@@ -89,6 +99,11 @@ def generate_launch_description():
                 "config_file": config_file,
                 "wait_for_gazebo": 60.0,
                 "run_demo_missions": LaunchConfiguration("demo"),
+                "run_mapf_demo": LaunchConfiguration("mapf"),
+                "load_orders": LaunchConfiguration("orders"),
+                "run_workload": LaunchConfiguration("orders"),
+                "strategy": LaunchConfiguration("strategy"),
+                "speed_mps": LaunchConfiguration("speed"),
             }],
         ),
 

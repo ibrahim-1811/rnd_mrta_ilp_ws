@@ -5,16 +5,25 @@ Pure data plus a focused loader: no ROS, so both ``shared_memory_node``
 share one definition.
 
 One CSV row is one order line item. Rows sharing an ``order_id`` form a
-single order and must agree on release_time, deadline and dropoff.
+single logical order and must agree on dropoff.
 
-Deliberately absent: priority, robot assignment, paths and charging.
-Assignment happens at runtime; routing belongs to the planner.
+The workload is deterministic and fully known at startup: every order
+exists from the moment the CSV is read and every order starts PENDING.
+There is no release schedule and no deadline -- which orders an
+allocator may see is a FIFO question, answered by
+:class:`mrta_core.order_queue.OrderQueue`, not a clock question.
+
+Deliberately absent: priority, release_time, deadline, robot
+assignment, paths and charging. Assignment happens at runtime;
+routing belongs to the planner.
 """
 
 import csv
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+
+from mrta_core.warehouse_map import ZoneType
 
 
 class OrderStatus(str, Enum):
@@ -37,8 +46,6 @@ class OrderItem:
 @dataclass
 class Order:
     order_id: str
-    release_time: float
-    deadline: float
     dropoff_id: str
     items: tuple[OrderItem, ...] = ()
 
@@ -53,33 +60,39 @@ class Order:
         """Shelves to visit, in CSV row order."""
         return tuple(item.shelf_id for item in self.items)
 
-    def lateness(self) -> float | None:
-        """max(0, completion - deadline). None until completed."""
-
-        if self.completion_time is None:
-            return None
-
-        return max(0.0, self.completion_time - self.deadline)
-
 
 REQUIRED_COLUMNS = (
     "order_id",
-    "release_time",
     "item_id",
     "shelf_id",
     "quantity",
     "dropoff_id",
-    "deadline",
 )
 
 
-def _zone_exists(warehouse, zone_id: str) -> bool:
-    try:
-        warehouse.zone_by_id(zone_id)
-    except KeyError:
-        return False
+def _station_problem(warehouse, zone_id: str, expected) -> str | None:
+    """Why ``zone_id`` is not a usable station of ``expected`` type.
 
-    return True
+    Existence alone is not enough: ``dropoff_id=shelf_004`` names a
+    real zone and would route a robot to racking to drop a parcel.
+    Returns None when the id is valid.
+    """
+
+    if not zone_id:
+        return "is empty"
+
+    try:
+        zone = warehouse.zone_by_id(zone_id)
+    except KeyError:
+        return "is not in the warehouse map"
+
+    if zone.zone_type is not expected:
+        return (
+            f"is a {zone.zone_type.value} station, "
+            f"not a {expected.value} station"
+        )
+
+    return None
 
 
 def load_orders_csv(
@@ -87,6 +100,10 @@ def load_orders_csv(
     warehouse=None,
 ) -> tuple[Order, ...]:
     """Load orders, grouping rows by ``order_id``.
+
+    The returned tuple is the FIFO workload sequence: logical orders in
+    the sequence their first row appears in the CSV. Reading the same
+    file twice always yields the same sequence.
 
     When ``warehouse`` is given, every shelf_id and dropoff_id is
     checked against the map so a typo fails at load time rather than
@@ -114,9 +131,10 @@ def load_orders_csv(
 
     grouped: dict[str, list] = {}
 
+    # FIFO sequence: order_ids in the sequence their first row appears.
     order_of_appearance: list[str] = []
 
-    header: dict[str, tuple[float, float, str, int]] = {}
+    header: dict[str, tuple[str, int]] = {}
 
     for line, row in rows:
 
@@ -131,9 +149,12 @@ def load_orders_csv(
         shelf_id = (row["shelf_id"] or "").strip()
         dropoff_id = (row["dropoff_id"] or "").strip()
 
+        if not item_id:
+            raise ValueError(
+                f"{path}:{line}: item_id must not be empty"
+            )
+
         try:
-            release_time = float(row["release_time"])
-            deadline = float(row["deadline"])
             quantity = int(row["quantity"])
         except (TypeError, ValueError) as exc:
             raise ValueError(
@@ -145,59 +166,37 @@ def load_orders_csv(
                 f"{path}:{line}: quantity must be > 0, got {quantity}"
             )
 
-        if release_time < 0.0:
-            raise ValueError(
-                f"{path}:{line}: release_time must be >= 0, "
-                f"got {release_time}"
-            )
-
-        if deadline < release_time:
-            raise ValueError(
-                f"{path}:{line}: deadline {deadline} is before "
-                f"release_time {release_time}"
-            )
-
         if warehouse is not None:
 
-            if not _zone_exists(warehouse, shelf_id):
-                raise ValueError(
-                    f"{path}:{line}: shelf {shelf_id!r} "
-                    f"is not in the warehouse map"
+            for label, station_id, expected in (
+                ("shelf", shelf_id, ZoneType.SHELF),
+                ("dropoff", dropoff_id, ZoneType.DROPOFF),
+            ):
+                problem = _station_problem(
+                    warehouse, station_id, expected
                 )
 
-            if not _zone_exists(warehouse, dropoff_id):
-                raise ValueError(
-                    f"{path}:{line}: dropoff {dropoff_id!r} "
-                    f"is not in the warehouse map"
-                )
+                if problem is not None:
+                    raise ValueError(
+                        f"{path}:{line}: {label} "
+                        f"{station_id!r} {problem}"
+                    )
 
         if order_id not in grouped:
             grouped[order_id] = []
             order_of_appearance.append(order_id)
-            header[order_id] = (
-                release_time,
-                deadline,
-                dropoff_id,
-                line,
-            )
+            header[order_id] = (dropoff_id, line)
 
         else:
-            first_release, first_deadline, first_drop, first_line = (
-                header[order_id]
-            )
+            first_drop, first_line = header[order_id]
 
-            for label, seen, first in (
-                ("release_time", release_time, first_release),
-                ("deadline", deadline, first_deadline),
-                ("dropoff_id", dropoff_id, first_drop),
-            ):
-                if seen != first:
-                    raise ValueError(
-                        f"{path}:{line}: order {order_id!r} has "
-                        f"{label}={seen!r} but line {first_line} "
-                        f"has {first!r}; all rows of one order "
-                        f"must agree"
-                    )
+            if dropoff_id != first_drop:
+                raise ValueError(
+                    f"{path}:{line}: order {order_id!r} has "
+                    f"dropoff_id={dropoff_id!r} but line "
+                    f"{first_line} has {first_drop!r}; all rows of "
+                    f"one order must agree"
+                )
 
         grouped[order_id].append(
             OrderItem(
@@ -211,13 +210,11 @@ def load_orders_csv(
 
     for order_id in order_of_appearance:
 
-        release_time, deadline, dropoff_id, _ = header[order_id]
+        dropoff_id, _ = header[order_id]
 
         orders.append(
             Order(
                 order_id=order_id,
-                release_time=release_time,
-                deadline=deadline,
                 dropoff_id=dropoff_id,
                 items=tuple(grouped[order_id]),
             )

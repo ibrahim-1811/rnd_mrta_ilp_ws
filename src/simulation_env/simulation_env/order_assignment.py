@@ -5,8 +5,10 @@ MissionPlanner, so the real MRTA allocators (nearest, auction, ILP,
 learned) can replace it later by swapping the object rather than
 editing execution code.
 
-Nothing here is an MRTA contribution. FirstReleasedAssigner exists only
-to validate the order pipeline end to end with a single robot.
+Nothing here is an MRTA contribution. FirstPendingAssigner exists only
+to validate the order pipeline end to end with a single robot: it
+takes the FIFO head and the first free robot, which is a pipeline
+check, not a strategy.
 """
 
 from abc import ABC, abstractmethod
@@ -27,13 +29,15 @@ class OrderAssigner(ABC):
         """Return (order, robot_id), or None if nothing to assign."""
 
 
-class FirstReleasedAssigner(OrderAssigner):
-    """Take the earliest released pending order. Pipeline check only.
+class FirstPendingAssigner(OrderAssigner):
+    """Take the FIFO head of the pending queue. Pipeline check only.
 
-    Ties break on order_id so a run is reproducible.
+    ``orders`` arrives in CSV sequence, so the first PENDING entry is
+    the oldest waiting order. No sorting: re-ordering here would be an
+    allocation decision.
     """
 
-    name = "first_released"
+    name = "first_pending"
 
     def select(
         self,
@@ -45,18 +49,9 @@ class FirstReleasedAssigner(OrderAssigner):
         if not free_robots:
             return None
 
-        released = [
-            order
-            for order in orders
-            if order.status is OrderStatus.PENDING
-            and order.release_time <= sim_time
-        ]
+        for order in orders:
 
-        if not released:
-            return None
+            if order.status is OrderStatus.PENDING:
+                return order, free_robots[0]
 
-        released.sort(
-            key=lambda order: (order.release_time, order.order_id)
-        )
-
-        return released[0], free_robots[0]
+        return None

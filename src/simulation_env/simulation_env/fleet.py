@@ -30,11 +30,18 @@ def staging_stations(warehouse: WarehouseMap) -> list:
 def build_fleet(
     config: SimConfig,
     warehouse: WarehouseMap,
+    speed_mps: float | None = None,
 ) -> list[GridRobot]:
     """Create one GridRobot per configured robot, at its staging cell.
 
     robot_001 -> staging_001, robot_002 -> staging_002, and so on.
+
+    ``speed_mps`` overrides ``fleet.speed_mps`` for this fleet only,
+    so a run can be re-timed from the command line without editing the
+    config. Everything else still comes from the config.
     """
+
+    speed = config.speed_mps if speed_mps is None else speed_mps
 
     mode = config.initial_position_mode
 
@@ -108,7 +115,7 @@ def build_fleet(
             GridRobot(
                 robot_id=robot_id,
                 cell=cell,
-                speed_mps=config.speed_mps,
+                speed_mps=speed,
                 battery_percent=config.initial_battery_percent,
                 status=GridRobotStatus.IDLE,
             )

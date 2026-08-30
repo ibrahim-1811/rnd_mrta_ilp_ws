@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>gazebo_fleet_pose_transport</name>
+  <version>0.1.0</version>
+  <description>Persistent batched Gazebo Transport client for fleet pose visualization.</description>
+  <maintainer email="immemon1811@gmail.com">Mohammad Ibrahim Memon</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>gz_msgs_vendor</depend>
+  <depend>gz_transport_vendor</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

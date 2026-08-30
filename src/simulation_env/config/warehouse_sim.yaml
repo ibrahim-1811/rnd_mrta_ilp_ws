@@ -27,6 +27,12 @@ service:
   shelf_pick_s: 2.0
   dropoff_s: 2.0
 
+# Order input layer. The workload is deterministic and fully known at
+# startup: every row is loaded at t=0 and every logical order starts
+# PENDING. Which orders an allocator may see is decided by FIFO on the
+# CSV sequence -- min(available_robots, pending_orders) at a time --
+# never by a clock. There is deliberately no priority, release_time or
+# deadline column.
 orders:
   file: orders.csv
   mode: replay
@@ -36,7 +42,13 @@ orders:
 # order stays available where it is.
 mission:
   start_zone: staging_001
-  return_to_start_when_idle: false
+  # When a robot has no work left it returns to its park zone. This
+  # is an idle policy, not part of any order: a robot does NOT go
+  # home between the legs of a mission.
+  park_when_idle: true
+  # home       -> each robot returns to its own staging station
+  # start_zone -> everything returns to mission.start_zone
+  park_zone_mode: home
 
 simulation:
   deterministic: true

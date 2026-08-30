@@ -11,9 +11,12 @@
   <depend>rclpy</depend>
   <depend>robot_interfaces</depend>
   <depend>mrta_core</depend>
+  <depend>task_management</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
+
+  <exec_depend>gazebo_fleet_pose_transport</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 

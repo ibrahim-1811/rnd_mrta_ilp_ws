@@ -232,8 +232,6 @@ class SharedMemoryNode(Node):
     def order_to_msg(self, order):
         msg = OrderState()
         msg.order_id = order.order_id
-        msg.release_time = float(order.release_time)
-        msg.deadline = float(order.deadline)
         msg.dropoff_id = order.dropoff_id
         msg.status = order.status.value
         msg.assigned_robot = order.assigned_robot
