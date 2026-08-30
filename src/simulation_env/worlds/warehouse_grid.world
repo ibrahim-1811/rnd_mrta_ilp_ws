@@ -1,0 +1,9394 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+  <world name="warehouse_grid">
+
+    <plugin
+      filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+
+    <plugin
+      filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+
+    <plugin
+      filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+
+
+    <scene>
+      <ambient>0.8 0.8 0.8 1</ambient>
+      <background>0.6 0.6 0.6 1</background>
+      <shadows>false</shadows>
+    </scene>
+
+
+    <light type="directional" name="sun">
+      <pose>0 0 20 0 0 0</pose>
+      <direction>0 0 -1</direction>
+      <diffuse>1 1 1 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <cast_shadows>false</cast_shadows>
+    </light>
+
+
+    <model name="warehouse_floor">
+      <static>true</static>
+
+      <pose>
+        8.5
+        17.5
+        0.0
+        0 0 0
+      </pose>
+
+      <link name="floor_link">
+
+        <visual name="floor_visual">
+          <geometry>
+            <box>
+              <size>
+                17.0
+                35.0
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.95 0.95 0.95 1</ambient>
+            <diffuse>0.95 0.95 0.95 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0000">
+      <static>true</static>
+
+      <pose>
+        0.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0001">
+      <static>true</static>
+
+      <pose>
+        0.5
+        1.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0002">
+      <static>true</static>
+
+      <pose>
+        0.5
+        2.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0003">
+      <static>true</static>
+
+      <pose>
+        0.5
+        3.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0004">
+      <static>true</static>
+
+      <pose>
+        0.5
+        4.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0005">
+      <static>true</static>
+
+      <pose>
+        0.5
+        5.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0006">
+      <static>true</static>
+
+      <pose>
+        0.5
+        6.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0007">
+      <static>true</static>
+
+      <pose>
+        0.5
+        7.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0008">
+      <static>true</static>
+
+      <pose>
+        0.5
+        8.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0009">
+      <static>true</static>
+
+      <pose>
+        0.5
+        9.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0010">
+      <static>true</static>
+
+      <pose>
+        0.5
+        10.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0011">
+      <static>true</static>
+
+      <pose>
+        0.5
+        11.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0012">
+      <static>true</static>
+
+      <pose>
+        0.5
+        12.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0013">
+      <static>true</static>
+
+      <pose>
+        0.5
+        22.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0014">
+      <static>true</static>
+
+      <pose>
+        0.5
+        23.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0015">
+      <static>true</static>
+
+      <pose>
+        0.5
+        24.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0016">
+      <static>true</static>
+
+      <pose>
+        0.5
+        25.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0017">
+      <static>true</static>
+
+      <pose>
+        0.5
+        26.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0018">
+      <static>true</static>
+
+      <pose>
+        0.5
+        27.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0019">
+      <static>true</static>
+
+      <pose>
+        0.5
+        28.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0020">
+      <static>true</static>
+
+      <pose>
+        0.5
+        29.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0021">
+      <static>true</static>
+
+      <pose>
+        0.5
+        30.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0022">
+      <static>true</static>
+
+      <pose>
+        0.5
+        31.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0023">
+      <static>true</static>
+
+      <pose>
+        0.5
+        32.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0024">
+      <static>true</static>
+
+      <pose>
+        0.5
+        33.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0025">
+      <static>true</static>
+
+      <pose>
+        0.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0026">
+      <static>true</static>
+
+      <pose>
+        1.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0027">
+      <static>true</static>
+
+      <pose>
+        1.5
+        1.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0028">
+      <static>true</static>
+
+      <pose>
+        1.5
+        2.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0029">
+      <static>true</static>
+
+      <pose>
+        1.5
+        3.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0030">
+      <static>true</static>
+
+      <pose>
+        1.5
+        4.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0031">
+      <static>true</static>
+
+      <pose>
+        1.5
+        5.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0032">
+      <static>true</static>
+
+      <pose>
+        1.5
+        6.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0033">
+      <static>true</static>
+
+      <pose>
+        1.5
+        7.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0034">
+      <static>true</static>
+
+      <pose>
+        1.5
+        8.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0035">
+      <static>true</static>
+
+      <pose>
+        1.5
+        9.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0036">
+      <static>true</static>
+
+      <pose>
+        1.5
+        10.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0037">
+      <static>true</static>
+
+      <pose>
+        1.5
+        11.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0038">
+      <static>true</static>
+
+      <pose>
+        1.5
+        12.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0039">
+      <static>true</static>
+
+      <pose>
+        1.5
+        22.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0040">
+      <static>true</static>
+
+      <pose>
+        1.5
+        23.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0041">
+      <static>true</static>
+
+      <pose>
+        1.5
+        24.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0042">
+      <static>true</static>
+
+      <pose>
+        1.5
+        25.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0043">
+      <static>true</static>
+
+      <pose>
+        1.5
+        26.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0044">
+      <static>true</static>
+
+      <pose>
+        1.5
+        27.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0045">
+      <static>true</static>
+
+      <pose>
+        1.5
+        28.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0046">
+      <static>true</static>
+
+      <pose>
+        1.5
+        29.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0047">
+      <static>true</static>
+
+      <pose>
+        1.5
+        30.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0048">
+      <static>true</static>
+
+      <pose>
+        1.5
+        31.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0049">
+      <static>true</static>
+
+      <pose>
+        1.5
+        32.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0050">
+      <static>true</static>
+
+      <pose>
+        1.5
+        33.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0051">
+      <static>true</static>
+
+      <pose>
+        1.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0052">
+      <static>true</static>
+
+      <pose>
+        2.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0053">
+      <static>true</static>
+
+      <pose>
+        2.5
+        1.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0054">
+      <static>true</static>
+
+      <pose>
+        2.5
+        2.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0055">
+      <static>true</static>
+
+      <pose>
+        2.5
+        32.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0056">
+      <static>true</static>
+
+      <pose>
+        2.5
+        33.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0057">
+      <static>true</static>
+
+      <pose>
+        2.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0058">
+      <static>true</static>
+
+      <pose>
+        3.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0059">
+      <static>true</static>
+
+      <pose>
+        3.5
+        1.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0060">
+      <static>true</static>
+
+      <pose>
+        3.5
+        2.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0061">
+      <static>true</static>
+
+      <pose>
+        3.5
+        32.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0062">
+      <static>true</static>
+
+      <pose>
+        3.5
+        33.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0063">
+      <static>true</static>
+
+      <pose>
+        3.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0064">
+      <static>true</static>
+
+      <pose>
+        4.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0065">
+      <static>true</static>
+
+      <pose>
+        4.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0066">
+      <static>true</static>
+
+      <pose>
+        5.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0067">
+      <static>true</static>
+
+      <pose>
+        5.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0068">
+      <static>true</static>
+
+      <pose>
+        6.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0069">
+      <static>true</static>
+
+      <pose>
+        6.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0070">
+      <static>true</static>
+
+      <pose>
+        7.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0071">
+      <static>true</static>
+
+      <pose>
+        7.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0072">
+      <static>true</static>
+
+      <pose>
+        8.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0073">
+      <static>true</static>
+
+      <pose>
+        8.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0074">
+      <static>true</static>
+
+      <pose>
+        9.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0075">
+      <static>true</static>
+
+      <pose>
+        9.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0076">
+      <static>true</static>
+
+      <pose>
+        10.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0077">
+      <static>true</static>
+
+      <pose>
+        10.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0078">
+      <static>true</static>
+
+      <pose>
+        11.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0079">
+      <static>true</static>
+
+      <pose>
+        11.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0080">
+      <static>true</static>
+
+      <pose>
+        12.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0081">
+      <static>true</static>
+
+      <pose>
+        12.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0082">
+      <static>true</static>
+
+      <pose>
+        13.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0083">
+      <static>true</static>
+
+      <pose>
+        13.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0084">
+      <static>true</static>
+
+      <pose>
+        14.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0085">
+      <static>true</static>
+
+      <pose>
+        14.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0086">
+      <static>true</static>
+
+      <pose>
+        15.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0087">
+      <static>true</static>
+
+      <pose>
+        15.5
+        1.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0088">
+      <static>true</static>
+
+      <pose>
+        15.5
+        2.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0089">
+      <static>true</static>
+
+      <pose>
+        15.5
+        32.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0090">
+      <static>true</static>
+
+      <pose>
+        15.5
+        33.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0091">
+      <static>true</static>
+
+      <pose>
+        15.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0092">
+      <static>true</static>
+
+      <pose>
+        16.5
+        0.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0093">
+      <static>true</static>
+
+      <pose>
+        16.5
+        1.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0094">
+      <static>true</static>
+
+      <pose>
+        16.5
+        2.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0095">
+      <static>true</static>
+
+      <pose>
+        16.5
+        3.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0096">
+      <static>true</static>
+
+      <pose>
+        16.5
+        4.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0097">
+      <static>true</static>
+
+      <pose>
+        16.5
+        5.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0098">
+      <static>true</static>
+
+      <pose>
+        16.5
+        6.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0099">
+      <static>true</static>
+
+      <pose>
+        16.5
+        7.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0100">
+      <static>true</static>
+
+      <pose>
+        16.5
+        8.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0101">
+      <static>true</static>
+
+      <pose>
+        16.5
+        9.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0102">
+      <static>true</static>
+
+      <pose>
+        16.5
+        10.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0103">
+      <static>true</static>
+
+      <pose>
+        16.5
+        11.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0104">
+      <static>true</static>
+
+      <pose>
+        16.5
+        12.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0105">
+      <static>true</static>
+
+      <pose>
+        16.5
+        22.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0106">
+      <static>true</static>
+
+      <pose>
+        16.5
+        23.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0107">
+      <static>true</static>
+
+      <pose>
+        16.5
+        24.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0108">
+      <static>true</static>
+
+      <pose>
+        16.5
+        25.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0109">
+      <static>true</static>
+
+      <pose>
+        16.5
+        26.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0110">
+      <static>true</static>
+
+      <pose>
+        16.5
+        27.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0111">
+      <static>true</static>
+
+      <pose>
+        16.5
+        28.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0112">
+      <static>true</static>
+
+      <pose>
+        16.5
+        29.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0113">
+      <static>true</static>
+
+      <pose>
+        16.5
+        30.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0114">
+      <static>true</static>
+
+      <pose>
+        16.5
+        31.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0115">
+      <static>true</static>
+
+      <pose>
+        16.5
+        32.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0116">
+      <static>true</static>
+
+      <pose>
+        16.5
+        33.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="blocked_0117">
+      <static>true</static>
+
+      <pose>
+        16.5
+        34.5
+        0.045
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                1.0
+                1.0
+                0.05
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_001">
+      <static>true</static>
+
+      <pose>
+        4.5
+        32.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_002">
+      <static>true</static>
+
+      <pose>
+        4.5
+        33.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_003">
+      <static>true</static>
+
+      <pose>
+        7.5
+        32.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_004">
+      <static>true</static>
+
+      <pose>
+        7.5
+        33.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_005">
+      <static>true</static>
+
+      <pose>
+        10.5
+        32.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_006">
+      <static>true</static>
+
+      <pose>
+        10.5
+        33.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_007">
+      <static>true</static>
+
+      <pose>
+        13.5
+        32.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_008">
+      <static>true</static>
+
+      <pose>
+        13.5
+        33.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_001">
+      <static>true</static>
+
+      <pose>
+        2.5
+        22.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_002">
+      <static>true</static>
+
+      <pose>
+        2.5
+        23.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_003">
+      <static>true</static>
+
+      <pose>
+        2.5
+        24.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_004">
+      <static>true</static>
+
+      <pose>
+        2.5
+        25.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_005">
+      <static>true</static>
+
+      <pose>
+        2.5
+        26.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_006">
+      <static>true</static>
+
+      <pose>
+        2.5
+        27.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_007">
+      <static>true</static>
+
+      <pose>
+        2.5
+        28.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_008">
+      <static>true</static>
+
+      <pose>
+        2.5
+        29.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_009">
+      <static>true</static>
+
+      <pose>
+        2.5
+        30.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_010">
+      <static>true</static>
+
+      <pose>
+        2.5
+        31.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_011">
+      <static>true</static>
+
+      <pose>
+        15.5
+        22.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_012">
+      <static>true</static>
+
+      <pose>
+        15.5
+        23.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_013">
+      <static>true</static>
+
+      <pose>
+        15.5
+        24.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_014">
+      <static>true</static>
+
+      <pose>
+        15.5
+        25.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_015">
+      <static>true</static>
+
+      <pose>
+        15.5
+        26.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_016">
+      <static>true</static>
+
+      <pose>
+        15.5
+        27.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_017">
+      <static>true</static>
+
+      <pose>
+        15.5
+        28.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_018">
+      <static>true</static>
+
+      <pose>
+        15.5
+        29.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_019">
+      <static>true</static>
+
+      <pose>
+        15.5
+        30.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_020">
+      <static>true</static>
+
+      <pose>
+        15.5
+        31.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_001">
+      <static>true</static>
+
+      <pose>
+        4.5
+        20.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_002">
+      <static>true</static>
+
+      <pose>
+        4.5
+        21.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_003">
+      <static>true</static>
+
+      <pose>
+        4.5
+        22.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_004">
+      <static>true</static>
+
+      <pose>
+        4.5
+        23.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_005">
+      <static>true</static>
+
+      <pose>
+        4.5
+        24.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_006">
+      <static>true</static>
+
+      <pose>
+        4.5
+        25.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_007">
+      <static>true</static>
+
+      <pose>
+        4.5
+        26.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_008">
+      <static>true</static>
+
+      <pose>
+        4.5
+        27.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_009">
+      <static>true</static>
+
+      <pose>
+        4.5
+        28.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_010">
+      <static>true</static>
+
+      <pose>
+        7.5
+        20.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_011">
+      <static>true</static>
+
+      <pose>
+        7.5
+        21.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_012">
+      <static>true</static>
+
+      <pose>
+        7.5
+        22.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_013">
+      <static>true</static>
+
+      <pose>
+        7.5
+        23.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_014">
+      <static>true</static>
+
+      <pose>
+        7.5
+        24.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_015">
+      <static>true</static>
+
+      <pose>
+        7.5
+        25.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_016">
+      <static>true</static>
+
+      <pose>
+        7.5
+        26.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_017">
+      <static>true</static>
+
+      <pose>
+        7.5
+        27.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_018">
+      <static>true</static>
+
+      <pose>
+        7.5
+        28.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_019">
+      <static>true</static>
+
+      <pose>
+        10.5
+        20.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_020">
+      <static>true</static>
+
+      <pose>
+        10.5
+        21.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_021">
+      <static>true</static>
+
+      <pose>
+        10.5
+        22.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_022">
+      <static>true</static>
+
+      <pose>
+        10.5
+        23.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_023">
+      <static>true</static>
+
+      <pose>
+        10.5
+        24.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_024">
+      <static>true</static>
+
+      <pose>
+        10.5
+        25.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_025">
+      <static>true</static>
+
+      <pose>
+        10.5
+        26.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_026">
+      <static>true</static>
+
+      <pose>
+        10.5
+        27.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_027">
+      <static>true</static>
+
+      <pose>
+        10.5
+        28.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_028">
+      <static>true</static>
+
+      <pose>
+        13.5
+        20.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_029">
+      <static>true</static>
+
+      <pose>
+        13.5
+        21.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_030">
+      <static>true</static>
+
+      <pose>
+        13.5
+        22.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_031">
+      <static>true</static>
+
+      <pose>
+        13.5
+        23.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_032">
+      <static>true</static>
+
+      <pose>
+        13.5
+        24.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_033">
+      <static>true</static>
+
+      <pose>
+        13.5
+        25.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_034">
+      <static>true</static>
+
+      <pose>
+        13.5
+        26.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_035">
+      <static>true</static>
+
+      <pose>
+        13.5
+        27.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_036">
+      <static>true</static>
+
+      <pose>
+        13.5
+        28.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_001">
+      <static>true</static>
+
+      <pose>
+        0.5
+        13.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_002">
+      <static>true</static>
+
+      <pose>
+        0.5
+        14.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_003">
+      <static>true</static>
+
+      <pose>
+        0.5
+        15.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_004">
+      <static>true</static>
+
+      <pose>
+        0.5
+        16.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_005">
+      <static>true</static>
+
+      <pose>
+        0.5
+        17.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_006">
+      <static>true</static>
+
+      <pose>
+        0.5
+        18.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_007">
+      <static>true</static>
+
+      <pose>
+        0.5
+        19.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_008">
+      <static>true</static>
+
+      <pose>
+        0.5
+        20.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_009">
+      <static>true</static>
+
+      <pose>
+        0.5
+        21.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_010">
+      <static>true</static>
+
+      <pose>
+        16.5
+        13.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_011">
+      <static>true</static>
+
+      <pose>
+        16.5
+        14.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_012">
+      <static>true</static>
+
+      <pose>
+        16.5
+        15.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_013">
+      <static>true</static>
+
+      <pose>
+        16.5
+        16.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_014">
+      <static>true</static>
+
+      <pose>
+        16.5
+        17.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_015">
+      <static>true</static>
+
+      <pose>
+        16.5
+        18.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_016">
+      <static>true</static>
+
+      <pose>
+        16.5
+        19.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_017">
+      <static>true</static>
+
+      <pose>
+        16.5
+        20.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="staging_018">
+      <static>true</static>
+
+      <pose>
+        16.5
+        21.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.85 0.80 0.55 1</ambient>
+            <diffuse>0.85 0.80 0.55 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_037">
+      <static>true</static>
+
+      <pose>
+        4.5
+        6.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_038">
+      <static>true</static>
+
+      <pose>
+        4.5
+        7.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_039">
+      <static>true</static>
+
+      <pose>
+        4.5
+        8.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_040">
+      <static>true</static>
+
+      <pose>
+        4.5
+        9.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_041">
+      <static>true</static>
+
+      <pose>
+        4.5
+        10.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_042">
+      <static>true</static>
+
+      <pose>
+        4.5
+        11.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_043">
+      <static>true</static>
+
+      <pose>
+        4.5
+        12.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_044">
+      <static>true</static>
+
+      <pose>
+        4.5
+        13.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_045">
+      <static>true</static>
+
+      <pose>
+        4.5
+        14.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_046">
+      <static>true</static>
+
+      <pose>
+        7.5
+        6.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_047">
+      <static>true</static>
+
+      <pose>
+        7.5
+        7.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_048">
+      <static>true</static>
+
+      <pose>
+        7.5
+        8.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_049">
+      <static>true</static>
+
+      <pose>
+        7.5
+        9.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_050">
+      <static>true</static>
+
+      <pose>
+        7.5
+        10.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_051">
+      <static>true</static>
+
+      <pose>
+        7.5
+        11.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_052">
+      <static>true</static>
+
+      <pose>
+        7.5
+        12.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_053">
+      <static>true</static>
+
+      <pose>
+        7.5
+        13.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_054">
+      <static>true</static>
+
+      <pose>
+        7.5
+        14.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_055">
+      <static>true</static>
+
+      <pose>
+        10.5
+        6.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_056">
+      <static>true</static>
+
+      <pose>
+        10.5
+        7.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_057">
+      <static>true</static>
+
+      <pose>
+        10.5
+        8.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_058">
+      <static>true</static>
+
+      <pose>
+        10.5
+        9.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_059">
+      <static>true</static>
+
+      <pose>
+        10.5
+        10.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_060">
+      <static>true</static>
+
+      <pose>
+        10.5
+        11.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_061">
+      <static>true</static>
+
+      <pose>
+        10.5
+        12.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_062">
+      <static>true</static>
+
+      <pose>
+        10.5
+        13.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_063">
+      <static>true</static>
+
+      <pose>
+        10.5
+        14.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_064">
+      <static>true</static>
+
+      <pose>
+        13.5
+        6.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_065">
+      <static>true</static>
+
+      <pose>
+        13.5
+        7.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_066">
+      <static>true</static>
+
+      <pose>
+        13.5
+        8.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_067">
+      <static>true</static>
+
+      <pose>
+        13.5
+        9.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_068">
+      <static>true</static>
+
+      <pose>
+        13.5
+        10.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_069">
+      <static>true</static>
+
+      <pose>
+        13.5
+        11.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_070">
+      <static>true</static>
+
+      <pose>
+        13.5
+        12.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_071">
+      <static>true</static>
+
+      <pose>
+        13.5
+        13.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="shelf_072">
+      <static>true</static>
+
+      <pose>
+        13.5
+        14.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.10 0.70 0.10 1</ambient>
+            <diffuse>0.10 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_021">
+      <static>true</static>
+
+      <pose>
+        2.5
+        3.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_022">
+      <static>true</static>
+
+      <pose>
+        2.5
+        4.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_023">
+      <static>true</static>
+
+      <pose>
+        2.5
+        5.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_024">
+      <static>true</static>
+
+      <pose>
+        2.5
+        6.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_025">
+      <static>true</static>
+
+      <pose>
+        2.5
+        7.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_026">
+      <static>true</static>
+
+      <pose>
+        2.5
+        8.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_027">
+      <static>true</static>
+
+      <pose>
+        2.5
+        9.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_028">
+      <static>true</static>
+
+      <pose>
+        2.5
+        10.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_029">
+      <static>true</static>
+
+      <pose>
+        2.5
+        11.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_030">
+      <static>true</static>
+
+      <pose>
+        2.5
+        12.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_031">
+      <static>true</static>
+
+      <pose>
+        15.5
+        3.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_032">
+      <static>true</static>
+
+      <pose>
+        15.5
+        4.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_033">
+      <static>true</static>
+
+      <pose>
+        15.5
+        5.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_034">
+      <static>true</static>
+
+      <pose>
+        15.5
+        6.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_035">
+      <static>true</static>
+
+      <pose>
+        15.5
+        7.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_036">
+      <static>true</static>
+
+      <pose>
+        15.5
+        8.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_037">
+      <static>true</static>
+
+      <pose>
+        15.5
+        9.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_038">
+      <static>true</static>
+
+      <pose>
+        15.5
+        10.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_039">
+      <static>true</static>
+
+      <pose>
+        15.5
+        11.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="dropoff_040">
+      <static>true</static>
+
+      <pose>
+        15.5
+        12.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.90 0.70 0.10 1</ambient>
+            <diffuse>0.90 0.70 0.10 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_009">
+      <static>true</static>
+
+      <pose>
+        4.5
+        1.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_010">
+      <static>true</static>
+
+      <pose>
+        4.5
+        2.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_011">
+      <static>true</static>
+
+      <pose>
+        7.5
+        1.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_012">
+      <static>true</static>
+
+      <pose>
+        7.5
+        2.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_013">
+      <static>true</static>
+
+      <pose>
+        10.5
+        1.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_014">
+      <static>true</static>
+
+      <pose>
+        10.5
+        2.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_015">
+      <static>true</static>
+
+      <pose>
+        13.5
+        1.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="charging_016">
+      <static>true</static>
+
+      <pose>
+        13.5
+        2.5
+        0.02
+        0 0 0
+      </pose>
+
+      <link name="link">
+
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>
+                0.8
+                0.8
+                0.02
+              </size>
+            </box>
+          </geometry>
+
+          <material>
+            <ambient>0.00 0.70 0.80 1</ambient>
+            <diffuse>0.00 0.70 0.80 1</diffuse>
+          </material>
+        </visual>
+
+      </link>
+    </model>
+
+
+    <model name="robot_001">
+
+      <static>true</static>
+
+      <pose>
+        0.5
+        13.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_002">
+
+      <static>true</static>
+
+      <pose>
+        0.5
+        14.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_003">
+
+      <static>true</static>
+
+      <pose>
+        0.5
+        15.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_004">
+
+      <static>true</static>
+
+      <pose>
+        0.5
+        16.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_005">
+
+      <static>true</static>
+
+      <pose>
+        0.5
+        17.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_006">
+
+      <static>true</static>
+
+      <pose>
+        0.5
+        18.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_007">
+
+      <static>true</static>
+
+      <pose>
+        0.5
+        19.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_008">
+
+      <static>true</static>
+
+      <pose>
+        0.5
+        20.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_009">
+
+      <static>true</static>
+
+      <pose>
+        0.5
+        21.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_010">
+
+      <static>true</static>
+
+      <pose>
+        16.5
+        13.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_011">
+
+      <static>true</static>
+
+      <pose>
+        16.5
+        14.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_012">
+
+      <static>true</static>
+
+      <pose>
+        16.5
+        15.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_013">
+
+      <static>true</static>
+
+      <pose>
+        16.5
+        16.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_014">
+
+      <static>true</static>
+
+      <pose>
+        16.5
+        17.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_015">
+
+      <static>true</static>
+
+      <pose>
+        16.5
+        18.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_016">
+
+      <static>true</static>
+
+      <pose>
+        16.5
+        19.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_017">
+
+      <static>true</static>
+
+      <pose>
+        16.5
+        20.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+
+    <model name="robot_018">
+
+      <static>true</static>
+
+      <pose>
+        16.5
+        21.5
+        0.155
+        0 0 0
+      </pose>
+
+      <link name="robot_link">
+
+        <visual name="robot_visual">
+
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.15</length>
+            </cylinder>
+          </geometry>
+
+          <material>
+            <ambient>0.02 0.02 0.02 1</ambient>
+            <diffuse>0.02 0.02 0.02 1</diffuse>
+          </material>
+
+        </visual>
+
+      </link>
+
+    </model>
+
+  </world>
+</sdf>

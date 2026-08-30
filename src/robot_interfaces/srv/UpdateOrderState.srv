@@ -1,0 +1,13 @@
+# srv/UpdateOrderState.srv
+#
+# Report an order lifecycle transition into shared memory.
+# assigned_robot is only read on the ASSIGNED transition.
+# sim_time stamps the transition in simulation time.
+
+string order_id
+string status
+string assigned_robot
+float64 sim_time
+---
+bool success
+string message

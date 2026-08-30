@@ -1,0 +1,4 @@
+order_id,release_time,item_id,shelf_id,quantity,dropoff_id,deadline
+O0001,0.0,SKU001,shelf_001,1,dropoff_001,120.0
+O0001,0.0,SKU002,shelf_010,1,dropoff_001,120.0
+O0001,0.0,SKU003,shelf_015,1,dropoff_001,120.0
