@@ -146,7 +146,39 @@ class GridRobot:
                 f"{self.robot_id} has no edge left to advance"
             )
 
+        expected_current = self.path[self.path_index]
         next_cell = self.path[self.path_index + 1]
+
+        # Strong execution invariant:
+        #
+        # physical cell must always match the current path waypoint
+        # before advancing to the next waypoint.
+        if expected_current != self.cell:
+            lo = max(0, self.path_index - 3)
+            hi = min(len(self.path), self.path_index + 5)
+
+            raise RuntimeError(
+                f"{self.robot_id} path/index desync: "
+                f"physical={self.cell}, "
+                f"path_index={self.path_index}, "
+                f"path_current={expected_current}, "
+                f"next={next_cell}, "
+                f"path_slice={self.path[lo:hi]}"
+            )
+
+        # A legal grid path must never contain a zero-length edge.
+        if next_cell == self.cell:
+            lo = max(0, self.path_index - 3)
+            hi = min(len(self.path), self.path_index + 5)
+
+            raise RuntimeError(
+                f"{self.robot_id} duplicate path waypoint: "
+                f"cell={self.cell}, "
+                f"path_index={self.path_index}, "
+                f"next={next_cell}, "
+                f"path_slice={self.path[lo:hi]}, "
+                f"full_path={self.path}"
+            )
 
         self.move_to(next_cell, resolution)
 

@@ -130,7 +130,7 @@ def main() -> int:
         on_perf=perf,
     )
 
-    print(f"  horizon    : {executor.horizon_steps} quanta")
+    print("  traffic    : local reactive grid traffic")
     print()
 
     try:

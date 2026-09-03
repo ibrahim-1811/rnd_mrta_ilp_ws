@@ -8,6 +8,7 @@ State is owned by GridRobot and is never read back from Gazebo.
 The selected FIFO/MRTA workload is executed here.
 """
 
+from math import ceil
 from time import perf_counter, sleep
 
 import rclpy
@@ -28,7 +29,6 @@ from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from simulation_env.fleet import build_fleet, home_stations
 from simulation_env.grid_robot import GridRobotStatus
 from simulation_env.workload_executor import WorkloadExecutor
-from simulation_env.fleet_engine import FleetSimulationEngine
 from mrta_core.warehouse_routing import plan_return_to_zone, service_cells
 from simulation_env.gazebo_bridge import (
     DEFAULT_ROBOT_Z,
@@ -500,21 +500,23 @@ class FleetNode(Node):
         print(f"speed      : {self.speed_mps} m/s")
         print()
 
-        # Gazebo renders exactly the trajectories the engine executes.
-        # The fleet is dispatched continuously, so the playback layer
-        # starts with every robot standing on its staging cell and is
-        # handed each new trajectory as it is committed.
-        if self.use_gazebo:
-
-            self.playback = FleetTrajectoryPlayback(
-                trajectories={},
-                resolution=self.resolution,
-                z=self.robot_z,
-                frame_hz=self.gazebo_playback_hz,
-            )
-
-            for robot in self.robots:
-                self.playback.place(robot.robot_id, robot.cell)
+        # Gazebo renders exactly what the engine executes.
+        #
+        # FleetTrajectoryPlayback is deliberately NOT used here. It
+        # replays pre-baked timed trajectories, and it is fed through
+        # the on_trajectory callback -- which WorkloadExecutor never
+        # calls, because the reactive traffic layer decides each move
+        # one cell at a time instead of planning a full space-time
+        # trajectory up front.
+        #
+        # Creating it anyway used to freeze the visualisation: it held
+        # no tracks, so it reported every robot parked on its staging
+        # cell forever, while also suppressing the fallback emitter in
+        # on_tick. The terminal showed the fleet working and Gazebo
+        # showed eighteen robots standing still.
+        #
+        # _live_poses() reads the engine's own in-flight moves instead,
+        # so the picture cannot drift from the simulation.
 
         executor = WorkloadExecutor(
             warehouse=self.warehouse,
@@ -657,15 +659,20 @@ class FleetNode(Node):
         print()
 
     def on_advance(self, delta_sim: float) -> None:
-        """Pace one global interval and optionally render it at about 20 Hz."""
+        """Pace one global interval and render it at about 20 Hz."""
 
         wall = self.config.wall_for(delta_sim)
 
-        if (
-            self.use_gazebo
-            and self.playback is not None
-            and getattr(self, "engine", None) is not None
-        ):
+        engine = getattr(self, "engine", None)
+
+        if self.use_gazebo and engine is not None:
+            self._render_interval(
+                start_sim=engine.sim_time - delta_sim,
+                end_sim=engine.sim_time,
+                wall_seconds=wall,
+            )
+
+        elif self.playback is not None and self.use_gazebo:
             end_sim = self.engine.sim_time
             self.playback.play_interval(
                 start_sim=end_sim - delta_sim,
@@ -673,8 +680,115 @@ class FleetNode(Node):
                 wall_seconds=wall,
                 emit=self._emit_gazebo_poses,
             )
+
         elif wall > 0.0:
             sleep(wall)
+
+    def _render_interval(
+        self,
+        start_sim: float,
+        end_sim: float,
+        wall_seconds: float,
+    ) -> None:
+        """Emit interpolated frames across one simulated interval.
+
+        The engine calls on_advance *before* it processes the events at
+        the end of the interval, so every move that spans this interval
+        is still open in the reservation table. That is what makes a
+        smooth in-between pose possible without inventing motion.
+        """
+
+        frames = 1
+
+        if wall_seconds > 0.0:
+            frames = max(
+                1,
+                int(ceil(wall_seconds * self.gazebo_playback_hz)),
+            )
+
+        begun = perf_counter()
+        span = end_sim - start_sim
+
+        for index in range(1, frames + 1):
+
+            fraction = index / frames
+
+            if wall_seconds > 0.0:
+                remaining = (
+                    begun
+                    + wall_seconds * fraction
+                    - perf_counter()
+                )
+
+                if remaining > 0.0:
+                    sleep(remaining)
+
+            sim_time = start_sim + span * fraction
+
+            self._emit_gazebo_poses(
+                sim_time,
+                self._live_poses(sim_time),
+            )
+
+    def _live_poses(self, sim_time: float) -> list:
+        """Where every robot is at ``sim_time``, read from the engine.
+
+        A robot mid-move is interpolated along the edge it reserved.
+        Anything else -- waiting, picking, dropping, parked -- sits
+        exactly on its cell.
+        """
+
+        transits = self.engine.reservations.transits()
+
+        poses = []
+
+        for robot in self.robots:
+
+            transit = transits.get(robot.robot_id)
+
+            if transit is None:
+                world_x, world_y = grid_to_gazebo(
+                    robot.cell,
+                    self.resolution,
+                )
+
+            else:
+                source, target, start, end = transit
+
+                span = float(end) - float(start)
+
+                if span <= 0.0:
+                    fraction = 1.0
+                else:
+                    fraction = (
+                        sim_time - float(start)
+                    ) / span
+
+                fraction = min(1.0, max(0.0, fraction))
+
+                source_x, source_y = grid_to_gazebo(
+                    source,
+                    self.resolution,
+                )
+
+                target_x, target_y = grid_to_gazebo(
+                    target,
+                    self.resolution,
+                )
+
+                world_x = source_x + (target_x - source_x) * fraction
+                world_y = source_y + (target_y - source_y) * fraction
+
+            poses.append(
+                FleetPose(
+                    robot.robot_id,
+                    world_x,
+                    world_y,
+                    self.robot_z,
+                )
+            )
+
+        return poses
 
     def _emit_gazebo_poses(self, _sim_time: float, poses) -> None:
         """Submit a visual frame; failures never feed into simulation state."""

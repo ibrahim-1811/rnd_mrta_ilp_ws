@@ -2,15 +2,27 @@
 
 """Generate an Open-RMF navigation graph from the warehouse XLSX.
 
-The XLSX remains the single source of truth.
+The XLSX remains the single source of truth for geometry, and
+``mrta_core.warehouse_routing`` remains the single source of truth for
+traffic direction. This script only joins the two; it decides nothing.
 
 RMF vertices are placed at the same cell centres used by Gazebo:
 
     world_x = origin_x + (grid_x + 0.5) * resolution
     world_y = origin_y + (grid_y + 0.5) * resolution
 
-Each pair of orthogonally adjacent traversable cells becomes one
-bidirectional RMF lane.
+Lanes come from the directed lane policy, not from raw adjacency. For
+each pair of orthogonally adjacent traversable cells a lane is emitted
+only in the directions ``directional_blocked_edges()`` permits, so:
+
+  * a one-way aisle yields exactly one lane
+  * a shelf, dropoff or staging service edge yields both, because a
+    robot has to drive in and reverse back out
+
+This is what keeps Gazebo a mirror of the scientific engine rather than
+a second planner with its own opinion. Emitting both directions
+unconditionally, as this script used to, put every head-on back into
+RMF that the one-way core was built to remove.
 """
 
 from __future__ import annotations
@@ -22,6 +34,10 @@ from pathlib import Path
 import yaml
 
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
+from mrta_core.warehouse_routing import (
+    directional_blocked_edges,
+    non_transit_cells,
+)
 
 
 def main() -> None:
@@ -97,16 +113,25 @@ def main() -> None:
             ]
         )
 
+    # The one directed-edge policy, exactly as A* consumes it.
+    blocked_edges = directional_blocked_edges(warehouse)
+    service_cells = non_transit_cells(warehouse)
+
     lanes = []
 
-    # Only inspect right and up.
-    # is_bidirectional=true supplies both travel directions.
+    one_way_lanes = 0
+    service_lanes = 0
+    two_way_core = []
+
+    # Only inspect right and up; each direction is decided separately.
     for x, y in free_cells:
 
         for dx, dy in (
             (1, 0),
             (0, 1),
         ):
+
+            cell = (x, y)
 
             neighbor = (
                 x + dx,
@@ -116,26 +141,52 @@ def main() -> None:
             if neighbor not in free_set:
                 continue
 
-            a = cell_to_index[(x, y)]
+            a = cell_to_index[cell]
             b = cell_to_index[neighbor]
 
-            # RMF Graph lanes are directed.
-            # Explicitly create both directions for each grid adjacency.
-            lanes.append(
-                [
-                    a,
-                    b,
-                    {"is_bidirectional": False},
-                ]
-            )
+            forward = (cell, neighbor) not in blocked_edges
+            reverse = (neighbor, cell) not in blocked_edges
 
-            lanes.append(
-                [
-                    b,
-                    a,
-                    {"is_bidirectional": False},
-                ]
-            )
+            # RMF Graph lanes are directed, so each permitted direction
+            # is its own record.
+            if forward:
+                lanes.append(
+                    [
+                        a,
+                        b,
+                        {"is_bidirectional": False},
+                    ]
+                )
+
+            if reverse:
+                lanes.append(
+                    [
+                        b,
+                        a,
+                        {"is_bidirectional": False},
+                    ]
+                )
+
+            if forward and reverse:
+
+                # Legitimate only where one end is a service cell.
+                if (
+                    cell in service_cells
+                    or neighbor in service_cells
+                ):
+                    service_lanes += 1
+                else:
+                    two_way_core.append((cell, neighbor))
+
+            elif forward or reverse:
+                one_way_lanes += 1
+
+    if two_way_core:
+        raise SystemExit(
+            f"refusing to write a graph with {len(two_way_core)} "
+            f"two-way core edges, such as {two_way_core[:3]}; "
+            f"the lane policy and this generator disagree"
+        )
 
     graph = {
         "building_name": "rnd_warehouse",
@@ -170,6 +221,9 @@ def main() -> None:
     print(f"  blocked cells      : {len(obstacles)}")
     print(f"  vertices           : {len(vertices)}")
     print(f"  lane records       : {len(lanes)}")
+    print(f"  one-way transit    : {one_way_lanes}")
+    print(f"  two-way service    : {service_lanes}")
+    print(f"  two-way core       : {len(two_way_core)}")
     print(f"  semantic zones     : {dict(sorted(zone_counts.items()))}")
     print(f"  output             : {args.output}")
 

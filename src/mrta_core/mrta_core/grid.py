@@ -6,6 +6,7 @@ from typing import TypeAlias
 from mrta_core.models import RobotState, TaskState
 
 Cell: TypeAlias = tuple[int, int]
+DirectedEdge: TypeAlias = tuple[Cell, Cell]
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,14 @@ class GridMap:
     height: int
     obstacles: frozenset[Cell] = field(default_factory=frozenset)
     congestion: dict[Cell, float] = field(default_factory=dict)
+
+    # Optional directed edges that may not be traversed.
+    #
+    # Keeping this generic means GridMap knows nothing about warehouse
+    # highways. Warehouse routing supplies the actual policy.
+    blocked_edges: frozenset[DirectedEdge] = field(
+        default_factory=frozenset
+    )
 
     def in_bounds(self, cell: Cell) -> bool:
         x, y = cell
@@ -32,7 +41,12 @@ class GridMap:
             (x, y - 1),
         ]
 
-        return [candidate for candidate in candidates if self.is_free(candidate)]
+        return [
+            candidate
+            for candidate in candidates
+            if self.is_free(candidate)
+            and (cell, candidate) not in self.blocked_edges
+        ]
 
     def congestion_at(self, cell: Cell) -> float:
         return self.congestion.get(cell, 0.0)

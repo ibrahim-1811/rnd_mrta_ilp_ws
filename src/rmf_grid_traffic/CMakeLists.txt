@@ -35,10 +35,24 @@ target_link_libraries(route_check
   rmf_fleet_adapter::rmf_fleet_adapter
 )
 
+add_executable(two_robot_check
+  src/two_robot_check.cpp
+)
+
+ament_target_dependencies(two_robot_check
+  rmf_traffic
+)
+
+target_link_libraries(two_robot_check
+  PRIVATE
+  rmf_fleet_adapter::rmf_fleet_adapter
+)
+
 install(
   TARGETS
     graph_check
     route_check
+    two_robot_check
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -48,7 +62,9 @@ install(
 )
 
 install(
-  PROGRAMS scripts/generate_nav_graph.py
+  PROGRAMS
+    scripts/generate_nav_graph.py
+    scripts/verify_nav_graph.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -28,17 +28,23 @@ bool is_service_name(const std::string& name)
 
 // Close all lanes entering or leaving shelf/dropoff waypoints.
 //
-// The one allowed service waypoint is reopened so it can be used
-// as the current planning endpoint.
+// The waypoints this leg actually uses as endpoints are reopened, so
+// they can be entered and left again.
+//
+// Both ends matter. Reopening only the goal made every route that
+// *starts* on a shelf unplannable: the robot was sealed onto the cell
+// it was standing on and the planner reported no route, even though
+// the warehouse rule explicitly allows a one-cell retreat.
 //
 // This preserves the warehouse rule:
 //
-//   shelf/dropoff = service target only
+//   shelf/dropoff = service endpoint only
 //   shelf/dropoff != transit cell
 //
 rmf_traffic::agv::LaneClosure service_lane_closures(
   const rmf_traffic::agv::Graph& graph,
-  std::size_t allowed_service_waypoint)
+  std::size_t start_waypoint,
+  std::size_t goal_waypoint)
 {
   rmf_traffic::agv::LaneClosure closures;
 
@@ -55,12 +61,15 @@ rmf_traffic::agv::LaneClosure service_lane_closures(
       closures.close(lane_index);
   }
 
-  // Then reopen the current target service waypoint only.
-  for (const auto lane_index : graph.lanes_from(allowed_service_waypoint))
-    closures.open(lane_index);
+  // Then reopen just this leg's own endpoints.
+  for (const auto waypoint : {start_waypoint, goal_waypoint})
+  {
+    for (const auto lane_index : graph.lanes_from(waypoint))
+      closures.open(lane_index);
 
-  for (const auto lane_index : graph.lanes_into(allowed_service_waypoint))
-    closures.open(lane_index);
+    for (const auto lane_index : graph.lanes_into(waypoint))
+      closures.open(lane_index);
+  }
 
   return closures;
 }
@@ -139,6 +148,7 @@ int main(int argc, char* argv[])
   planner_config.lane_closures(
     service_lane_closures(
       graph,
+      start_wp->index(),
       goal_wp->index()));
 
   rmf_traffic::agv::Planner planner(

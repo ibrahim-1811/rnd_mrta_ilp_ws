@@ -36,8 +36,6 @@ from mrta_core.orders import OrderStatus
 
 from simulation_env.fleet_engine import EventType, FleetSimulationEngine
 from simulation_env.grid_robot import GridRobotStatus
-from simulation_env.mapf import MapfFailure, TimedReservations
-from simulation_env.mapf_planner import MapfMissionPlanner, timing
 from mrta_core.warehouse_routing import RouteCache, plan_from_cell
 
 
@@ -311,39 +309,6 @@ class WorkloadExecutor:
         for robot in robots:
             self.engine.add_robot(robot)
 
-        # Timing first, so the horizon can be derived from the same
-        # quanta the planner will actually search in.
-        _quantum, _move_steps, _service_steps = timing(
-            resolution, speed_mps, service_seconds
-        )
-
-        if horizon_steps is None:
-            horizon_steps = workload_horizon_steps(
-                warehouse,
-                _move_steps,
-                _service_steps,
-                len(robots),
-            )
-
-        self.horizon_steps = horizon_steps
-
-        self.mapf = MapfMissionPlanner(
-            warehouse=warehouse,
-            resolution=resolution,
-            speed_mps=speed_mps,
-            service_seconds=service_seconds,
-            horizon_steps=horizon_steps,
-        )
-
-        # One reservation table for the entire run. A robot dispatched
-        # late is planned against everything already in flight.
-        self.reservations = TimedReservations()
-
-        for robot in robots:
-            self.reservations.reserve_cell(
-                robot.cell, Fraction(0), None, robot.robot_id
-            )
-
         # One memo for the whole run: the map and the service-cell
         # rule never change, so a leg costed for the first dispatch is
         # still valid for the hundredth.
@@ -588,18 +553,6 @@ class WorkloadExecutor:
         # One allocation decision, one fleet MAPF planning operation.
         return started + self.launch_batch(assignments)
 
-    def _assign(self, robot_id: str, trajectory) -> None:
-        """Hand a trajectory to the engine, and mirror it to playback.
-
-        The engine call is the scientific one and happens first. The
-        visualization callback is downstream and read-only.
-        """
-
-        self.engine.assign_trajectory(robot_id, trajectory)
-
-        if self.on_trajectory is not None:
-            self.on_trajectory(robot_id, trajectory)
-
     def _clear_deferred(self, robot_id: str) -> None:
         """This robot no longer owes a deferred plan."""
 
@@ -612,49 +565,17 @@ class WorkloadExecutor:
         self._traffic_version += 1
 
     def _build_mission(self, assignment):
-        """The route this assignment will actually drive, or None.
+        """Build the static mission chosen by the MRTA allocator.
 
-        The allocator chose the shelf visiting order from a purely
-        static prediction. The geometry between those zones is
-        re-planned here around live occupancy: a robot standing still
-        is a solid obstacle, and a path drawn straight through one
-        cannot be realised by the space-time layer afterwards.
+        Dynamic robot occupancy is deliberately excluded here.
 
-        The zone sequence stays the allocator's. Only the geometry
-        responds to traffic, so MAPF can never change which robot owns
-        which order.
-
-        Repeated failures are remembered, and only failures. The
-        result of this call is a pure function of three things: where
-        the robot stands, the zone sequence, and which cells are
-        blocked by stationary robots. When all three are unchanged the
-        answer is necessarily the same, so re-running the A* would burn
-        CPU to reach a conclusion already known. Skipping it cannot
-        change any simulated outcome -- a remembered failure is the
-        failure that would have happened.
-
-        Successes are deliberately *not* remembered: a MissionPlan is
-        handed to the space-time layer and consumed, and caching one
-        would risk reusing a route against occupancy that has moved.
+        The static A* layer answers where the mission should travel.
+        FleetSimulationEngine and LocalTrafficController decide when
+        each cell may actually be entered.
         """
 
         robot_id = assignment.robot_id
-
         robot = self.engine.robots[robot_id]
-
-        blocked = self.stationary_cells(robot_id)
-
-        key = (
-            robot_id,
-            robot.cell,
-            assignment.order_id,
-            assignment.route.shelf_sequence,
-            blocked,
-        )
-
-        if key in self._unroutable:
-            self.result.static_route_reuses += 1
-            return None
 
         try:
             return plan_from_cell(
@@ -662,74 +583,25 @@ class WorkloadExecutor:
                 robot.cell,
                 list(assignment.zone_sequence),
                 start_label=robot_id,
-                extra_blocked=blocked,
             )
 
         except (RuntimeError, ValueError):
-            # A stationary robot is sitting on the only approach this
-            # order needs. Traffic, not a bad order.
-            self._unroutable.add(key)
             return None
 
-    def _plan_batch(self, missions: dict, now):
-        """Route a whole allocation batch through the fleet MAPF planner.
+    def launch_batch(self, assignments) -> int:
+        """Build and launch one MRTA allocation batch.
 
-        One allocation decision is one MAPF planning operation. The
-        batch is handed to the existing prioritized fleet planner,
-        which knows about every robot in it at once, rather than being
-        committed robot by robot as unrelated trajectories -- that was
-        what let an early robot book a lane a later one still needed,
-        with no chance to see the conflict coming.
+        The allocator owns robot-order assignment.
 
-        ``robots`` deliberately carries more than the batch: every
-        *stationary* robot is a real obstacle and must be visible to
-        the planner. Robots already in flight are left out, because
-        their committed trajectories already say where they will be;
-        giving them a standing placeholder here would freeze them at
-        their current cell for all time.
+        Static A* builds each MissionPlan. The complete batch is then
+        handed directly to FleetSimulationEngine, where local traffic
+        arbitration controls execution cell by cell.
         """
 
-        robots = {
-            robot_id: self.engine.robots[robot_id]
-            for robot_id in missions
-        }
-
-        for robot_id, robot in self.engine.robots.items():
-
-            if robot_id in robots:
-                continue
-
-            if (
-                robot_id in self.active
-                or robot_id in self.returning
-                or robot_id in self.repositioning
-            ):
-                # In flight: its trajectory is already committed.
-                continue
-
-            robots[robot_id] = robot
-
-        # plan_fleet re-books a placeholder for everyone it is given,
-        # so clear their old bookings first and let it be the single
-        # writer. Otherwise duplicates pile up on every dispatch.
-        for robot_id in robots:
-            self.reservations.drop(robot_id)
-
-        return self.mapf.plan_fleet(
-            robots=robots,
-            missions=missions,
-            start_time=now,
-            reservations=self.reservations,
-            hold_forever=True,
-        )
-
-    def launch_batch(self, assignments) -> int:
-        """Build, plan and commit one allocation batch. Returns started."""
+        assignments = list(assignments)
 
         if not assignments:
             return 0
-
-        now = self.engine.time
 
         by_robot = {}
         missions = {}
@@ -741,9 +613,11 @@ class WorkloadExecutor:
 
             if mission is None:
                 self.result.plan_failures += 1
-                self._deferred_at[assignment.robot_id] = (
-                    self._traffic_version
-                )
+
+                self._deferred_at[
+                    assignment.robot_id
+                ] = self._traffic_version
+
                 continue
 
             by_robot[assignment.robot_id] = assignment
@@ -752,79 +626,100 @@ class WorkloadExecutor:
         if not missions:
             return 0
 
-        with self._stage("plan_fleet"):
-            fleet_plan = self._plan_batch(missions, now)
+        # --------------------------------------------------
+        # Register workload state before starting movement.
+        #
+        # A robot that immediately has to WAIT is still executing its
+        # assigned order. Traffic waiting is not an MRTA deferral.
+        # --------------------------------------------------
 
-        started = 0
+        for robot_id in sorted(missions):
 
-        # Sorted, so committing is as deterministic as planning was.
-        for robot_id in sorted(fleet_plan.trajectories):
-
-            self._commit(
-                by_robot[robot_id],
-                missions[robot_id],
-                fleet_plan.trajectories[robot_id],
+            assignment = by_robot[robot_id]
+            order = self.queue.order(
+                assignment.order_id
             )
 
-            started += 1
+            self._clear_deferred(robot_id)
 
-        for robot_id in sorted(fleet_plan.failures):
-            # Pairing kept; retried when traffic has actually moved.
-            self.result.plan_failures += 1
-            self._deferred_at[robot_id] = self._traffic_version
+            self.active[robot_id] = order.order_id
 
-        if started:
-            # Robots are about to vacate cells, so anything blocked
-            # behind them is worth re-planning.
-            self._bump_traffic()
+            # Every shelf service plus the final drop-off service.
+            self._services_left[robot_id] = (
+                len(
+                    assignment.route.shelf_sequence
+                )
+                + 1
+            )
 
-        return started
+            self._set_status(
+                order,
+                OrderStatus.IN_PROGRESS,
+                robot_id,
+            )
 
-    def _commit(self, assignment, plan, trajectory) -> None:
-        """Hand one planned trajectory to the engine and mark it live."""
+        # --------------------------------------------------
+        # Scientific execution.
+        #
+        # All initial movement intentions enter the local traffic
+        # controller together.
+        # --------------------------------------------------
 
-        robot_id = assignment.robot_id
-        robot = self.engine.robots[robot_id]
-
-        order = self.queue.order(assignment.order_id)
-
-        # The pairing is in flight now, no longer owed a plan.
-        self._clear_deferred(robot_id)
-
-        self.active[robot_id] = order.order_id
-
-        # Every shelf is serviced, then the drop-off.
-        self._services_left[robot_id] = len(
-            assignment.route.shelf_sequence
-        ) + 1
-
-        self._assign(robot_id, trajectory)
-
-        self._set_status(order, OrderStatus.IN_PROGRESS, robot_id)
-
-        record = Dispatch(
-            sim_time=self.engine.sim_time,
-            robot_id=robot_id,
-            order_id=order.order_id,
-            static_cost_m=assignment.cost,
-            shelf_sequence=assignment.route.shelf_sequence,
-            dropoff_id=order.dropoff_id,
-            start_cell=robot.cell,
-            planned_distance_m=plan.total_distance_m,
-            planned_wait_s=float(trajectory.planned_wait),
+        self.engine.assign_missions_batch(
+            missions
         )
 
-        self.result.dispatches.append(record)
+        # --------------------------------------------------
+        # Dispatch records.
+        #
+        # There is no pre-planned traffic wait anymore. Waiting is
+        # measured only from what actually occurs during execution.
+        # --------------------------------------------------
 
-        if self.on_dispatch is not None:
-            self.on_dispatch(record)
+        for robot_id in sorted(missions):
 
-    # -- end of workload ------------------------------------
+            assignment = by_robot[robot_id]
+            plan = missions[robot_id]
+
+            order = self.queue.order(
+                assignment.order_id
+            )
+
+            record = Dispatch(
+                sim_time=self.engine.sim_time,
+                robot_id=robot_id,
+                order_id=order.order_id,
+                static_cost_m=assignment.cost,
+                shelf_sequence=(
+                    assignment.route.shelf_sequence
+                ),
+                dropoff_id=order.dropoff_id,
+                start_cell=plan.path[0],
+                planned_distance_m=(
+                    plan.total_distance_m
+                ),
+                planned_wait_s=0.0,
+            )
+
+            self.result.dispatches.append(
+                record
+            )
+
+            if self.on_dispatch is not None:
+                self.on_dispatch(record)
+
+        return len(missions)
 
     def _send_home(self, free) -> int:
-        """No work left: drive each free robot to its own staging cell."""
+        """No work left: return free robots to their staging cells.
 
-        started = 0
+        Home routes are static MissionPlans. Dynamic robot interaction
+        is resolved by FleetSimulationEngine and LocalTrafficController,
+        exactly like normal order execution.
+        """
+
+        missions = {}
+        parking = set()
 
         for robot_id in free:
 
@@ -836,59 +731,58 @@ class WorkloadExecutor:
                 self.warehouse.zone_by_id(home).cells
             )
 
+            # Already parked.
             if robot.cell == home_cell:
+
                 self.parked.add(robot_id)
-                self.result.returns[robot_id] = self.engine.sim_time
+
+                self.result.returns[
+                    robot_id
+                ] = self.engine.sim_time
+
                 continue
 
-            now = self.engine.time
-
-            parked = self.stationary_cells(robot_id)
-
             try:
+
                 plan = plan_from_cell(
                     self.warehouse,
                     robot.cell,
                     [home],
                     start_label=robot_id,
-                    extra_blocked=parked,
                 )
 
             except (RuntimeError, ValueError):
+
                 self.result.plan_failures += 1
-                self._deferred_at[robot_id] = self._traffic_version
                 continue
 
-            self.reservations.drop(robot_id)
+            missions[robot_id] = plan
+            parking.add(robot_id)
 
-            try:
-                trajectory = self.mapf.plan_mission(
-                    robot_id=robot_id,
-                    start_cell=robot.cell,
-                    plan=plan,
-                    start_time=now,
-                    reservations=self.reservations,
-                    hold_forever=True,
-                    blocked_cells=parked,
-                )
+        if not missions:
+            return 0
 
-            except MapfFailure:
-                self.reservations.reserve_cell(
-                    robot.cell, now, None, robot_id
-                )
-                self.result.plan_failures += 1
-                self._deferred_at[robot_id] = self._traffic_version
-                continue
+        # Mark them before execution begins so workload availability
+        # cannot treat them as free robots.
+        self.returning.update(missions)
 
-            self.reservations.commit(trajectory, hold_forever=True)
+        try:
 
-            self.returning.add(robot_id)
+            self.engine.assign_missions_batch(
+                missions,
+                parking=parking,
+            )
 
-            self._assign(robot_id, trajectory)
+        except Exception:
 
-            started += 1
+            # Keep executor state consistent if assignment itself
+            # fails before execution begins.
+            for robot_id in missions:
+                self.returning.discard(robot_id)
 
-        return started
+            raise
+
+        return len(missions)
 
     # -- engine callbacks -----------------------------------
 
@@ -932,28 +826,16 @@ class WorkloadExecutor:
         )
 
     def _retire(self, robot_id: str) -> None:
-        """Collapse a finished robot's bookings to where it stands.
+        """Retire one finished mission.
 
-        A committed trajectory books every cell and edge it used, and
-        the tail is held forever. Left alone, each completed order adds
-        another thirty dead bookings that every later space-time search
-        still has to walk, and after a hundred orders the search --
-        not the fleet -- is what runs out of memory.
+        FleetSimulationEngine's live ReservationTable already leaves
+        the robot owning the cell where it stopped.
 
-        The robot is stationary now, so one booking says everything
-        true about it: this cell, from now, until it is dispatched
-        again.
+        No trajectory reservations need to be collapsed or rebuilt.
         """
 
-        robot = self.engine.robots[robot_id]
-
-        self.reservations.drop(robot_id)
-
-        self.reservations.reserve_cell(
-            robot.cell, self.engine.time, None, robot_id
-        )
-
-        # Its cell is released and it is available again.
+        # Traffic changed because this robot completed its mission and
+        # may immediately become available for another assignment.
         self._bump_traffic()
 
     def snapshot(self, sim_time: float | None = None) -> Progress:
@@ -1062,83 +944,14 @@ class WorkloadExecutor:
             self._external_tick(sim_time, batch)
 
     def _yield_blockers(self) -> int:
-        """Get idle robots out of the traffic lanes.
+        """Legacy MAPF recovery is disabled.
 
-        Robots retreat one cell into the aisle after a drop-off and
-        wait there, which is fine while they are being given work. When
-        every idle robot is blocked by another idle robot, though, the
-        aisle itself is the problem: nobody can plan a route because
-        everybody is standing in one.
-
-        A real fleet does not deadlock over this -- an idle robot goes
-        back to its standby position and stops occupying a lane. That
-        is what this does, and unlike the end-of-workload return it is
-        not terminal: the robot rejoins the available pool the moment
-        it arrives.
+        Local traffic conflicts are resolved inside
+        FleetSimulationEngine. There is no full-horizon traffic plan
+        to discard or rebuild.
         """
 
-        moved = 0
-
-        for robot_id in sorted(self.deferred):
-
-            robot = self.engine.robots[robot_id]
-
-            if robot.status is not GridRobotStatus.IDLE:
-                continue
-
-            home = self.homes[robot_id]
-
-            home_cell = min(self.warehouse.zone_by_id(home).cells)
-
-            if robot.cell == home_cell:
-                continue
-
-            now = self.engine.time
-
-            parked = self.stationary_cells(robot_id)
-
-            try:
-                plan = plan_from_cell(
-                    self.warehouse,
-                    robot.cell,
-                    [home],
-                    start_label=robot_id,
-                    extra_blocked=parked,
-                )
-
-            except (RuntimeError, ValueError):
-                continue
-
-            self.reservations.drop(robot_id)
-
-            try:
-                trajectory = self.mapf.plan_mission(
-                    robot_id=robot_id,
-                    start_cell=robot.cell,
-                    plan=plan,
-                    start_time=now,
-                    reservations=self.reservations,
-                    hold_forever=True,
-                    blocked_cells=parked,
-                )
-
-            except MapfFailure:
-                self.reservations.reserve_cell(
-                    robot.cell, now, None, robot_id
-                )
-                continue
-
-            self.reservations.commit(trajectory, hold_forever=True)
-
-            self.repositioning.add(robot_id)
-
-            self._assign(robot_id, trajectory)
-
-            moved += 1
-
-        return moved
-
-    # -- run ------------------------------------------------
+        return 0
 
     def finished(self) -> bool:
         return (

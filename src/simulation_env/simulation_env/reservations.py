@@ -76,6 +76,17 @@ class ReservationTable:
             if holder == robot_id
         )
 
+    def transits(self) -> dict:
+        """Every move currently in flight: robot -> (source, target, start, end).
+
+        Read-only view for a visualiser that needs to know where a robot
+        is *between* two cells. Nothing here influences the simulation;
+        the entry is created by ``begin_move`` and removed by
+        ``complete_move``.
+        """
+
+        return dict(self._transit)
+
     def cells_held_by_others(self, robot_id: str) -> frozenset:
         """Cells another robot is standing on or driving into.
 
@@ -152,8 +163,14 @@ class ReservationTable:
                 f"({conflict}); check_move first"
             )
 
+        already_held = (
+            self._owner.get(target) == robot_id
+        )
+
         self._owner[target] = robot_id
-        self._since[target] = now
+
+        if not already_held:
+            self._since[target] = now
 
         self._transit[robot_id] = (
             source,
@@ -162,14 +179,172 @@ class ReservationTable:
             now + duration,
         )
 
+    def begin_moves_batch(
+        self,
+        moves,
+        now: Fraction,
+        duration: Fraction,
+    ) -> None:
+        """Atomically begin multiple simultaneous one-cell moves.
+
+        ``moves`` contains ``(robot_id, source, target)`` tuples.
+
+        This is the runtime primitive for local synchronous traffic.
+        A robot may enter a cell that another approved robot is
+        vacating in the same batch.
+
+        Guarantees:
+        - target cells are unique
+        - a target may only be occupied by a robot leaving in this batch
+        - direct head-on edge swaps are rejected
+        - all sources release before any target is claimed
+        """
+
+        moves = tuple(moves)
+
+        if not moves:
+            return
+
+        robot_ids = [
+            robot_id
+            for robot_id, _, _ in moves
+        ]
+
+        if len(set(robot_ids)) != len(robot_ids):
+            raise ValueError(
+                "duplicate robot in simultaneous move batch"
+            )
+
+        sources = {
+            robot_id: source
+            for robot_id, source, _ in moves
+        }
+
+        targets = {
+            robot_id: target
+            for robot_id, _, target in moves
+        }
+
+        if len(set(targets.values())) != len(targets):
+            raise ValueError(
+                "simultaneous move batch has duplicate target cells"
+            )
+
+        # Every robot must actually own its source before the move.
+        for robot_id, source, _ in moves:
+
+            holder = self._owner.get(source)
+
+            if holder != robot_id:
+                raise RuntimeError(
+                    f"{robot_id} cannot leave {source}: "
+                    f"owned by {holder!r}"
+                )
+
+        moving = set(robot_ids)
+
+        # A target must either be free or currently owned by another
+        # robot that is approved to vacate it in this same batch.
+        for robot_id, _, target in moves:
+
+            holder = self._owner.get(target)
+
+            if holder is None or holder == robot_id:
+                continue
+
+            if holder not in moving:
+                raise RuntimeError(
+                    f"{robot_id} cannot enter {target}: "
+                    f"stationary {holder} still owns it"
+                )
+
+            if sources[holder] != target:
+                raise RuntimeError(
+                    f"{robot_id} cannot enter {target}: "
+                    f"{holder} is not leaving that cell"
+                )
+
+        # Never permit a direct A->B / B->A exchange.
+        for robot_id, source, target in moves:
+
+            for other_id, other_source, other_target in moves:
+
+                if other_id <= robot_id:
+                    continue
+
+                if (
+                    source == other_target
+                    and target == other_source
+                ):
+                    raise RuntimeError(
+                        f"head-on edge swap rejected: "
+                        f"{robot_id} {source}->{target} against "
+                        f"{other_id} {other_source}->{other_target}"
+                    )
+
+        # Check against a traversal that was already in progress before
+        # this batch began.
+        for robot_id, source, target in moves:
+
+            for other, (o_src, o_tgt, _, _) in self._transit.items():
+
+                if other == robot_id:
+                    continue
+
+                if (
+                    o_src == target
+                    and o_tgt == source
+                ):
+                    raise RuntimeError(
+                        f"{robot_id} {source}->{target} conflicts "
+                        f"with live reverse traversal by {other}"
+                    )
+
+        # Phase 1. Everyone leaves their source at the exact same
+        # simulation instant.
+        for robot_id, source, _ in moves:
+            self.release(
+                source,
+                robot_id,
+                now,
+            )
+
+        # Phase 2. Everyone claims the destination and begins transit.
+        for robot_id, source, target in moves:
+
+            if target in self._owner:
+                raise RuntimeError(
+                    f"batch target {target} unexpectedly still occupied "
+                    f"by {self._owner[target]}"
+                )
+
+            self._owner[target] = robot_id
+            self._since[target] = now
+
+            self._transit[robot_id] = (
+                source,
+                target,
+                now,
+                now + duration,
+            )
+
     def complete_move(
         self,
         robot_id: str,
         source: Cell,
         target: Cell,
         now: Fraction,
+        *,
+        release_source: bool = True,
     ) -> None:
-        """Arrive at the target and release the cell left behind."""
+        """Complete one move.
+
+        Normally the source is released on arrival.
+
+        A service-entry move may deliberately retain its source.
+        That source is the robot's guaranteed one-cell retreat path
+        while PICKING or DROPPING.
+        """
 
         transit = self._transit.pop(robot_id, None)
 
@@ -184,7 +359,12 @@ class ReservationTable:
                 )
             )
 
-        self.release(source, robot_id, now)
+        if release_source:
+            self.release(
+                source,
+                robot_id,
+                now,
+            )
 
     def release(
         self,
