@@ -36,10 +36,8 @@ from heapq import heappop, heappush
 
 from mrta_core.warehouse_map import WarehouseMap, ZoneType
 
-from simulation_env.execution_buffer import RollingExecutionBuffer
 from simulation_env.grid_robot import GridRobot, GridRobotStatus
 from mrta_core.warehouse_routing import MissionPlan
-from simulation_env.mapf import MOVE, RETREAT, SERVICE, WAIT
 from simulation_env.reservations import EDGE, VERTEX, ReservationTable
 from simulation_env.local_traffic_controller import (
     LocalTrafficController,
@@ -190,7 +188,6 @@ class FleetSimulationEngine:
 
         # The complete timed trajectory remains owned by each rolling buffer;
         # only a six-cell delivery window is exposed to execution.
-        self._trajectories: dict[str, RollingExecutionBuffer] = {}
 
         # Robots that finished an action this timestamp and must pick
         # their next one, once every release in the batch is applied.
@@ -200,7 +197,6 @@ class FleetSimulationEngine:
         # return a fresh Trajectory from the robot's current cell and
         # the current time, or None to give up. Replanning, never a
         # blind retry loop.
-        self.replanner = None
 
     # -- clock ------------------------------------------
 
@@ -392,161 +388,7 @@ class FleetSimulationEngine:
             ),
         )
 
-    # -- MAPF trajectory execution ----------------------
 
-    ACTION_EVENT = {
-        MOVE: EventType.MOVE_COMPLETE,
-        RETREAT: EventType.RETREAT_COMPLETE,
-        WAIT: EventType.WAIT_COMPLETE,
-        SERVICE: EventType.SERVICE_COMPLETE,
-    }
-
-    def assign_trajectory(self, robot_id: str, trajectory) -> None:
-        """Execute a pre-planned timed path instead of a raw mission."""
-
-        robot = self.robots[robot_id]
-
-        if trajectory.start_cell != robot.cell:
-            raise ValueError(
-                f"{robot_id} is at {robot.cell} but its trajectory "
-                f"starts at {trajectory.start_cell}"
-            )
-
-        robot.planned_wait_time_s += float(trajectory.planned_wait)
-        robot.space_time_expansions += trajectory.expansions
-
-        self._trajectories[robot_id] = RollingExecutionBuffer(
-            trajectory, now=self.time
-        )
-
-        self._start_action(robot_id)
-
-    def _start_action(self, robot_id: str) -> None:
-
-        robot = self.robots[robot_id]
-
-        execution = self._trajectories[robot_id]
-        action = execution.current_action
-
-        if action is None:
-            self._schedule(
-                robot_id, EventType.MISSION_COMPLETE, Fraction(0)
-            )
-            return
-
-        delay = action.end - self.time
-
-        if delay < 0:
-            delay = Fraction(0)
-
-        if action.kind in (MOVE, RETREAT):
-
-            conflict = self.reservations.check_move(
-                robot_id, robot.cell, action.cell
-            )
-
-            if conflict is not None:
-                self._replan(robot_id, conflict)
-                return
-
-            self.reservations.begin_move(
-                robot_id,
-                robot.cell,
-                action.cell,
-                self.time,
-                delay,
-            )
-
-            robot.status = GridRobotStatus.MOVING
-
-        elif action.kind == WAIT:
-            # A planned wait: stationary, still holding its cell.
-            robot.status = GridRobotStatus.WAITING
-
-        elif action.kind == SERVICE:
-            zone_type = self.warehouse.zone_by_id(
-                action.zone
-            ).zone_type
-            robot.status = SERVICE_STATUS[zone_type]
-
-        self._schedule(
-            robot_id,
-            self.ACTION_EVENT[action.kind],
-            delay,
-            detail=action.zone,
-        )
-
-    def _replan(self, robot_id: str, conflict: str) -> None:
-        """The environment moved under a planned trajectory."""
-
-        robot = self.robots[robot_id]
-
-        if conflict == VERTEX:
-            robot.vertex_conflict_count += 1
-        elif conflict == EDGE:
-            robot.edge_conflict_count += 1
-
-        robot.replan_count += 1
-
-        if self.replanner is None:
-            raise RuntimeError(
-                f"{robot_id} hit a {conflict} conflict at "
-                f"{robot.cell} t={self.sim_time:.4f} and no "
-                f"replanner is configured"
-            )
-
-        trajectory = self.replanner(robot, self.time)
-
-        if trajectory is None:
-            raise DeadlockError(
-                f"{robot_id} could not be replanned from "
-                f"{robot.cell} at t={self.sim_time:.4f}"
-            )
-
-        self._trajectories[robot_id] = RollingExecutionBuffer(
-            trajectory, now=self.time
-        )
-
-        robot.space_time_expansions += trajectory.expansions
-        robot.planned_wait_time_s += float(trajectory.planned_wait)
-
-        self._start_action(robot_id)
-
-    def _advance_trajectory(self, event: Event) -> None:
-        """Apply one finished action. Claims happen later in the batch."""
-
-        robot = self.robots[event.robot_id]
-
-        execution = self._trajectories[event.robot_id]
-        action = execution.current_action
-
-        if action is None:
-            raise RuntimeError(
-                f"{event.robot_id} completed an action with an empty buffer"
-            )
-
-        duration = float(action.duration)
-
-        if action.kind in (MOVE, RETREAT):
-            source = robot.cell
-            robot.move_to(action.cell, float(self.resolution))
-            robot.book_travel(duration)
-            self.reservations.complete_move(
-                event.robot_id, source, robot.cell, self.time
-            )
-
-        elif action.kind == WAIT:
-            robot.book_wait(duration)
-
-        elif action.kind == SERVICE:
-            robot.book_service(duration, robot.status)
-
-        # Refill happens before phase two starts the next action.  It adds no
-        # event or delay, so consecutive cell waypoints remain continuous
-        # MOVING rather than becoming implicit stop commands.
-        execution.complete_current(self.time)
-
-    # -- mission progression ----------------------------
 
     def _begin_segment(self, robot_id: str) -> None:
 
@@ -1356,17 +1198,6 @@ class FleetSimulationEngine:
         if event.kind is EventType.MISSION_COMPLETE:
             self._mission_complete_events += 1
 
-        if event.robot_id in self._trajectories:
-
-            if event.kind is EventType.MISSION_COMPLETE:
-                robot.status = GridRobotStatus.IDLE
-                self.mission_completion[event.robot_id] = self.time
-                return
-
-            self._advance_trajectory(event)
-            self._pending.append((event.robot_id, event.kind))
-            return
-
         # --------------------------------------------------
         # Temporary local head-on side step completed.
         # --------------------------------------------------
@@ -1602,13 +1433,6 @@ class FleetSimulationEngine:
             )
 
         for robot_id, kind in sorted(pending):
-
-            # Old MAPF trajectory execution remains untouched until
-            # WorkloadExecutor is migrated.
-            if robot_id in self._trajectories:
-
-                self._start_action(robot_id)
-                continue
 
             assignment = self.assignments.get(
                 robot_id

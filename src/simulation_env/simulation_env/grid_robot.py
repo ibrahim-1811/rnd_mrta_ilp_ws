@@ -74,14 +74,6 @@ class GridRobot:
     vertex_conflict_count: int = 0
     edge_conflict_count: int = 0
 
-    # MAPF accounting. planned_wait_time_s is waiting the planner
-    # scheduled up front; waiting_time_s is what actually happened.
-    # static_distance_m is the free-running shortest path, kept apart
-    # so traffic overhead can be measured as the difference.
-    planned_wait_time_s: float = 0.0
-    static_distance_m: float = 0.0
-    space_time_expansions: int = 0
-    replan_count: int = 0
 
     def move_duration(self, resolution: float) -> float:
         """Simulated seconds for one grid edge. Pure."""
@@ -120,7 +112,7 @@ class GridRobot:
     def move_to(self, cell: Cell, resolution: float) -> Cell:
         """Move one grid edge to an explicit cell. No time.
 
-        Used when a MAPF trajectory, rather than a stored path, says
+        Used when the traffic layer, rather than a stored path, says
         where the robot goes next.
         """
 

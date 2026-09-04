@@ -1,0 +1,76 @@
+# Central warehouse simulation configuration.
+#
+# Authoritative for map, fleet, service durations, orders and Gazebo.
+# Nodes take config_file as a ROS parameter and read this, so there are
+# no duplicate constants in the executor.
+#
+# Research strategy parameters (allocation policy, congestion,
+# reservations, battery, priority, RL, ILP) deliberately live
+# elsewhere and are not configured here yet.
+
+warehouse:
+  map: CSV_To_Gazebo.xlsx
+  resolution_m: 1.0
+
+fleet:
+  robot_count: 10
+  robot_prefix: robot_
+  # Robots are deployed onto staging stations in id order:
+  # robot_001 -> staging_001 ... robot_018 -> staging_018
+  initial_position_mode: staging
+  speed_mps: 1.0
+  initial_battery_percent: 100.0
+
+# Scientific service durations, used exactly as written. Nothing in
+# the visualization layer may modify these.
+service:
+  shelf_pick_s: 2.0
+  dropoff_s: 2.0
+
+# Order input layer. The workload is deterministic and fully known at
+# startup: every row is loaded at t=0 and every logical order starts
+# PENDING. Which orders an allocator may see is decided by FIFO on the
+# CSV sequence -- min(available_robots, pending_orders) at a time --
+# never by a clock. There is deliberately no priority, release_time or
+# deadline column.
+orders:
+  file: orders.csv
+  mode: replay
+
+# Staging is the deployment position and an optional idle position.
+# It is NOT a mandatory return destination: a robot that finishes an
+# order stays available where it is.
+mission:
+  start_zone: staging_001
+  # When a robot has no work left it returns to its park zone. This
+  # is an idle policy, not part of any order: a robot does NOT go
+  # home between the legs of a mission.
+  park_when_idle: true
+  # home       -> each robot returns to its own staging station
+  # start_zone -> everything returns to mission.start_zone
+  park_zone_mode: home
+
+simulation:
+  deterministic: true
+  seed: 42
+
+# Playback only. NEVER affects sim_time, completion_time, lateness,
+# travel time, service time or any outcome datum.
+#   wall_seconds = sim_seconds / time_scale
+# time_scale 0 disables delays entirely (fastest headless runs).
+# min_wall_hold_s only lengthens what a human sees, never the model.
+visualization:
+  time_scale: 4.0
+  min_wall_hold_s: 0.0
+
+
+ros:
+  robot_states_topic: /mrta/robot_states
+  order_states_topic: /mrta/order_states
+  # Robots are stationary in this step, so publish the fleet snapshot
+  # periodically to give a live topic to monitor.
+  robot_state_publish_hz: 2.0
+
+gazebo:
+  enabled: true
+  world_name: warehouse_10

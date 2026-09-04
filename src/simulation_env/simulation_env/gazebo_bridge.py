@@ -10,10 +10,24 @@ import queue
 import re
 import subprocess
 import threading
+from dataclasses import dataclass
 
 
 # Matches the robot pose the world generator writes.
 DEFAULT_ROBOT_Z = 0.155
+
+# How often the visualiser samples the fleet while pacing one interval.
+DEFAULT_PLAYBACK_HZ = 20.0
+
+
+@dataclass(frozen=True)
+class FleetPose:
+    """One robot's rendered position for a single visual frame."""
+
+    name: str
+    x: float
+    y: float
+    z: float
 
 # A GUI server renders every station tile, so it answers slower than a
 # headless one and an occasional call overruns. Retry rather than

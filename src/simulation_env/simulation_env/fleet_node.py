@@ -31,17 +31,14 @@ from simulation_env.grid_robot import GridRobotStatus
 from simulation_env.workload_executor import WorkloadExecutor
 from mrta_core.warehouse_routing import plan_return_to_zone, service_cells
 from simulation_env.gazebo_bridge import (
+    DEFAULT_PLAYBACK_HZ,
     DEFAULT_ROBOT_Z,
+    FleetPose,
     FleetPoseSink,
     provider_count,
     read_robot_z,
 )
 from simulation_env.gazebo_view import grid_to_gazebo
-from simulation_env.fleet_playback import (
-    DEFAULT_PLAYBACK_HZ,
-    FleetPose,
-    FleetTrajectoryPlayback,
-)
 
 
 DEFAULT_CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
@@ -106,7 +103,6 @@ class FleetNode(Node):
         self.resolution = config.resolution_m
         self.robot_z = DEFAULT_ROBOT_Z
         self.gazebo_sink: FleetPoseSink | None = None
-        self.playback: FleetTrajectoryPlayback | None = None
 
         qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -534,7 +530,6 @@ class FleetNode(Node):
             on_tick=self.on_tick,
             on_dispatch=self.announce_dispatch,
             on_order_status=self.announce_order_status,
-            on_trajectory=self.show_trajectory,
             on_progress=self.announce_progress,
             progress_interval_s=self.progress_interval_s,
             on_perf=self.announce_perf,
@@ -555,15 +550,6 @@ class FleetNode(Node):
 
         self.report_workload(executor, result, wall)
 
-    def show_trajectory(self, robot_id: str, trajectory) -> None:
-        """Mirror a newly committed trajectory into Gazebo playback.
-
-        Visualization only. Nothing here is read back into the
-        simulation: the engine already holds the authoritative copy.
-        """
-
-        if self.playback is not None:
-            self.playback.set_trajectory(robot_id, trajectory)
 
     def announce_perf(self, budget) -> None:
         """Report a dispatch that stalled the loop. CPU time only."""
@@ -640,8 +626,6 @@ class FleetNode(Node):
         print(f"  total travel time     : {totals['travel_time_s']:.4f} s")
         print(f"  total waiting         : {totals['waiting_time_s']:.4f} s")
         print(f"  total service time    : {totals['service_time_s']:.4f} s")
-        print(f"  MAPF conflicts        : {totals['conflicts']}")
-        print(f"  MAPF replans          : {totals['replans']}")
         print(f"  plan deferrals        : {result.plan_failures}")
         print(f"  peak in-progress      : {result.peak_in_progress}")
         print(f"  max deferred-now      : {result.max_deferred_now}")
@@ -652,7 +636,10 @@ class FleetNode(Node):
         print(f"    slow dispatches     : {result.slow_dispatches}")
         print(f"    worst dispatch      : {result.worst_dispatch_s:.3f} s")
         print(f"    static reuses       : {result.static_route_reuses}")
-        print(f"  space-time expansions : {totals['expansions']}")
+        print(
+            f"  reservation violations: "
+            f"{totals['reservation_violations']}"
+        )
         print(f"  events processed      : {totals['events']}")
         print(f"  routes cached         : {executor.routes.stats()}")
         print(f"  wall clock            : {wall:.1f} s")
@@ -670,15 +657,6 @@ class FleetNode(Node):
                 start_sim=engine.sim_time - delta_sim,
                 end_sim=engine.sim_time,
                 wall_seconds=wall,
-            )
-
-        elif self.playback is not None and self.use_gazebo:
-            end_sim = self.engine.sim_time
-            self.playback.play_interval(
-                start_sim=end_sim - delta_sim,
-                end_sim=end_sim,
-                wall_seconds=wall,
-                emit=self._emit_gazebo_poses,
             )
 
         elif wall > 0.0:
@@ -809,34 +787,6 @@ class FleetNode(Node):
 
     def on_tick(self, sim_time: float, batch) -> None:
         """Observe the new state. Never advances the clock."""
-
-        # MAPF interpolation already ended this interval with one complete
-        # fleet pose at exactly ``sim_time``.  The legacy path runner has no
-        # timed trajectory, so give it one batched endpoint update here.
-        if self.use_gazebo and self.playback is None:
-
-            moved = {event.robot_id for event in batch}
-
-            by_id = {r.robot_id: r for r in self.robots}
-
-            poses = []
-
-            for robot_id in sorted(moved):
-                robot = by_id[robot_id]
-                world_x, world_y = grid_to_gazebo(
-                    robot.cell, self.resolution
-                )
-                poses.append(
-                    FleetPose(
-                        robot_id,
-                        world_x,
-                        world_y,
-                        self.robot_z,
-                    )
-                )
-
-            if poses:
-                self._emit_gazebo_poses(sim_time, poses)
 
         self.publish_fleet()
 

@@ -1,6 +1,37 @@
 # 16 — Current status
 
-Status as of 2026-08-29, branch `main`, commit `ec6ecd6`.
+> **Superseded in part.** The component table below is as of
+> 2026-08-29, commit `ec6ecd6`. The simulator and traffic layer were
+> frozen on 2026-09-03 on branch `traffic/rmf-integration`; for that
+> state see [00_RUNBOOK.md §7](00_RUNBOOK.md) and
+> [18_TRAFFIC_TOPOLOGY.md](18_TRAFFIC_TOPOLOGY.md).
+
+## Frozen simulator baseline (2026-09-03)
+
+| Measure | Value |
+|---|---|
+| orders completed | 100/100 |
+| robots returned home | 18/18 |
+| makespan | 315.3333 s |
+| total distance | 6282.0 m |
+| total waiting | 236.0000 s |
+| reservation violations | 0 |
+| uncontrolled bidirectional core edges | 0 |
+| core strongly connected | PASS (347/347) |
+| terminal access | PASS (130/130) |
+| unit tests | 69 passed |
+| Gazebo | live mirror, reproduces the above exactly |
+
+Removed at the freeze: full-horizon MAPF (`mapf.py`,
+`mapf_planner.py`, `execution_buffer.py`, `fleet_playback.py`, the
+trajectory path in `fleet_engine.py`, and their two test files). Every
+run had reported 0 conflicts, 0 replans and 0 space-time expansions.
+
+Not yet simulated: **charging**. The map defines 16 charging cells and
+they are parsed and rendered, but battery is never decremented and no
+robot ever routes to a charger. See [00_RUNBOOK.md §8.2](00_RUNBOOK.md).
+
+## Component status as of 2026-08-29, branch `main`, commit `ec6ecd6`
 
 ## Status definitions
 

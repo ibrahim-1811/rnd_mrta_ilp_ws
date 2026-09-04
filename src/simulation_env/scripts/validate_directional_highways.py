@@ -13,6 +13,7 @@ What is checked, against the exact ``blocked_edges`` set A* consumes:
   * every shelf, dropoff and staging cell can be entered and left
 """
 
+import argparse
 from collections import deque
 
 from mrta_core.sim_config import load_sim_config
@@ -32,7 +33,11 @@ from mrta_core.warehouse_routing import (
 )
 
 
-CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+DEFAULT_CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+
+_parser = argparse.ArgumentParser(description=__doc__)
+_parser.add_argument("--config", default=DEFAULT_CONFIG)
+CONFIG = _parser.parse_args().config
 
 TERMINAL_TYPES = (
     ZoneType.SHELF,

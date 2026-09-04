@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Run a warehouse workload headless: FIFO -> allocator -> MAPF -> fleet.
+"""Run a warehouse workload headless: FIFO -> allocator -> fleet.
 
 No ROS and no Gazebo: this is the execution path on its own, so a run
 can be checked without a display or a live node.
@@ -45,10 +45,6 @@ def main() -> int:
     parser.add_argument(
         "--speed", type=float, default=0.0,
         help="robot speed in m/s (0 = the configured speed_mps)",
-    )
-    parser.add_argument(
-        "--horizon", type=int, default=0,
-        help="space-time search depth in quanta (0 = derived)",
     )
     parser.add_argument(
         "--progress", type=float, default=10.0,
@@ -123,7 +119,6 @@ def main() -> int:
             ZoneType.SHELF: config.shelf_pick_s,
             ZoneType.DROPOFF: config.dropoff_s,
         },
-        horizon_steps=args.horizon or None,
         on_dispatch=announce,
         on_progress=progress,
         progress_interval_s=args.progress,
@@ -157,8 +152,10 @@ def main() -> int:
     print(f"  total distance   : {totals['distance_m']:.1f} m")
     print(f"  total waiting    : {totals['waiting_time_s']:.4f} s")
     print(f"  total service    : {totals['service_time_s']:.4f} s")
-    print(f"  MAPF conflicts   : {totals['conflicts']}")
-    print(f"  MAPF replans     : {totals['replans']}")
+    print(
+        f"  reservation viol.: "
+        f"{totals['reservation_violations']}"
+    )
     print(f"  plan deferrals   : {result.plan_failures}")
     print(f"  peak in-progress : {result.peak_in_progress}")
     print(f"  max deferred-now : {result.max_deferred_now}")

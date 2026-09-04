@@ -20,6 +20,17 @@ from and is compared against.
 
 ---
 
+> **Document status (2026-09-03).** The *Quick start* section above is
+> current and verified. Sections below it — *Running manually*,
+> *Nodes*, *Allocation strategies*, *Output files*, *Testing*,
+> *Roadmap* — describe an earlier workspace and are **stale**: the
+> launch files, nodes and twelve strategies they reference were removed
+> in commit `7a07208`, leaving one strategy (`nearest_astar`) and one
+> launch file (`warehouse_sim.launch.py`). Use
+> [`docs/00_RUNBOOK.md`](docs/00_RUNBOOK.md) for anything you intend to
+> run, and [`docs/README.md`](docs/README.md) for the full register of
+> stale claims.
+
 ## Table of contents
 
 1. [Architecture](#architecture)
@@ -128,30 +139,68 @@ colcon build --packages-select task_management && source install/setup.bash
 
 ## Quick start
 
-One command runs the full headless stack, fires a seeded order stream, streams live
-progress, and saves everything under `Mrta_experiments/<strategy>_<timestamp>/`:
+> **Full command reference:** [`docs/00_RUNBOOK.md`](docs/00_RUNBOOK.md)
+> — build, regenerating every artefact, headless runs, Gazebo, and the
+> verification gates. Every command in it was executed and verified on
+> 2026-09-03.
+
+Two interpreters are in play. Headless science runs on the pixi
+environment; anything launched with `ros2` runs on ROS 2 Jazzy.
+`openpyxl` is not in the pixi env, so the system copy goes on
+`PYTHONPATH`:
 
 ```bash
-scripts/run_experiment.sh [strategy] [num_robots] [num_orders] [seed] [rate_hz] [time_scale]
-
-# examples
-scripts/run_experiment.sh                      # auction, 6 robots, 20 orders, seed 42
-scripts/run_experiment.sh nearest 10 30 42     # nearest, 10 robots, 30 orders
-scripts/run_experiment.sh score 6 20 7 5 20    # score, seed 7, 5 Hz, 20x real-time
+cd ~/rnd_mrta_ilp_ws
+export PY=.pixi/envs/default/bin/python
+export PP=src/mrta_core:src/simulation_env:src/task_management:/usr/lib/python3/dist-packages
 ```
 
-Example output:
+### Headless — no ROS, no display
+
+```bash
+PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py --orders 100 --progress 0
+```
 
 ```
-== launching headless stack: strategy=nearest robots=6 ==
-== sending 15 orders (seed=42, rate=5.0Hz) ==
-  progress: completed=8 / 15
-  progress: completed=15 / 15
-==================== RESULT ====================
-strategy  n_assign  n_defer  n_completed  makespan_s  throughput_ops  mean_travel_m  mean_energy_pct  mean_alloc_runtime_ms
-nearest   15        0        15           4.108       3.6516          44.067         13.365           0.0034
-saved to: /home/.../Mrta_experiments/nearest_2026-07-30_12-34-23
+  completed        : 100/100
+  returned to home : 18/18
+  makespan         : 315.3333 s
+  total distance   : 6282.0 m
+  total waiting    : 236.0000 s
+  reservation viol.: 0
 ```
+
+Vary the run with `--orders N`, `--robots N`, `--speed M`,
+`--strategy NAME`. Note that `--orders` and `--robots` are applied as
+list slices: asking for more than exists silently gives you what
+exists (100 orders in the committed CSV, 18 staging cells).
+
+### Gazebo — visualisation only
+
+Gazebo mirrors the engine and reproduces the headless numbers exactly.
+Use two terminals so Gazebo stays up between runs.
+
+**Terminal 1 — Gazebo, left running:**
+
+```bash
+source /opt/ros/jazzy/setup.bash && source install/setup.bash
+gz sim -r $(ros2 pkg prefix simulation_env)/share/simulation_env/worlds/warehouse_grid.world
+```
+
+**Terminal 2 — fleet and orders, re-runnable:**
+
+```bash
+source /opt/ros/jazzy/setup.bash && source install/setup.bash
+ros2 launch simulation_env warehouse_sim.launch.py start_gazebo:=false orders:=true
+```
+
+Robots snap to their staging cells and start moving. Add `speed:=0.4`
+to watch the one-way lane structure. Run everything in one shot with
+`ros2 launch simulation_env warehouse_sim.launch.py orders:=true`.
+
+> ⚠️ Never run two `gz sim` servers for the same world — both advertise
+> `set_pose_vector`, pose updates get split between them, and robots
+> appear to stall. `pkill -f "gz sim"` before relaunching.
 
 ---
 

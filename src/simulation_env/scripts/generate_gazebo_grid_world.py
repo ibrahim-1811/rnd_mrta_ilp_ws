@@ -21,6 +21,7 @@ Station tiles are visual only. They carry no collision and never
 affect A*; the occupancy layer is still just the red cells.
 """
 
+import argparse
 from pathlib import Path
 
 from mrta_core.sim_config import load_sim_config
@@ -29,23 +30,48 @@ from simulation_env.fleet import build_fleet
 from simulation_env.gazebo_view import grid_to_gazebo
 
 
-CONFIG_PATH = Path(
-    "src/simulation_env/config/warehouse_sim.yaml"
+DEFAULT_CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+
+WORLDS_DIR = Path("src/simulation_env/worlds")
+
+_parser = argparse.ArgumentParser(description=__doc__)
+
+_parser.add_argument(
+    "--config",
+    default=DEFAULT_CONFIG,
+    type=Path,
+    help="simulation config; map, fleet size, cell size and world "
+         "name all come from it",
 )
 
-# Map and start zone come from the central config, so the world and
-# the executor can never disagree about either.
+_parser.add_argument(
+    "--output",
+    default=None,
+    type=Path,
+    help="output .world path "
+         "(default: worlds/<gazebo.world_name>.world)",
+)
+
+_args = _parser.parse_args()
+
+CONFIG_PATH = _args.config
+
+# Map, fleet size, resolution and world name all come from the central
+# config, so the world and the executor can never disagree about any of
+# them. Regenerate this world whenever any of those change.
 CONFIG = load_sim_config(CONFIG_PATH)
 
 MAP_PATH = CONFIG.map_path
 
-OUTPUT_PATH = Path(
-    "src/simulation_env/worlds/warehouse_grid.world"
+WORLD_NAME = CONFIG.gazebo_world_name
+
+OUTPUT_PATH = (
+    _args.output
+    if _args.output is not None
+    else WORLDS_DIR / f"{WORLD_NAME}.world"
 )
 
-WORLD_NAME = "warehouse_grid"
-
-CELL_SIZE = 1.0
+CELL_SIZE = CONFIG.resolution_m
 
 FLOOR_Z = 0.0
 

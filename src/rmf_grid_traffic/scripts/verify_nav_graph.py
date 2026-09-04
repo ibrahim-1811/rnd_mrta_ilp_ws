@@ -26,6 +26,7 @@ from pathlib import Path
 
 import yaml
 
+from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from mrta_core.warehouse_routing import (
     directional_blocked_edges,
@@ -37,12 +38,22 @@ def main() -> int:
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--map", required=True, type=Path)
+    parser.add_argument("--map", type=Path)
+    parser.add_argument("--config", type=Path)
     parser.add_argument("--graph", required=True, type=Path)
 
     args = parser.parse_args()
 
-    warehouse = load_warehouse_xlsx(args.map)
+    if args.map is None and args.config is None:
+        parser.error("give --map or --config")
+
+    map_path = (
+        args.map
+        if args.map is not None
+        else load_sim_config(args.config).map_path
+    )
+
+    warehouse = load_warehouse_xlsx(map_path)
     grid = warehouse.grid
 
     blocked_edges = directional_blocked_edges(warehouse)

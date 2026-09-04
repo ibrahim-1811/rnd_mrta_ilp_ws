@@ -1,9 +1,9 @@
-"""Run a whole warehouse workload: FIFO -> allocator -> MAPF -> fleet.
+"""Run a whole warehouse workload: FIFO -> allocator -> fleet.
 
 This is the execution half of the milestone. It owns no allocation
 policy of its own: it asks ``task_management`` who should take what,
 and then drives the answer through the existing planner, the existing
-space-time MAPF layer and the existing fleet engine.
+reactive local traffic layer and the fleet engine.
 
     OrderQueue          which orders are eligible   (FIFO, capped at
                         min(available_robots, pending))
@@ -28,7 +28,6 @@ t=93 is routed around the seventeen already in motion.
 
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
-from fractions import Fraction
 from time import perf_counter
 
 from mrta_core.order_queue import OrderQueue
@@ -42,49 +41,6 @@ from mrta_core.warehouse_routing import RouteCache, plan_from_cell
 # An order visits at most three shelves and one drop-off.
 MAX_ORDER_LEGS = 4
 
-
-def workload_horizon_steps(
-    warehouse,
-    move_steps: int,
-    service_steps: dict,
-    robot_count: int,
-    max_legs: int = MAX_ORDER_LEGS,
-) -> int:
-    """How deep the space-time search may look, in planner quanta.
-
-    ``MapfMissionPlanner`` defaults to 4000 quanta -- roughly 2600
-    simulated seconds at 1.5 m/s. That depth is never needed by a
-    workload mission, but it is paid in full every time a robot is
-    genuinely unroutable, because the search only stops when the
-    horizon runs out. One such failure measured ~28 s of wall time.
-
-    So bound it by what a mission can actually need:
-
-        travel   a leg is at most a Manhattan crossing of the map, and
-                 an order has at most ``max_legs`` of them
-        service  one service hold per leg
-        traffic  slack for yielding, scaled by fleet size: in the worst
-                 case a robot waits behind every other robot once per
-                 leg
-
-    The result is generous -- several times the makespan a real mission
-    needs -- so a route that exists is still found. What it removes is
-    only the dead search *past* any plausible route, which is exactly
-    the cost of discovering that no route exists right now.
-
-    Derived from the map and fleet rather than hard-coded, so changing
-    speed, service time, fleet size or map keeps it proportionate.
-    """
-
-    span = warehouse.grid.width + warehouse.grid.height
-
-    travel = span * max_legs * move_steps
-
-    service = max_legs * (max(service_steps.values()) if service_steps else 0)
-
-    traffic = robot_count * max_legs * move_steps
-
-    return int(travel + service + traffic)
 
 
 @dataclass
@@ -187,7 +143,7 @@ class Progress:
     The five order counts are the five OrderStatus values, so they
     always sum to the total. ``deferred_now`` is a *subset* of
     ``assigned`` -- assignments whose robot is chosen but which are
-    still waiting for a MAPF plan -- and must never be added to the
+    still waiting for a route -- and must never be added to the
     total separately.
     """
 
@@ -254,7 +210,6 @@ class WorkloadExecutor:
         resolution: float,
         speed_mps: float,
         service_seconds: dict,
-        horizon_steps: int | None = None,
         on_advance=None,
         on_tick=None,
         on_dispatch=None,
@@ -332,7 +287,7 @@ class WorkloadExecutor:
         self.parked: set[str] = set()
 
         # robot_id -> the OrderAssignment the allocator made for it,
-        # still waiting for a MAPF plan. Prioritized MAPF is
+        # still waiting for a route. Prioritized planning is
         # incomplete: a robot can be genuinely unroutable right now
         # because others hold the aisle it needs. The MRTA decision is
         # made once and kept -- a deferred order is never quietly
@@ -410,7 +365,7 @@ class WorkloadExecutor:
         A robot with no trajectory in flight is not going to move out
         of the way, so it is a wall -- to the static route and to the
         space-time search alike. Robots that are driving are left out:
-        their bookings expire, and resolving them is what the MAPF
+        their bookings expire, and resolving them is what the traffic
         layer is for.
         """
 
@@ -550,7 +505,7 @@ class WorkloadExecutor:
             self.deferred[assignment.robot_id] = assignment
             self._deferred_at[assignment.robot_id] = -1
 
-        # One allocation decision, one fleet MAPF planning operation.
+        # One allocation decision, one fleet planning operation.
         return started + self.launch_batch(assignments)
 
     def _clear_deferred(self, robot_id: str) -> None:
@@ -943,16 +898,6 @@ class WorkloadExecutor:
         if self._external_tick is not None:
             self._external_tick(sim_time, batch)
 
-    def _yield_blockers(self) -> int:
-        """Legacy MAPF recovery is disabled.
-
-        Local traffic conflicts are resolved inside
-        FleetSimulationEngine. There is no full-horizon traffic plan
-        to discard or rebuild.
-        """
-
-        return 0
-
     def finished(self) -> bool:
         return (
             not self.queue.pending()
@@ -1008,7 +953,10 @@ class WorkloadExecutor:
             if started:
                 return started
 
-        return self._yield_blockers()
+        # Nothing further to try: local traffic conflicts are resolved
+        # inside FleetSimulationEngine, and there is no full-horizon
+        # traffic plan left to discard and rebuild.
+        return 0
 
     def run(self, max_rounds: int = 500) -> WorkloadResult:
         """Execute the whole workload, then bring the fleet home."""
@@ -1061,10 +1009,8 @@ class WorkloadExecutor:
             "travel_time_s": sum(r.travel_time_s for r in robots),
             "waiting_time_s": sum(r.waiting_time_s for r in robots),
             "service_time_s": sum(r.service_time_s for r in robots),
-            "replans": sum(r.replan_count for r in robots),
-            "conflicts": len(self.engine.reservations.audit()),
-            "expansions": sum(
-                r.space_time_expansions for r in robots
+            "reservation_violations": len(
+                self.engine.reservations.audit()
             ),
             "events": self.engine.processed,
         }

@@ -84,11 +84,6 @@ class LocalTrafficController:
         if len({i.source for i in intents}) != len(intents):
             raise ValueError("two robots cannot own the same source cell")
 
-        by_id = {
-            intent.robot_id: intent
-            for intent in intents
-        }
-
         occupancy = (
             dict(occupied_by)
             if occupied_by is not None
