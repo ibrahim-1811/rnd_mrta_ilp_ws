@@ -19,9 +19,10 @@ pytest = "*"
 ruff = "*"
 mypy = "*"
 swi-prolog = "*"
+openpyxl = ">=3.1.5,<4"
 
 [tasks]
-test = "PYTHONPATH=src/mrta_core python -m pytest -q"
+test = "PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management python -m pytest src/mrta_core/tests src/simulation_env/test src/task_management/test -q"
 lint = "ruff check ."
 format = "ruff format ."
 tree = "find . -maxdepth 4 -type f -not -path \"./.git/*\" -not -path \"./.pixi/*\" -not -path \"./.pytest_cache/*\" | sort"

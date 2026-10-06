@@ -14,6 +14,7 @@ rather than going silent.
 """
 
 import argparse
+from dataclasses import replace
 import time
 
 from mrta_core.order_queue import OrderQueue
@@ -21,8 +22,15 @@ from mrta_core.orders import load_orders_csv
 from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
+from simulation_env.battery_ledger import battery_report_lines
 from simulation_env.fleet import build_fleet, home_stations
-from simulation_env.workload_executor import PerfBudget, WorkloadExecutor
+from simulation_env.workload_executor import (
+    PerfBudget,
+    WorkloadExecutor,
+    battery_event_line,
+    charging_report_lines,
+    eligibility_report_lines,
+)
 from task_management.allocation_strategy import get_batch_strategy
 
 CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
@@ -40,7 +48,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--robots", type=int, default=0,
-        help="fleet size (0 = the configured robot_count)",
+        help="fleet size (0 = the configured fleet.robot_count); "
+             "capped by the home cells the map provides",
     )
     parser.add_argument(
         "--speed", type=float, default=0.0,
@@ -56,19 +65,25 @@ def main() -> int:
 
     config = load_sim_config(args.config)
 
+    # Override fleet.robot_count before the fleet is built, so this
+    # can raise the count as well as lower it. Slicing the built fleet
+    # could only ever shrink it, which made --robots above the
+    # configured count silently do nothing.
+    if args.robots:
+        config = replace(config, robot_count=args.robots)
+
     warehouse = load_warehouse_xlsx(config.map_path)
 
     speed = args.speed or config.speed_mps
 
     robots = build_fleet(config, warehouse)
 
-    if args.robots:
-        robots = robots[: args.robots]
-
     for robot in robots:
         robot.speed_mps = speed
 
-    homes = home_stations(config, warehouse)
+    # Spawn positions only. The bank is a shared resource: where a
+    # robot finally parks is decided at return time by directed A*.
+    spawn_stations = home_stations(config, warehouse)
 
     orders = load_orders_csv(config.orders_path, warehouse)
 
@@ -112,7 +127,6 @@ def main() -> int:
         robots=robots,
         queue=queue,
         allocator=get_batch_strategy(args.strategy),
-        homes=homes,
         resolution=config.resolution_m,
         speed_mps=speed,
         service_seconds={
@@ -123,6 +137,11 @@ def main() -> int:
         on_progress=progress,
         progress_interval_s=args.progress,
         on_perf=perf,
+        battery=config.battery,
+        # Battery state changes are rare and always worth seeing.
+        on_battery_event=lambda event: print(
+            battery_event_line(event), flush=True
+        ),
     )
 
     print("  traffic    : local reactive grid traffic")
@@ -147,7 +166,7 @@ def main() -> int:
     print("RESULT")
     print("=" * 70)
     print(f"  completed        : {completed}/{len(queue)}")
-    print(f"  returned to home : {len(executor.parked)}/{len(robots)}")
+    print(f"  parked at stage  : {len(executor.parked)}/{len(robots)}")
     print(f"  makespan         : {totals['makespan_s']:.4f} s")
     print(f"  total distance   : {totals['distance_m']:.1f} m")
     print(f"  total waiting    : {totals['waiting_time_s']:.4f} s")
@@ -168,6 +187,61 @@ def main() -> int:
     print(f"    worst dispatch : {result.worst_dispatch_s:.3f} s")
     print(f"    static failures reused: {result.static_route_reuses}")
     print(f"  wall clock       : {wall:.1f} s")
+
+    claims = executor.parking.claims
+
+    moved = sum(
+        1
+        for robot_id, zone_id in claims.items()
+        if zone_id != spawn_stations.get(robot_id)
+    )
+
+    print()
+    print("=" * 70)
+    print("FINAL STAGE ZONE OCCUPANCY")
+    print("=" * 70)
+    print(f"  robots parked    : {len(claims)}/{len(robots)}")
+    print(f"  distinct stages  : {len(set(claims.values()))}")
+    print(f"  moved off spawn  : {moved}/{len(robots)}")
+    print()
+
+    for robot_id in sorted(claims):
+        spawn = spawn_stations.get(robot_id, "-")
+        final = claims[robot_id]
+        mark = " " if final == spawn else "*"
+        print(
+            f"  {mark} {robot_id}  spawn {spawn:<12} "
+            f"final {final:<12} cell {executor.parking.cell_of[final]}"
+        )
+
+    print()
+    print("  * = parked somewhere other than its spawn Stage Zone")
+    print()
+
+    ledger = executor.engine.battery
+
+    print("=" * 70)
+
+    if ledger is None:
+        print("BATTERY: disabled (battery.enabled is false)")
+    else:
+        for line in battery_report_lines(
+            ledger,
+            executor.engine.time,
+            executor.engine.robots,
+        ):
+            print(line)
+
+        print()
+
+        for line in eligibility_report_lines(executor):
+            print(line)
+
+        print()
+
+        for line in charging_report_lines(executor):
+            print(line)
+
     print()
 
     return 0 if completed == len(queue) else 1

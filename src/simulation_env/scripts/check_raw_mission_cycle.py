@@ -5,6 +5,7 @@ from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from mrta_core.warehouse_routing import plan_from_cell
 
+from simulation_env.fleet import home_bank
 from simulation_env.fleet_engine import (
     EventType,
     FleetSimulationEngine,
@@ -18,7 +19,8 @@ config = load_sim_config(CONFIG)
 warehouse = load_warehouse_xlsx(config.map_path)
 
 
-start_zone = "staging_001"
+# First home station, whichever name the map's bank carries.
+start_zone = home_bank(warehouse)[0].zone_id
 shelf_zone = "shelf_001"
 dropoff_zone = "dropoff_001"
 

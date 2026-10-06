@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from dataclasses import replace
 from itertools import combinations
 
 from mrta_core.sim_config import load_sim_config
@@ -8,6 +9,7 @@ from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from mrta_core.warehouse_routing import plan_from_cell
 
 from simulation_env.fleet import (
+    home_bank,
     build_fleet,
     home_stations,
 )
@@ -80,18 +82,26 @@ def synchronous_conflict_score(plans):
 config = load_sim_config(CONFIG)
 warehouse = load_warehouse_xlsx(config.map_path)
 
+# Maximum density: one robot on every home cell the map provides,
+# independent of fleet.robot_count. A traffic stress test wants the
+# busiest fleet the warehouse can hold, and pinning it to a literal
+# meant widening the home bank broke the test rather than exercising
+# it.
+FLEET_SIZE = len(home_bank(warehouse))
+
+if FLEET_SIZE < 2:
+    raise RuntimeError(
+        f"traffic stress needs at least 2 home cells, "
+        f"map provides {FLEET_SIZE}"
+    )
+
 robots = build_fleet(
-    config,
+    replace(config, robot_count=FLEET_SIZE),
     warehouse,
 )
 
-if len(robots) != 18:
-    raise RuntimeError(
-        f"expected 18 configured robots, got {len(robots)}"
-    )
-
 homes = home_stations(
-    config,
+    replace(config, robot_count=FLEET_SIZE),
     warehouse,
 )
 
@@ -164,7 +174,7 @@ for shift in (
 
 # Deterministic mid-mission pick targets.
 #
-# A stride that is coprime with the shelf count spreads the 18 robots
+# A stride that is coprime with the shelf count spreads the robots
 # over the whole racking instead of clustering them in one aisle.
 SHELF_IDS = [
     zone.zone_id
@@ -246,7 +256,7 @@ for name, targets in permutations:
 
 if best is None:
     raise RuntimeError(
-        "could not construct a valid 18-robot traffic scenario"
+        f"could not construct a valid {FLEET_SIZE}-robot traffic scenario"
     )
 
 
@@ -262,7 +272,7 @@ if best is None:
 
 print()
 print("=" * 76)
-print("18 ROBOT REAL WAREHOUSE TRAFFIC STRESS TEST")
+print(f"{FLEET_SIZE} ROBOT REAL WAREHOUSE TRAFFIC STRESS TEST")
 print("=" * 76)
 
 print()
@@ -321,7 +331,7 @@ started = engine.assign_missions_batch(
 
 print()
 print("initially moving             :", len(started))
-print("initially blocked/yielding   :", 18 - len(started))
+print("initially blocked/yielding   :", FLEET_SIZE - len(started))
 
 
 try:
@@ -556,7 +566,7 @@ print("=" * 76)
 print("RESULT")
 print("=" * 76)
 
-print(f"completed missions       : {parked}/18")
+print(f"completed missions       : {parked}/{FLEET_SIZE}")
 print(f"makespan                 : {engine.sim_time:.3f} s")
 print(f"distance                 : {distance:.1f} m")
 print(f"realized waiting         : {total_wait:.3f} s")
@@ -572,8 +582,8 @@ print(f"unfinished wait states   : {len(engine._waiting)}")
 # Acceptance checks.
 # -----------------------------------------------------------------
 
-assert parked == 18, (
-    f"only {parked}/18 missions completed"
+assert parked == FLEET_SIZE, (
+    f"only {parked}/{FLEET_SIZE} missions completed"
 )
 
 assert problems == [], problems
@@ -591,7 +601,7 @@ final_cells = [
     for robot in robots
 ]
 
-assert len(set(final_cells)) == 18, (
+assert len(set(final_cells)) == FLEET_SIZE, (
     "two robots finished on the same cell"
 )
 
@@ -620,7 +630,7 @@ assert edge_conflicts == 0, (
 
 print()
 print("checks")
-print("  all 18 completed          : PASS")
+print(f"  all {FLEET_SIZE} completed          : PASS")
 print("  unique final occupancy    : PASS")
 print("  reservation audit         : PASS")
 print("  no unresolved wait        : PASS")

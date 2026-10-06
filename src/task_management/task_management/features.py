@@ -11,12 +11,20 @@ With at most three shelves this requires at most 3! = 6 route candidates.
 
 C_static is a geometric prediction. It contains no realized MAPF
 waiting, reservation conflicts, execution outcomes or future leakage.
+
+With a battery context each candidate also carries its decision-time
+energy features (``mrta_core.battery.EnergyRequirement``): the SOC the
+robot has now, and the energy the chosen static route, its services and
+the directed-A* leg from the post-dropoff retreat cell to the nearest
+charger are predicted to cost. Battery eligibility is a hard mask: an
+ineligible pair is never a legal assignment for any strategy.
 """
 
 from dataclasses import dataclass
 from itertools import permutations
 from math import inf
 
+from mrta_core.battery import BatteryDecisionContext, EnergyRequirement
 from mrta_core.grid import Cell
 from mrta_core.warehouse_routing import (
     MissionPlan,
@@ -137,9 +145,39 @@ class OrderCandidate:
     cost: float             # C_static(r, o), metres
     route: OrderRoute
 
+    # Decision-time battery features. None when the decision was made
+    # without battery accounting, which imposes no energy constraint.
+    energy: EnergyRequirement | None = None
+
     @property
     def reachable(self) -> bool:
         return self.route.reachable
+
+    @property
+    def battery_eligible(self) -> bool:
+        return self.energy is None or self.energy.battery_eligible
+
+    @property
+    def eligible(self) -> bool:
+        """A legal assignment: routable, and battery-feasible."""
+        return self.reachable and self.battery_eligible
+
+
+def route_energy(
+    battery: BatteryDecisionContext,
+    robot_id: str,
+    route: OrderRoute,
+) -> EnergyRequirement:
+    """The battery eligibility of one robot for one planned route."""
+
+    return battery.requirement(
+        robot_id,
+        order_distance_m=route.distance_m,
+        shelf_services=len(route.shelf_sequence),
+        # The plan ends on the aisle cell the robot reverses into after
+        # the drop-off service; the charger leg starts there.
+        end_cell=route.plan.path[-1],
+    )
 
 
 def build_order_candidates(
@@ -148,11 +186,14 @@ def build_order_candidates(
     orders,
     fifo_position,
     cache: RouteCache | None = None,
+    battery: BatteryDecisionContext | None = None,
 ) -> list[OrderCandidate]:
     """Score every (robot, order) pair with C_static.
 
     ``robots`` is ``(robot_id, cell)`` pairs; ``orders`` is the
     eligible FIFO batch; ``fifo_position`` maps order_id -> FIFO index.
+    With ``battery`` every reachable pair also gets its decision-time
+    energy features.
     """
 
     candidates: list[OrderCandidate] = []
@@ -170,6 +211,12 @@ def build_order_candidates(
                 cache=cache,
             )
 
+            energy = (
+                route_energy(battery, robot_id, route)
+                if battery is not None and route.reachable
+                else None
+            )
+
             candidates.append(
                 OrderCandidate(
                     robot_id=robot_id,
@@ -177,6 +224,7 @@ def build_order_candidates(
                     fifo_position=fifo_position[order.order_id],
                     cost=route.distance_m,
                     route=route,
+                    energy=energy,
                 )
             )
 

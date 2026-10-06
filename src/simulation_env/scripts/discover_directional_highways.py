@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 from mrta_core.sim_config import load_sim_config
-from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
+from mrta_core.warehouse_routing import NON_TRANSIT_TYPES
 
 
 CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
@@ -12,11 +12,8 @@ warehouse = load_warehouse_xlsx(config.map_path)
 grid = warehouse.grid
 
 
-NON_TRANSIT = {
-    ZoneType.SHELF,
-    ZoneType.DROPOFF,
-    ZoneType.STAGING,
-}
+# The routing policy's own list, never a second copy of it.
+NON_TRANSIT = set(NON_TRANSIT_TYPES)
 
 
 def usable(cell):

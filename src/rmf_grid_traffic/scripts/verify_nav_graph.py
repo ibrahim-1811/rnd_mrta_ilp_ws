@@ -15,7 +15,15 @@ It fails on any disagreement in either direction:
     -> RMF could not follow a route the engine legitimately planned
 
 It also re-checks strong connectivity on the RMF graph itself, so a
-graph that is one-way but cut into pieces cannot pass.
+graph that is one-way but cut into pieces cannot pass, and it checks
+the half of the lane policy a static graph cannot apply for itself:
+terminals are leg endpoints, never intermediates. A lane joining two
+terminal cells is a route across the station bank -- along the home
+bank, or down a shelf column -- that the scientific planner never
+takes, because ``navigation_grid()`` blocks terminals per leg.
+
+Expected lanes therefore come from ``traversable_lane_edges()``, the
+same function the generator writes from, so the two cannot drift.
 """
 
 from __future__ import annotations
@@ -27,10 +35,11 @@ from pathlib import Path
 import yaml
 
 from mrta_core.sim_config import load_sim_config
+from mrta_core.world_view import world_to_grid
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from mrta_core.warehouse_routing import (
-    directional_blocked_edges,
     non_transit_cells,
+    traversable_lane_edges,
 )
 
 
@@ -56,8 +65,8 @@ def main() -> int:
     warehouse = load_warehouse_xlsx(map_path)
     grid = warehouse.grid
 
-    blocked_edges = directional_blocked_edges(warehouse)
     service_cells = non_transit_cells(warehouse)
+    expected = traversable_lane_edges(warehouse)
 
     with args.graph.open() as handle:
         document = yaml.safe_load(handle)
@@ -69,12 +78,12 @@ def main() -> int:
 
     for index, vertex in enumerate(level["vertices"]):
 
-        world_x, world_y = vertex[0], vertex[1]
-
-        x = int(round((world_x - grid.origin_x) / grid.resolution - 0.5))
-        y = int(round((world_y - grid.origin_y) / grid.resolution - 0.5))
-
-        cell_of_index[index] = (x, y)
+        cell_of_index[index] = world_to_grid(
+            (vertex[0], vertex[1]),
+            grid.resolution,
+            grid.origin_x,
+            grid.origin_y,
+        )
 
     graph_lanes = set()
 
@@ -85,38 +94,6 @@ def main() -> int:
                 cell_of_index[lane[1]],
             )
         )
-
-    # What the lane policy says the graph should contain.
-    def free(cell):
-        x, y = cell
-        return (
-            0 <= x < grid.width
-            and 0 <= y < grid.height
-            and cell not in grid.obstacles
-        )
-
-    expected = set()
-
-    for y in range(grid.height):
-        for x in range(grid.width):
-
-            cell = (x, y)
-
-            if not free(cell):
-                continue
-
-            for neighbor in (
-                (x + 1, y),
-                (x - 1, y),
-                (x, y + 1),
-                (x, y - 1),
-            ):
-
-                if not free(neighbor):
-                    continue
-
-                if (cell, neighbor) not in blocked_edges:
-                    expected.add((cell, neighbor))
 
     extra = sorted(graph_lanes - expected)
     missing = sorted(expected - graph_lanes)
@@ -129,6 +106,27 @@ def main() -> int:
         and (target, source) in graph_lanes
         and source not in service_cells
         and target not in service_cells
+    )
+
+    # A lane between two terminals is a route across the station bank.
+    # Scored on the graph itself, not inferred from `extra`, so it is
+    # named as the specific regression it is.
+    terminal_chain = sorted(
+        (source, target)
+        for (source, target) in graph_lanes
+        if source in service_cells
+        and target in service_cells
+    )
+
+    # Removing the chain must not leave a station the fleet cannot
+    # drive into, or cannot reverse back out of.
+    entered = {target for _, target in graph_lanes}
+    exited = {source for source, _ in graph_lanes}
+
+    stranded_terminals = sorted(
+        cell
+        for cell in service_cells
+        if cell not in entered or cell not in exited
     )
 
     # Strong connectivity over transit vertices, on the RMF graph.
@@ -177,7 +175,10 @@ def main() -> int:
     print(f"  illegal lanes (extra)    : {len(extra)}")
     print(f"  missing lanes            : {len(missing)}")
     print(f"  two-way core lanes       : {len(two_way_core)}")
+    print(f"  terminal chain lanes     : {len(terminal_chain)}")
     print()
+    print(f"  terminal vertices        : {len(service_cells)}")
+    print(f"  stranded terminals       : {len(stranded_terminals)}")
     print(f"  transit vertices         : {len(transit)}")
     print(f"  forward reachable        : {len(forward)}/{len(transit)}")
     print(f"  reverse reachable        : {len(reverse)}/{len(transit)}")
@@ -190,6 +191,7 @@ def main() -> int:
         ("ILLEGAL LANES", extra),
         ("MISSING LANES", missing),
         ("TWO-WAY CORE", two_way_core),
+        ("TERMINAL CHAIN", terminal_chain),
     ):
         if rows:
             print()
@@ -197,14 +199,29 @@ def main() -> int:
             for source, target in rows[:20]:
                 print(f"  {source} -> {target}")
 
+    if stranded_terminals:
+        print()
+        print("STRANDED TERMINALS")
+        for cell in stranded_terminals[:20]:
+            print(f"  {cell}")
+
     print()
 
-    if extra or missing or two_way_core or not strongly_connected:
+    if (
+        extra
+        or missing
+        or two_way_core
+        or terminal_chain
+        or stranded_terminals
+        or not strongly_connected
+    ):
         print("status : FAIL, RMF graph does not mirror the lane policy")
         return 1
 
     print("lane-for-lane match      : PASS")
     print("no two-way core lanes    : PASS")
+    print("no terminal chain lanes  : PASS")
+    print("terminal access          : PASS")
     print("strong connectivity      : PASS")
     print()
     print("status                   : OK")

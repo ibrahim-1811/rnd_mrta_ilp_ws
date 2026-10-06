@@ -87,6 +87,8 @@ STATION_INSET = 0.8
 STATION_COLORS = {
     "shelf": "0.10 0.70 0.10",
     "charging": "0.00 0.70 0.80",
+    # Charging holding bank, matching the purple XLSX fill (8E7CC3).
+    "charge_queue": "0.56 0.49 0.76",
     "dropoff": "0.90 0.70 0.10",
     "collection": "0.85 0.80 0.55",
     # Stage / wait / park zone, matching its XLSX fill.
@@ -94,16 +96,6 @@ STATION_COLORS = {
     "staging": "0.85 0.80 0.55",
     "waiting": "0.30 0.30 0.30",
 }
-
-
-def grid_to_world(x: int, y: int) -> tuple[float, float]:
-
-    # Cell centres. Shared with the live mission runner so the
-    # generated world and the animated robot cannot disagree.
-    return grid_to_gazebo(
-        (x, y),
-        CELL_SIZE,
-    )
 
 
 warehouse = load_warehouse_xlsx(
@@ -123,8 +115,36 @@ height_m = (
 )
 
 
+# Cell centres sit on integers, so the tiles span
+# -0.5 .. width-0.5 rather than 0 .. width. The floor has to be
+# centred on that extent or it shows half a cell of white beyond the
+# racking on two sides.
+floor_center_x = (
+    warehouse.grid.origin_x
+    + (warehouse.grid.width - 1) * CELL_SIZE / 2.0
+)
+
+floor_center_y = (
+    warehouse.grid.origin_y
+    + (warehouse.grid.height - 1) * CELL_SIZE / 2.0
+)
+
+
 # The fleet is built from the same config the executor uses, so the
 # world and the running robots always agree on where each one starts.
+def grid_to_world(x: int, y: int) -> tuple[float, float]:
+
+    # Cell centres. Shared with the live mission runner and the RMF
+    # nav graph so none of the three can disagree about where a cell
+    # sits. Origin comes from the map, not assumed to be zero.
+    return grid_to_gazebo(
+        (x, y),
+        CELL_SIZE,
+        warehouse.grid.origin_x,
+        warehouse.grid.origin_y,
+    )
+
+
 fleet = build_fleet(CONFIG, warehouse)
 
 
@@ -209,8 +229,8 @@ lines.append(
       <static>true</static>
 
       <pose>
-        {width_m / 2.0}
-        {height_m / 2.0}
+        {floor_center_x}
+        {floor_center_y}
         {FLOOR_Z}
         0 0 0
       </pose>

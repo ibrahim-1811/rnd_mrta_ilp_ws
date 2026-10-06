@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 
@@ -8,9 +9,12 @@ from simulation_env.local_yield_selector import (
 )
 
 
-MAP = "src/simulation_env/maps/CSV_To_Gazebo.xlsx"
+# Follow the configured map rather than pinning a version.
+CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
 
-warehouse = load_warehouse_xlsx(MAP)
+warehouse = load_warehouse_xlsx(
+    load_sim_config(CONFIG).map_path
+)
 
 grid = warehouse.grid
 

@@ -87,9 +87,14 @@ def generate_launch_description():
         OpaqueFunction(function=resolve_world_file),
         DeclareLaunchArgument("start_gazebo", default_value="true"),
         DeclareLaunchArgument("headless", default_value="false"),
+        # The workload switch: it sets both load_orders and
+        # run_workload below. Without orders:=true the node deploys
+        # the fleet, publishes it and spins -- no order is loaded and
+        # no robot moves.
         DeclareLaunchArgument("orders", default_value="false"),
-        # Allocation strategy for the order workload. Naming one
-        # implies orders:=true.
+        # Allocation strategy for the order workload. This does NOT
+        # imply orders:=true; naming a strategy without it still runs
+        # no workload.
         DeclareLaunchArgument(
             "strategy", default_value="nearest_astar"
         ),

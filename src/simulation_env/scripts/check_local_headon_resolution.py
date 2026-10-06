@@ -23,6 +23,7 @@ way, so robot_002 must step aside into the aisle on the far side of the
 rack, (3,10), and let it in.
 """
 
+from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from mrta_core.warehouse_routing import (
     directional_blocked_edges,
@@ -40,9 +41,12 @@ from simulation_env.local_yield_selector import (
 )
 
 
-MAP = "src/simulation_env/maps/CSV_To_Gazebo.xlsx"
+# Follow the configured map rather than pinning a version.
+CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
 
-warehouse = load_warehouse_xlsx(MAP)
+warehouse = load_warehouse_xlsx(
+    load_sim_config(CONFIG).map_path
+)
 controller = LocalTrafficController()
 
 blocked_edges = directional_blocked_edges(warehouse)

@@ -49,7 +49,9 @@ class GridRobot:
     cell: Cell
 
     speed_mps: float = DEFAULT_SPEED_MPS
-    battery_percent: float = 100.0
+
+    # No battery field: state of charge lives only in the fleet engine's
+    # BatteryLedger, so there is never a stale copy on the robot.
 
     status: GridRobotStatus = GridRobotStatus.IDLE
     sim_time: float = 0.0

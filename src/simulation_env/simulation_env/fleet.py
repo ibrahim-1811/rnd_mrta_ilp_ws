@@ -7,24 +7,46 @@ starts.
 Robots are generated programmatically from ``fleet.robot_count``; the
 count is never written out by hand.
 
-STAGING is where robots are deployed and may idle. It is not an order
-pickup or drop-off point, and nothing here makes it a mandatory return
-destination.
+The home bank is where robots are deployed and may idle. It is not an
+order pickup or drop-off point, and nothing here makes it a mandatory
+return destination.
+
+V1 maps label that bank STAGING; V2 renames it to COLLECTION. Both are
+accepted, so the same fleet code builds either map. "Home" is the
+stable concept and is what the helpers here are named after.
 """
 
 from mrta_core.sim_config import SimConfig
-from mrta_core.warehouse_map import WarehouseMap, ZoneType
+from mrta_core.warehouse_map import WarehouseMap
+from mrta_core.warehouse_routing import HOME_TYPES
 
 from simulation_env.grid_robot import GridRobot, GridRobotStatus
 
 
-def staging_stations(warehouse: WarehouseMap) -> list:
-    """Staging zones in deterministic id order: staging_001 first."""
+def home_bank(warehouse: WarehouseMap) -> list:
+    """Home zones in deterministic id order: ``*_001`` first.
 
-    return sorted(
-        warehouse.zones_of_type(ZoneType.STAGING),
-        key=lambda zone: zone.zone_id,
-    )
+    A map is expected to label its bank with one home type. If it
+    carries both, COLLECTION wins and STAGING is ignored, so a
+    half-migrated sheet fails loudly on the robot count rather than
+    silently deploying onto a mixture of the two.
+    """
+
+    for zone_type in HOME_TYPES:
+
+        zones = warehouse.zones_of_type(zone_type)
+
+        if zones:
+            return sorted(
+                zones,
+                key=lambda zone: zone.zone_id,
+            )
+
+    return []
+
+
+# Legacy name, kept so V1-era scripts keep working.
+staging_stations = home_bank
 
 
 def build_fleet(
@@ -32,9 +54,10 @@ def build_fleet(
     warehouse: WarehouseMap,
     speed_mps: float | None = None,
 ) -> list[GridRobot]:
-    """Create one GridRobot per configured robot, at its staging cell.
+    """Create one GridRobot per configured robot, at its home cell.
 
-    robot_001 -> staging_001, robot_002 -> staging_002, and so on.
+    robot_001 -> the first home station, robot_002 -> the second, and
+    so on: staging_001.. on a V1 map, collection_001.. on a V2 map.
 
     ``speed_mps`` overrides ``fleet.speed_mps`` for this fleet only,
     so a run can be re-timed from the command line without editing the
@@ -45,13 +68,16 @@ def build_fleet(
 
     mode = config.initial_position_mode
 
-    if mode != "staging":
+    # "home" is the stable name for this; "staging" is the V1 spelling
+    # and keeps existing configs working.
+    if mode not in ("home", "staging"):
         raise ValueError(
             f"unsupported fleet.initial_position_mode {mode!r}; "
-            f"only 'staging' is implemented"
+            f"only 'home' (or its legacy alias 'staging') "
+            f"is implemented"
         )
 
-    stations = staging_stations(warehouse)
+    stations = home_bank(warehouse)
 
     if config.robot_count < 1:
         raise ValueError(
@@ -62,8 +88,29 @@ def build_fleet(
     if config.robot_count > len(stations):
         raise ValueError(
             f"fleet.robot_count is {config.robot_count} but the map "
-            f"has only {len(stations)} staging station(s); either add "
-            f"staging cells to the XLSX or lower robot_count"
+            f"has only {len(stations)} home station(s); either add "
+            f"home cells to the XLSX (labelled "
+            f"{' or '.join(t.value for t in HOME_TYPES)}) "
+            f"or lower robot_count"
+        )
+
+    # A per-robot SOC override naming a robot this fleet does not have
+    # would silently do nothing, so a controlled test would quietly run
+    # at the default instead.
+    fleet_ids = {
+        config.robot_id(index)
+        for index in range(config.robot_count)
+    }
+
+    stray = sorted(
+        set(config.battery.initial_soc_overrides) - fleet_ids
+    )
+
+    if stray:
+        raise ValueError(
+            f"battery.initial_soc_overrides names {stray}, which "
+            f"{'is' if len(stray) == 1 else 'are'} not in this "
+            f"{config.robot_count}-robot fleet"
         )
 
     grid = warehouse.grid.grid_map()
@@ -98,9 +145,9 @@ def build_fleet(
                 f"is not traversable"
             )
 
-        if warehouse.zone_type_at(cell) is not ZoneType.STAGING:
+        if warehouse.zone_type_at(cell) not in HOME_TYPES:
             raise ValueError(
-                f"{robot_id}: cell {cell} is not a staging cell"
+                f"{robot_id}: cell {cell} is not a home cell"
             )
 
         if cell in taken:
@@ -116,7 +163,6 @@ def build_fleet(
                 robot_id=robot_id,
                 cell=cell,
                 speed_mps=speed,
-                battery_percent=config.initial_battery_percent,
                 status=GridRobotStatus.IDLE,
             )
         )
@@ -128,9 +174,9 @@ def home_stations(
     config: SimConfig,
     warehouse: WarehouseMap,
 ) -> dict[str, str]:
-    """robot_id -> the staging station it was deployed at."""
+    """robot_id -> the home station it was deployed at."""
 
-    stations = staging_stations(warehouse)
+    stations = home_bank(warehouse)
 
     return {
         config.robot_id(index): stations[index].zone_id

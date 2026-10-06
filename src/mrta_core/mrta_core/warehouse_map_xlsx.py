@@ -52,6 +52,7 @@ region order, then by ascending (x, y) within a region:
 
     shelf_001 .. shelf_072
     charging_001 .. charging_016
+    charge_queue_001 .. charge_queue_00N
 
 All semantic zone cells remain traversable.
 """
@@ -82,6 +83,18 @@ ZONE_ALIASES = {
     "CHARGING": ZoneType.CHARGING,
     "CHARGING ZONE": ZoneType.CHARGING,
 
+    # Charging holding bank. Not a generic queue: these cells exist
+    # only to hold robots that are waiting for, or were preempted
+    # from, a charging slot.
+    "CHARGE QUEUE": ZoneType.CHARGE_QUEUE,
+    "CHARGING QUEUE": ZoneType.CHARGE_QUEUE,
+    "CHARGE HOLDING": ZoneType.CHARGE_QUEUE,
+    "CHARGING HOLDING": ZoneType.CHARGE_QUEUE,
+    "CHARGE QUEUE ZONE": ZoneType.CHARGE_QUEUE,
+    "CHARGING QUEUE ZONE": ZoneType.CHARGE_QUEUE,
+    "CHARGE HOLDING ZONE": ZoneType.CHARGE_QUEUE,
+    "CHARGING HOLDING ZONE": ZoneType.CHARGE_QUEUE,
+
     "DROP ZONE": ZoneType.DROPOFF,
     "DROP OFF": ZoneType.DROPOFF,
     "DROPOFF": ZoneType.DROPOFF,
@@ -105,6 +118,7 @@ ZONE_ALIASES = {
 ZONE_PREFIX = {
     ZoneType.SHELF: "shelf",
     ZoneType.CHARGING: "charging",
+    ZoneType.CHARGE_QUEUE: "charge_queue",
     ZoneType.DROPOFF: "dropoff",
     ZoneType.COLLECTION: "collection",
     ZoneType.PICKUP: "pickup",

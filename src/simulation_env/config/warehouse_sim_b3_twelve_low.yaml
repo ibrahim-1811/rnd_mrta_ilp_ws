@@ -1,0 +1,117 @@
+# CONTROLLED TEST CONFIG -- Battery V1 B3 visual acceptance: robot_001..012 start at 9%; 8 take the chargers, 4 go to holding cells.
+# Identical to warehouse_sim.yaml except battery.initial_soc_overrides.
+# Never use for scientific runs.
+#
+# Central warehouse simulation configuration.
+#
+# Authoritative for map, fleet, battery, service durations, orders and
+# Gazebo. Nodes take config_file as a ROS parameter and read this, so
+# there are no duplicate constants in the executor.
+#
+# Research strategy parameters (allocation policy, congestion,
+# reservations, priority, RL, ILP) deliberately live elsewhere and are
+# not configured here yet. Battery is not one of them: it is fixed
+# infrastructure, identical for every strategy, and lives below.
+
+warehouse:
+  map: CSV_To_Gazebo_v2.xlsx
+  resolution_m: 1.0
+
+fleet:
+  robot_count: 22
+  robot_prefix: robot_
+  # Robots are deployed onto the map's home bank in id order:
+  # robot_001 -> the first home station, and so on. V1 maps label
+  # that bank staging_001..; V2 may label it collection_001..
+  initial_position_mode: staging
+  speed_mps: 1.5
+
+# Battery V1: a normalized, deterministic SOC model. Fixed
+# infrastructure, identical for every MRTA strategy (docs/DECISIONS.md).
+#
+#   travel         travel_percent_per_20m          per 20 m driven
+#   service        service_percent_per_60s         per 60 s pick or drop
+#   waiting, idle  waiting_idle_percent_per_300s   per 300 s standing still
+#
+# B1 accounts SOC. B2: reserve_percent and charge_due_percent gate
+# allocation (eligibility, CHARGE_DUE, CHARGE_NEEDED). B3: a robot in
+# charge REQUEST drives to a reserved charger or holding cell.
+# charging_percent_per_second has no effect until charging exists (B4).
+#
+# initial_soc_overrides (robot_id -> percent) exists for controlled
+# tests only. Scientific baseline configs must not set it.
+battery:
+  enabled: true
+  initial_soc_percent: 100.0
+  travel_percent_per_20m: 1.0
+  service_percent_per_60s: 1.0
+  waiting_idle_percent_per_300s: 1.0
+  charging_percent_per_second: 1.0
+  reserve_percent: 10.0
+  charge_due_percent: 10.0
+  initial_soc_overrides:
+    robot_001: 9.0
+    robot_002: 9.0
+    robot_003: 9.0
+    robot_004: 9.0
+    robot_005: 9.0
+    robot_006: 9.0
+    robot_007: 9.0
+    robot_008: 9.0
+    robot_009: 9.0
+    robot_010: 9.0
+    robot_011: 9.0
+    robot_012: 9.0
+
+# Scientific service durations, used exactly as written. Nothing in
+# the visualization layer may modify these.
+service:
+  shelf_pick_s: 2.0
+  dropoff_s: 2.0
+
+# Order input layer. The workload is deterministic and fully known at
+# startup: every row is loaded at t=0 and every logical order starts
+# PENDING. Which orders an allocator may see is decided by FIFO on the
+# CSV sequence -- min(available_robots, pending_orders) at a time --
+# never by a clock. There is deliberately no priority, release_time or
+# deadline column.
+orders:
+  file: orders.csv
+  mode: replay
+
+# Parking is fixed infrastructure and has no configuration.
+#
+# A Stage Zone cell is where a robot is deployed, and nothing more: the
+# bank is a shared fleet resource, not a set of robot-owned homes. A
+# robot that finishes an order stays available where it stands and
+# takes more work from there -- it never drives home between orders.
+#
+# When the fleet runs out of work, each returning robot claims the
+# nearest FREE Stage Zone by directed A* cost over the one-way road
+# graph, reserving it as the return mission is assigned so two robots
+# cannot pick the same cell. See simulation_env/stage_parking.py.
+
+simulation:
+  deterministic: true
+  seed: 42
+
+# Playback only. NEVER affects sim_time, completion_time, lateness,
+# travel time, service time or any outcome datum.
+#   wall_seconds = sim_seconds / time_scale
+# time_scale 0 disables delays entirely (fastest headless runs).
+# min_wall_hold_s only lengthens what a human sees, never the model.
+visualization:
+  time_scale: 4.0
+  min_wall_hold_s: 0.0
+
+
+ros:
+  robot_states_topic: /mrta/robot_states
+  order_states_topic: /mrta/order_states
+  # Robots are stationary in this step, so publish the fleet snapshot
+  # periodically to give a live topic to monitor.
+  robot_state_publish_hz: 2.0
+
+gazebo:
+  enabled: true
+  world_name: warehouse_grid

@@ -20,9 +20,14 @@ import argparse
 import random
 from pathlib import Path
 
-# The real warehouse: shelf_001..shelf_072, dropoff_001..dropoff_040.
+# The real warehouse: shelf_001..shelf_072, dropoff_001..dropoff_036.
+#
+# The dropoff count follows the map. Widening the home bank on V2 took
+# one cell off each of the four dropoff columns, so the pool went from
+# 40 to 36. Keep this in step with the XLSX or the generated CSV names
+# stations the map does not define and load_orders_csv rejects it.
 SHELVES = tuple(f"shelf_{index:03d}" for index in range(1, 73))
-DROPOFFS = tuple(f"dropoff_{index:03d}" for index in range(1, 41))
+DROPOFFS = tuple(f"dropoff_{index:03d}" for index in range(1, 37))
 
 HEADER = "order_id,item_id,shelf_id,quantity,dropoff_id"
 

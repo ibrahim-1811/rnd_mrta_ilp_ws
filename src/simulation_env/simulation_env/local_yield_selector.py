@@ -20,8 +20,11 @@ pass, then returns to its route.
 from __future__ import annotations
 
 from mrta_core.grid import Cell
-from mrta_core.warehouse_map import WarehouseMap, ZoneType
-from mrta_core.warehouse_routing import directional_blocked_edges
+from mrta_core.warehouse_map import WarehouseMap
+from mrta_core.warehouse_routing import (
+    NON_TRANSIT_TYPES,
+    directional_blocked_edges,
+)
 
 
 DIRS = (
@@ -102,8 +105,8 @@ def select_local_yield_cell(
         # up a one-way aisle.
         #
         # On the directed warehouse that leaves precisely one kind of
-        # bay: the aisle on the far side of a service cell, since shelf,
-        # dropoff and staging edges stay two-way. That is also the only
+        # bay: the aisle on the far side of a service cell, since
+        # shelf, dropoff and home edges stay two-way. That is also the only
         # place a head-on can still arise, so the two match up.
         #
         # A robot standing in a one-way aisle has no bay and simply
@@ -118,12 +121,11 @@ def select_local_yield_cell(
 
         zone_type = warehouse.zone_type_at(cell)
 
-        # Service cells are endpoints for actual work, not traffic bays.
-        if zone_type in (
-            ZoneType.SHELF,
-            ZoneType.DROPOFF,
-            ZoneType.STAGING,
-        ):
+        # Service cells are endpoints for actual work, not traffic
+        # bays. This is the routing policy's own list, so a yield can
+        # never be selected into a cell A* treats as non-transit --
+        # including charge-queue holding cells.
+        if zone_type in NON_TRANSIT_TYPES:
             continue
 
         candidates.append(cell)

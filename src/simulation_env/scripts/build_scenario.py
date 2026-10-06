@@ -28,7 +28,7 @@ from pathlib import Path
 
 from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
-from simulation_env.fleet import build_fleet, staging_stations
+from simulation_env.fleet import build_fleet, home_bank
 
 
 DEFAULT_CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
@@ -109,7 +109,7 @@ def main() -> int:
         else NAV_GRAPH_DIR / "warehouse_nav_graph.yaml"
     )
 
-    stations = staging_stations(warehouse)
+    stations = home_bank(warehouse)
 
     # Fail before generating anything, rather than writing a world the
     # fleet cannot actually be placed in.

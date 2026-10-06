@@ -34,8 +34,10 @@ from enum import Enum
 from fractions import Fraction
 from heapq import heappop, heappush
 
+from mrta_core.battery import BatteryConfig
 from mrta_core.warehouse_map import WarehouseMap, ZoneType
 
+from simulation_env.battery_ledger import BatteryLedger
 from simulation_env.grid_robot import GridRobot, GridRobotStatus
 from mrta_core.warehouse_routing import MissionPlan
 from simulation_env.reservations import EDGE, VERTEX, ReservationTable
@@ -129,11 +131,21 @@ class FleetSimulationEngine:
         on_tick=None,
         on_event=None,
         on_mission_complete=None,
+        battery: BatteryConfig | None = None,
     ) -> None:
 
         self.warehouse = warehouse
 
         self.resolution = Fraction(resolution).limit_denominator(10**6)
+
+        # The one authoritative battery record, booked from this
+        # engine's own events. Observation only: nothing in the engine
+        # reads it back. None when battery accounting is disabled.
+        self.battery = (
+            BatteryLedger(battery, self.resolution)
+            if battery is not None and battery.enabled
+            else None
+        )
 
         self.service_seconds = {
             zone_type: Fraction(seconds).limit_denominator(10**6)
@@ -242,6 +254,45 @@ class FleetSimulationEngine:
         self.robots[robot.robot_id] = robot
         robot.set_sim_time(self.sim_time)
         self.reservations.occupy(robot.cell, robot.robot_id, self.time)
+
+        if self.battery is not None:
+            self.battery.register(robot.robot_id, self.time)
+
+    # -- accounting ---------------------------------------
+    #
+    # Every travel, service and wait booking goes through these, so the
+    # robot's float counters and the battery ledger are written by the
+    # same events with the same durations and can never disagree about
+    # what happened.
+
+    def _book_travel(self, robot: GridRobot, duration: Fraction) -> None:
+        """One completed one-cell move, whatever kind of move it was."""
+
+        robot.book_travel(float(duration))
+
+        if self.battery is not None:
+            self.battery.book_move(robot.robot_id, duration)
+
+    def _book_wait(self, robot: GridRobot, duration: Fraction) -> None:
+        """One closed stationary traffic wait."""
+
+        robot.book_wait(float(duration))
+
+        if self.battery is not None:
+            self.battery.book_wait(robot.robot_id, duration)
+
+    def _book_service(
+        self,
+        robot: GridRobot,
+        duration: Fraction,
+        status: GridRobotStatus,
+    ) -> None:
+        """One completed pick or drop."""
+
+        robot.book_service(float(duration), status)
+
+        if self.battery is not None:
+            self.battery.book_service(robot.robot_id, duration)
 
     def _prepare_mission_start(self, robot_id: str):
         """Prepare the first movement request for one raw mission.
@@ -645,11 +696,9 @@ class FleetSimulationEngine:
             )
 
             if pending_wait is not None:
-                robot.book_wait(
-                    float(
-                        self.time
-                        - pending_wait[2]
-                    )
+                self._book_wait(
+                    robot,
+                    self.time - pending_wait[2],
                 )
 
             duration = self._move_duration(
@@ -957,11 +1006,9 @@ class FleetSimulationEngine:
             )
 
             if pending_wait is not None:
-                robot.book_wait(
-                    float(
-                        self.time
-                        - pending_wait[2]
-                    )
+                self._book_wait(
+                    robot,
+                    self.time - pending_wait[2],
                 )
 
             self._yielding[robot_id] = _YieldState(
@@ -1030,11 +1077,9 @@ class FleetSimulationEngine:
 
                 if pending_wait is not None:
 
-                    self.robots[robot_id].book_wait(
-                        float(
-                            self.time
-                            - pending_wait[2]
-                        )
+                    self._book_wait(
+                        self.robots[robot_id],
+                        self.time - pending_wait[2],
                     )
 
                 kind, detail = request_by_robot[
@@ -1053,13 +1098,9 @@ class FleetSimulationEngine:
 
                     if state.wait_since is not None:
 
-                        self.robots[
-                            robot_id
-                        ].book_wait(
-                            float(
-                                self.time
-                                - state.wait_since
-                            )
+                        self._book_wait(
+                            self.robots[robot_id],
+                            self.time - state.wait_since,
                         )
 
                         state.wait_since = None
@@ -1153,7 +1194,7 @@ class FleetSimulationEngine:
         pending = self._waiting.pop(robot_id, None)
 
         if pending is not None:
-            robot.book_wait(float(self.time - pending[2]))
+            self._book_wait(robot, self.time - pending[2])
 
         duration = self._move_duration(robot)
 
@@ -1222,9 +1263,7 @@ class FleetSimulationEngine:
                 float(self.resolution)
             )
 
-            robot.book_travel(
-                float(duration)
-            )
+            self._book_travel(robot, duration)
 
             self.reservations.complete_move(
                 event.robot_id,
@@ -1275,9 +1314,7 @@ class FleetSimulationEngine:
                 float(self.resolution)
             )
 
-            robot.book_travel(
-                float(duration)
-            )
+            self._book_travel(robot, duration)
 
             self.reservations.complete_move(
                 event.robot_id,
@@ -1324,7 +1361,7 @@ class FleetSimulationEngine:
             source = robot.cell
 
             robot.advance_cell(float(self.resolution))
-            robot.book_travel(float(duration))
+            self._book_travel(robot, duration)
 
             retain_service_exit = False
 
@@ -1369,8 +1406,9 @@ class FleetSimulationEngine:
                 segment.to_zone
             ).zone_type
 
-            robot.book_service(
-                float(self.service_seconds[zone_type]),
+            self._book_service(
+                robot,
+                self.service_seconds[zone_type],
                 robot.status,
             )
 

@@ -7,8 +7,13 @@ WarehouseZone answers what a traversable cell means operationally.
 
 Only obstacle cells are non-traversable.
 Semantic cells such as shelves, pickup points, drop-off points,
-charging stations, staging areas, and waiting areas remain
-valid robot positions.
+charging stations, charge-queue holding cells, staging areas, and
+waiting areas remain valid robot positions.
+
+CHARGE_QUEUE is the dedicated holding bank beside the chargers: where
+a robot waits for a charging slot, and where a preempted robot goes
+when it is not energy-eligible to rejoin the fleet. It is deliberately
+charging-specific rather than a generic task queue.
 """
 
 from dataclasses import dataclass
@@ -27,6 +32,7 @@ class ZoneType(str, Enum):
     DROPOFF = "dropoff"
     COLLECTION = "collection"
     CHARGING = "charging"
+    CHARGE_QUEUE = "charge_queue"
     STAGING = "staging"
     WAITING = "waiting"
 

@@ -20,6 +20,16 @@ ZONE_ALIASES = {
     "CHARGING": ZoneType.CHARGING,
     "CHARGING ZONE": ZoneType.CHARGING,
 
+    # Charging holding bank, not a generic task queue
+    "CHARGE QUEUE": ZoneType.CHARGE_QUEUE,
+    "CHARGING QUEUE": ZoneType.CHARGE_QUEUE,
+    "CHARGE HOLDING": ZoneType.CHARGE_QUEUE,
+    "CHARGING HOLDING": ZoneType.CHARGE_QUEUE,
+    "CHARGE QUEUE ZONE": ZoneType.CHARGE_QUEUE,
+    "CHARGING QUEUE ZONE": ZoneType.CHARGE_QUEUE,
+    "CHARGE HOLDING ZONE": ZoneType.CHARGE_QUEUE,
+    "CHARGING HOLDING ZONE": ZoneType.CHARGE_QUEUE,
+
     # Dropoff
     "DROPOFF": ZoneType.DROPOFF,
     "DROP OFF": ZoneType.DROPOFF,
@@ -35,6 +45,8 @@ ZONE_ALIASES = {
     "PICKUP ZONE": ZoneType.PICKUP,
 
     # Staging
+    "STAGE": ZoneType.STAGING,
+    "STAGE ZONE": ZoneType.STAGING,
     "STAGING": ZoneType.STAGING,
     "STAGING ZONE": ZoneType.STAGING,
 

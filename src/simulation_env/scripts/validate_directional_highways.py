@@ -10,18 +10,20 @@ What is checked, against the exact ``blocked_edges`` set A* consumes:
 
   * every core transit edge is one-way
   * the core is strongly connected
-  * every shelf, dropoff and staging cell can be entered and left
+  * every terminal cell -- shelf, dropoff, Stage Zone, charger and
+    charge-queue holding cell -- can be entered from the core and left
+    back to it
 """
 
 import argparse
-from collections import deque
+from collections import Counter, deque
 
 from mrta_core.sim_config import load_sim_config
-from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from mrta_core.warehouse_routing import (
     BIDIRECTIONAL_CONNECTORS,
     EASTBOUND_ROWS,
+    NON_TRANSIT_TYPES,
     NORTHBOUND_COLS,
     SHELF_BLOCK_RUNG_DX,
     SHELF_BLOCK_ROWS,
@@ -39,11 +41,8 @@ _parser = argparse.ArgumentParser(description=__doc__)
 _parser.add_argument("--config", default=DEFAULT_CONFIG)
 CONFIG = _parser.parse_args().config
 
-TERMINAL_TYPES = (
-    ZoneType.SHELF,
-    ZoneType.DROPOFF,
-    ZoneType.STAGING,
-)
+# The routing policy's own list, never a second copy of it.
+TERMINAL_TYPES = NON_TRANSIT_TYPES
 
 
 config = load_sim_config(CONFIG)
@@ -90,7 +89,7 @@ def move_allowed(source, target):
 # ============================================================
 # Core traffic graph
 #
-# Shelf, dropoff and staging cells are not transit vertices.
+# Terminal cells are not transit vertices.
 # ============================================================
 
 core = {
@@ -335,11 +334,23 @@ if uncontrolled_bidirectional:
     )
     raise SystemExit(1)
 
+# The core is strongly connected, so a terminal with a legal lane in
+# from a core cell and a legal lane back out to one is reachable from
+# everywhere and can return anywhere.
+access_counts = Counter(
+    type_value for _, type_value, _ in terminal_cells
+)
+
 print("uncontrolled bidi edges  : 0")
 print("core strong connectivity : PASS")
-print("shelf access             : PASS")
-print("dropoff access           : PASS")
-print("staging access           : PASS")
+
+for type_value in TERMINAL_TYPES:
+    if access_counts.get(type_value):
+        print(
+            f"{type_value.value + ' access':<25}: PASS "
+            f"({access_counts[type_value]} cells)"
+        )
+
 print("service retreat possible : PASS")
 print()
 print("status                   : OK")

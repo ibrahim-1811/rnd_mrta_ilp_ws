@@ -11,6 +11,7 @@ module and must never change robot-order ownership.
 
 from dataclasses import dataclass
 
+from mrta_core.battery import EnergyRequirement
 from task_management.features import (
     OrderCandidate,
     OrderRoute,
@@ -31,6 +32,9 @@ class OrderAssignment:
     order_id: str
     cost: float          # C_static(r, o), metres
     route: OrderRoute    # includes the chosen shelf visiting order
+
+    # Decision-time battery features of the chosen pair, if any.
+    energy: EnergyRequirement | None = None
 
     @property
     def zone_sequence(self) -> tuple[str, ...]:
@@ -66,11 +70,20 @@ class BatchAllocationStrategy:
       orders          the eligible FIFO batch, already capped at
                       min(available_robots, pending_orders)
       fifo_position   order_id -> FIFO index, for deterministic ties
+      battery         a BatteryDecisionContext, or None
 
     and gets back a list of :class:`OrderAssignment`. A strategy may
     return fewer assignments than robots (an unreachable order defers),
     but never more than one order per robot or one robot per order, and
     never an order outside ``orders``.
+
+    Battery feasibility contract. With a ``battery`` context, every
+    candidate from :meth:`score` carries its decision-time energy
+    features, and a strategy may only return pairs whose
+    ``candidate.eligible`` is true: reachable AND battery-eligible. The
+    executor re-checks every returned pair independently and raises
+    rather than execute an ineligible one. Among eligible pairs the
+    strategy is free to choose however it likes.
     """
 
     name = 'batch_base'
@@ -83,15 +96,17 @@ class BatchAllocationStrategy:
         """Reset any per-trial internal state."""
 
     def score(
-        self, warehouse, robots, orders, fifo_position, cache=None
+        self, warehouse, robots, orders, fifo_position, cache=None,
+        battery=None,
     ) -> list[OrderCandidate]:
         """Cost every (robot, order) pair. Shared by every strategy."""
         return build_order_candidates(
-            warehouse, robots, orders, fifo_position, cache
+            warehouse, robots, orders, fifo_position, cache, battery
         )
 
     def assign(
-        self, warehouse, robots, orders, fifo_position, cache=None
+        self, warehouse, robots, orders, fifo_position, cache=None,
+        battery=None,
     ) -> list[OrderAssignment]:
         raise NotImplementedError
 
@@ -124,18 +139,25 @@ class NearestAStarAllocator(BatchAllocationStrategy):
     cost always resolves to the older order, and then to the
     lower-numbered robot. Two runs of the same workload therefore
     produce byte-identical assignments.
+
+    Battery eligibility is a hard mask applied before the sweep: an
+    ineligible pair is simply not a candidate, however cheap. Among
+    eligible pairs the rule above is unchanged.
     """
 
     name = 'nearest_astar'
 
-    def assign(self, warehouse, robots, orders, fifo_position, cache=None):
+    def assign(
+        self, warehouse, robots, orders, fifo_position, cache=None,
+        battery=None,
+    ):
 
         candidates = [
             candidate
             for candidate in self.score(
-                warehouse, robots, orders, fifo_position, cache
+                warehouse, robots, orders, fifo_position, cache, battery
             )
-            if candidate.reachable
+            if candidate.eligible
         ]
 
         # One total order over every pair, so the greedy sweep below is
@@ -166,6 +188,7 @@ class NearestAStarAllocator(BatchAllocationStrategy):
                     order_id=candidate.order_id,
                     cost=candidate.cost,
                     route=candidate.route,
+                    energy=candidate.energy,
                 )
             )
 

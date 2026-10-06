@@ -1,17 +1,16 @@
 """Static warehouse routing: the one grid-aware path layer.
 
-Shelf and drop-off cells are service cells, not transit space. A robot
-may enter one only as the final cell of the leg that targets it, and
-never as a shortcut. Every other service cell is blocked for the whole
-leg, so a route to a charger or collection point never crosses racking
-or a drop chute.
+Shelf, drop-off, Stage Zone, charging and charge-queue (holding) cells
+are terminals, not transit space. A robot may enter one only as the
+final cell of the leg that targets it, and never as a shortcut. Every
+other terminal is blocked for the whole leg, and no leg ever moves
+directly from one terminal to another, so a route never crosses
+racking, a drop chute, the home bank or the charging bank.
 
-Having served one the robot reverses exactly one cell, back to the
-aisle cell it approached from. The next leg starts from that aisle
-cell, not from inside the station. That retreat is a real movement and
-is counted in the mission distance and cost.
-
-Charging and collection cells stay traversable for now.
+Having served a shelf or drop-off the robot reverses exactly one cell,
+back to the aisle cell it approached from. The next leg starts from
+that aisle cell, not from inside the station. That retreat is a real
+movement and is counted in the mission distance and cost.
 
 The rule lives here, in the planner, not in the map. WarehouseMap's
 occupancy layer stays exactly what it always was -- the red cells --
@@ -80,17 +79,78 @@ SERVICE_TYPES: tuple[ZoneType, ...] = (
     ZoneType.DROPOFF,
 )
 
-# Cells that may be used as a leg endpoint but should not be used as
-# intermediate transit space.
+# The robot home / start / parking bank.
 #
-# STAGING is deliberately not a service type. Robots may start there
-# and return there, but no pick/drop service or retreat is attached to
-# a staging cell.
-NON_TRANSIT_TYPES: tuple[ZoneType, ...] = (
-    ZoneType.SHELF,
-    ZoneType.DROPOFF,
+# V1 maps label this bank STAGING. V2 renames it to COLLECTION, which
+# is the real warehouse term for it. The cells, their order and their
+# role are identical, so both spellings are accepted and one code base
+# reads either map. A map is expected to use one or the other.
+HOME_TYPES: tuple[ZoneType, ...] = (
+    ZoneType.COLLECTION,
     ZoneType.STAGING,
 )
+
+
+# Charging apron.
+# ---------------------------------------------------------------------
+# Chargers and charge-queue holding cells are dedicated service
+# resources: reachable as leg endpoints, never usable as transit.
+#
+# V2 only became legal under this rule after the B0 map correction.
+# The apron was authored two cells deep against the wall. Its outer
+# row could only be reached through one-cell stubs on the northbound
+# trunks, and a one-way stub with a single way in is either a source
+# or a sink. With the apron out of transit, 16 of its 32 cells could
+# not be both entered and left.
+#
+# The bank is now one cell deep -- y=2 and y=32, x=4..14, reading
+# C Q Q C Q Q C Q Q C Q -- entered from the aisle cell directly
+# outside it and left by reversing into that cell, like every other
+# terminal bank. The outer rows y=1 and y=33 are wall. Measured:
+#
+#   309 transit cells, 485 directed edges, strongly connected,
+#   8 chargers + 14 holding cells, all enterable and leavable,
+#   0 unreachable station legs
+#
+# A map whose charging apron is deeper than one cell fails
+# scripts/check_map_topology.py under this rule, which is the point.
+CHARGING_APRON_NON_TRANSIT = True
+
+
+def non_transit_types(
+    *,
+    charging_apron: bool | None = None,
+) -> tuple[ZoneType, ...]:
+    """Cell types that are leg endpoints but never transit space.
+
+    Home cells are deliberately not service types. Robots start and
+    park there, but no pick/drop service or retreat is attached to a
+    home cell.
+
+    ``charging_apron`` overrides the migration gate, so the topology
+    validator can score the target policy against the live one without
+    growing a second copy of the lane rules.
+    """
+
+    if charging_apron is None:
+        charging_apron = CHARGING_APRON_NON_TRANSIT
+
+    types = (
+        ZoneType.SHELF,
+        ZoneType.DROPOFF,
+        *HOME_TYPES,
+    )
+
+    if charging_apron:
+        types += (
+            ZoneType.CHARGING,
+            ZoneType.CHARGE_QUEUE,
+        )
+
+    return types
+
+
+NON_TRANSIT_TYPES: tuple[ZoneType, ...] = non_transit_types()
 
 
 # ---------------------------------------------------------------------
@@ -116,11 +176,15 @@ NON_TRANSIT_TYPES: tuple[ZoneType, ...] = (
 #
 #   * aisle <-> shelf
 #   * aisle <-> dropoff
-#   * aisle <-> staging
+#   * aisle <-> home bank (staging in V1, collection in V2)
+#   * aisle <-> charger
+#   * aisle <-> charge-queue holding cell
 #
-# Those are service connections, not transit lanes. A service cell is
-# never a through route (navigation_grid() blocks it), so a robot only
-# ever sits on one as the endpoint of its own leg, then reverses out.
+# Those are service connections, not transit lanes. A terminal is never
+# a through route (navigation_grid() blocks it), so a robot only ever
+# sits on one as the endpoint of its own leg, then reverses out. An
+# edge between two terminals is legal in neither direction: that is a
+# route along a station bank, not access to it.
 #
 # Layout this policy is written against (17 x 35):
 #
@@ -128,8 +192,10 @@ NON_TRANSIT_TYPES: tuple[ZoneType, ...] = (
 #   x = 5, 8, 11, 14  southbound trunk aisles
 #   x = 4, 7, 10, 13  shelf columns; open floor only inside the three
 #                     horizontal bands, northbound there
-#   x = 1, 2          left staging frontage lanes  (y = 13..21)
-#   x = 15            right staging frontage lane  (y = 13..21)
+#   x = 1, 2          left home frontage lanes
+#   x = 15            right home frontage lane
+#                     both spanning the rows the home bank occupies,
+#                     read off the map by frontage_band()
 #
 #   y = 1..5, 15..19, 29..33   open bands, alternating one-way rows
 #   y = 6..14, 20..28          shelf blocks; the only horizontal core
@@ -211,15 +277,19 @@ OPEN_BANDS = (
 BIDIRECTIONAL_CONNECTORS: frozenset[frozenset] = frozenset()
 
 
-# Left staging frontage.
+# Left home-bank frontage.
 #
-# Staging cells themselves are at x=0 and remain terminal cells.
+# The home cells themselves are at x=0 and remain terminal cells.
+# V2 renames the bank from staging to collection; the geometry, and
+# therefore these constants, are unchanged.
 #
 # x=1 is the northbound frontage lane nearest the staging bank.
 # x=2 is the southbound feeder/return lane.
 #
 # These fixed infrastructure rules prevent opposing robots from
 # meeting head-on directly in front of the parking bank.
+# Fallback band, used only when a map carries no home bank at all.
+# On a real map the band is derived from the bank itself, below.
 STAGING_FRONTAGE_Y_MIN = 13
 STAGING_FRONTAGE_Y_MAX = 21
 
@@ -231,6 +301,47 @@ LEFT_FRONTAGE_SOUTH_X = 2
 # second frontage lane and no external boundary to police here.
 RIGHT_FRONTAGE_NORTH_X = 15
 RIGHT_FRONTAGE_FEEDER_X = 14
+
+
+def frontage_band(
+    warehouse: WarehouseMap,
+) -> tuple[int, int]:
+    """Rows the home bank occupies, and therefore the frontage band.
+
+    The frontage circulation rules exist to stop robots meeting
+    head-on directly in front of the parking bank, so the band they
+    police has to be exactly the rows that bank spans. Deriving it
+    from the map means adding home cells for more robots cannot
+    silently leave the new rows ungoverned -- which strands the
+    frontage lanes at x=1, x=2 and x=15 on those rows.
+
+    Falls back to the module constants for a map with no home bank.
+    """
+
+    rows = {
+        y
+        for zone_type in HOME_TYPES
+        for zone in warehouse.zones_of_type(zone_type)
+        for _, y in zone.cells
+    }
+
+    if not rows:
+        return (
+            STAGING_FRONTAGE_Y_MIN,
+            STAGING_FRONTAGE_Y_MAX,
+        )
+
+    low = min(rows)
+    high = max(rows)
+
+    if sorted(rows) != list(range(low, high + 1)):
+        raise ValueError(
+            f"home bank rows {sorted(rows)} are not contiguous; "
+            f"the frontage circulation rules assume one unbroken "
+            f"bank per side"
+        )
+
+    return (low, high)
 
 
 def _open_band(y: int) -> tuple[int, int] | None:
@@ -247,6 +358,7 @@ def _directional_edge_allowed(
     source: Cell,
     target: Cell,
     terminal_cells: frozenset[Cell],
+    frontage: tuple[int, int],
 ) -> bool:
     """Whether one geometric grid edge obeys warehouse traffic flow."""
 
@@ -256,14 +368,26 @@ def _directional_edge_allowed(
     if abs(tx - sx) + abs(ty - sy) != 1:
         return False
 
-    # Shelf, dropoff and staging connection edges stay bidirectional.
+    source_terminal = source in terminal_cells
+    target_terminal = target in terminal_cells
+
+    # Terminal to terminal is never a legal move. When a leg's start and
+    # goal are adjacent terminals -- a holding cell beside its charger,
+    # two neighbouring bank cells -- navigation_grid() unblocks both
+    # endpoints, and without this A* would hop straight across instead
+    # of going out through the aisle, a move the RMF graph does not
+    # have.
+    if source_terminal and target_terminal:
+        return False
+
+    # Aisle <-> terminal connection edges stay bidirectional.
     #
     # This preserves:
-    #   aisle -> service/staging
-    #   service/staging -> aisle
+    #   aisle -> terminal     drive in to be served, or to park
+    #   terminal -> aisle     the retreat
     #
-    # Service cells themselves remain non-transit in navigation_grid().
-    if source in terminal_cells or target in terminal_cells:
+    # Terminals themselves remain non-transit in navigation_grid().
+    if source_terminal or target_terminal:
         return True
 
     if (
@@ -274,6 +398,8 @@ def _directional_edge_allowed(
 
     dx = tx - sx
     dy = ty - sy
+
+    frontage_y_min, frontage_y_max = frontage
 
     if dy == 0:
 
@@ -303,9 +429,9 @@ def _directional_edge_allowed(
         # -----------------------------------------------------
 
         in_staging_band = (
-            STAGING_FRONTAGE_Y_MIN
+            frontage_y_min
             <= sy
-            <= STAGING_FRONTAGE_Y_MAX
+            <= frontage_y_max
         )
 
         if in_staging_band:
@@ -323,7 +449,7 @@ def _directional_edge_allowed(
                 # Top crossover for outbound traffic:
                 #
                 # x1 -> x2
-                if sy == STAGING_FRONTAGE_Y_MAX:
+                if sy == frontage_y_max:
                     return (
                         sx == LEFT_FRONTAGE_NORTH_X
                         and
@@ -352,7 +478,7 @@ def _directional_edge_allowed(
                 # Top ingress:
                 #
                 # warehouse x3 -> staging lane x2
-                if sy == STAGING_FRONTAGE_Y_MAX:
+                if sy == frontage_y_max:
                     return (
                         sx == LEFT_FRONTAGE_SOUTH_X + 1
                         and
@@ -362,7 +488,7 @@ def _directional_edge_allowed(
                 # Bottom egress:
                 #
                 # staging lane x2 -> warehouse x3
-                if sy == STAGING_FRONTAGE_Y_MIN:
+                if sy == frontage_y_min:
                     return (
                         sx == LEFT_FRONTAGE_SOUTH_X
                         and
@@ -393,7 +519,7 @@ def _directional_edge_allowed(
                 # Top crossover back onto the trunk:
                 #
                 # x15 -> x14
-                if sy == STAGING_FRONTAGE_Y_MAX:
+                if sy == frontage_y_max:
                     return (
                         sx == RIGHT_FRONTAGE_NORTH_X
                         and
@@ -430,14 +556,14 @@ def _directional_edge_allowed(
         # Entry and exit at the ends of the frontage remain
         # governed by the surrounding warehouse topology.
         #
-        # Edges touching a STAGING terminal were already accepted
+        # Edges touching a home terminal were already accepted
         # above, so parking entry and departure remain possible.
         # -----------------------------------------------------
 
         in_frontage = (
-            STAGING_FRONTAGE_Y_MIN <= sy <= STAGING_FRONTAGE_Y_MAX
+            frontage_y_min <= sy <= frontage_y_max
             and
-            STAGING_FRONTAGE_Y_MIN <= ty <= STAGING_FRONTAGE_Y_MAX
+            frontage_y_min <= ty <= frontage_y_max
         )
 
         if in_frontage:
@@ -479,6 +605,7 @@ def _cached_directional_blocked_edges(
     height: int,
     obstacles: frozenset[Cell],
     terminal_cells: frozenset[Cell],
+    frontage: tuple[int, int],
 ):
     """Build the fixed directed-edge restriction set once per layout."""
 
@@ -514,6 +641,7 @@ def _cached_directional_blocked_edges(
                     source,
                     target,
                     terminal_cells,
+                    frontage,
                 ):
                     blocked_edges.add(
                         (source, target)
@@ -524,18 +652,27 @@ def _cached_directional_blocked_edges(
 
 def directional_blocked_edges(
     warehouse: WarehouseMap,
+    terminal_cells: frozenset[Cell] | None = None,
 ) -> frozenset[tuple[Cell, Cell]]:
-    """Directed edges forbidden by the fixed warehouse lane policy."""
+    """Directed edges forbidden by the fixed warehouse lane policy.
 
-    terminal_cells = non_transit_cells(
-        warehouse
-    )
+    ``terminal_cells`` defaults to the live non-transit policy. The
+    topology validator passes an explicit set so it can score a
+    candidate policy through this exact function rather than
+    reimplementing the lane rules.
+    """
+
+    if terminal_cells is None:
+        terminal_cells = non_transit_cells(
+            warehouse
+        )
 
     return _cached_directional_blocked_edges(
         warehouse.grid.width,
         warehouse.grid.height,
         warehouse.grid.obstacles,
         terminal_cells,
+        frontage_band(warehouse),
     )
 
 
@@ -556,14 +693,17 @@ def service_cells(
 
 def non_transit_cells(
     warehouse: WarehouseMap,
-    types: tuple[ZoneType, ...] = NON_TRANSIT_TYPES,
+    types: tuple[ZoneType, ...] | None = None,
 ) -> frozenset[Cell]:
     """Cells excluded from intermediate static routing.
 
     navigation_grid() removes the current leg's start and goal from
-    the blocked set, so a robot may still leave its own staging cell
-    and enter its own staging destination.
+    the blocked set, so a robot may still leave its own home cell and
+    enter its own home destination.
     """
+
+    if types is None:
+        types = NON_TRANSIT_TYPES
 
     cells: set[Cell] = set()
 
@@ -572,6 +712,94 @@ def non_transit_cells(
             cells |= zone.cells
 
     return frozenset(cells)
+
+
+def traversable_lane_edges(
+    warehouse: WarehouseMap,
+    terminal_cells: frozenset[Cell] | None = None,
+) -> frozenset[tuple[Cell, Cell]]:
+    """Every directed edge a robot may actually drive.
+
+    Terminals are leg endpoints, never intermediates. For A* that takes
+    two rules working together: ``navigation_grid()`` blocks every
+    terminal except the current leg's own start and goal, and the lane
+    policy itself forbids every terminal -> terminal edge, so even two
+    adjacent endpoints are joined through the aisle, never directly.
+
+    A static graph has no per-leg context, so it is handed the edge set
+    with both rules already resolved and endpoint access intact:
+
+        aisle    -> terminal    kept, a robot drives in to be served
+        terminal -> aisle       kept, the retreat after service
+        terminal -> terminal    dropped, that is the shortcut
+        aisle    -> aisle       whatever the lane policy says
+
+    Without the second rule a static graph sees a legal chain of
+    terminal cells -- the home bank is 11 adjacent home cells, a shelf
+    column nine adjacent shelves, the charging bank eleven -- and
+    routes straight along it. The explicit terminal -> terminal check
+    below is now implied by ``directional_blocked_edges()``; it stays
+    as a guard, because the RMF graph must never carry a chain even if
+    the lane policy is edited later.
+
+    ``terminal_cells`` defaults to the live non-transit policy.
+    """
+
+    if terminal_cells is None:
+        terminal_cells = non_transit_cells(warehouse)
+
+    blocked = directional_blocked_edges(
+        warehouse,
+        terminal_cells,
+    )
+
+    grid = warehouse.grid
+
+    def free(cell: Cell) -> bool:
+        x, y = cell
+        return (
+            0 <= x < grid.width
+            and 0 <= y < grid.height
+            and cell not in grid.obstacles
+        )
+
+    edges: set[tuple[Cell, Cell]] = set()
+
+    for y in range(grid.height):
+        for x in range(grid.width):
+
+            source = (x, y)
+
+            if not free(source):
+                continue
+
+            for target in (
+                (x + 1, y),
+                (x - 1, y),
+                (x, y + 1),
+                (x, y - 1),
+            ):
+
+                if not free(target):
+                    continue
+
+                if (source, target) in blocked:
+                    continue
+
+                # The terminal chain. One end being a terminal is
+                # service access; both ends being terminals is a
+                # through route across stations.
+                if (
+                    source in terminal_cells
+                    and target in terminal_cells
+                ):
+                    continue
+
+                edges.add(
+                    (source, target)
+                )
+
+    return frozenset(edges)
 
 
 def is_service_zone(
@@ -593,8 +821,14 @@ def navigation_grid(
     start: Cell,
     goal: Cell,
     congestion: dict[Cell, float] | None = None,
+    terminal_cells: frozenset[Cell] | None = None,
 ) -> GridMap:
-    """Planning view: ``occupied`` blocks, except this leg's endpoints."""
+    """Planning view: ``occupied`` blocks, except this leg's endpoints.
+
+    ``terminal_cells`` defaults to the live non-transit policy and
+    exists so the topology validator can plan against a candidate
+    policy using this same function.
+    """
 
     blocked = set(
         warehouse.grid.obstacles
@@ -611,7 +845,8 @@ def navigation_grid(
         obstacles=frozenset(blocked),
         congestion=congestion or {},
         blocked_edges=directional_blocked_edges(
-            warehouse
+            warehouse,
+            terminal_cells,
         ),
     )
 
@@ -661,6 +896,55 @@ def best_path_to_zone(
         )
 
     return best
+
+
+def nearest_reachable_zone(
+    warehouse: WarehouseMap,
+    start_cell: Cell,
+    zone_ids,
+    cache: "RouteCache | None" = None,
+):
+    """The zone with the cheapest directed-A* route from ``start_cell``.
+
+    Returns ``(zone_id, distance_m)``, or None when no zone in
+    ``zone_ids`` is reachable. Planned exactly as a mission leg is, so
+    one-way aisles count: the geometrically closest zone is often not
+    the nearest one. An exact distance tie goes to the lower zone_id.
+    """
+
+    best = None
+
+    for zone_id in sorted(zone_ids):
+
+        try:
+            result = (
+                cache.leg(start_cell, zone_id)
+                if cache is not None
+                else best_path_to_zone(
+                    warehouse,
+                    start_cell,
+                    zone_id,
+                    non_transit_cells(warehouse),
+                )
+            )
+
+        except RuntimeError:
+            continue
+
+        candidate = (
+            result.distance * warehouse.grid.resolution,
+            zone_id,
+        )
+
+        if best is None or candidate < best:
+            best = candidate
+
+    if best is None:
+        return None
+
+    distance_m, zone_id = best
+
+    return zone_id, distance_m
 
 
 class RouteCache:

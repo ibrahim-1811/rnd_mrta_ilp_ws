@@ -26,10 +26,16 @@ from mrta_core.order_queue import OrderQueue
 from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
+from mrta_core.warehouse_routing import HOME_TYPES
+from simulation_env.battery_ledger import battery_report_lines
 from simulation_env.fleet import build_fleet, home_stations
 from simulation_env.grid_robot import GridRobotStatus
-from simulation_env.workload_executor import WorkloadExecutor
-from mrta_core.warehouse_routing import plan_return_to_zone, service_cells
+from simulation_env.workload_executor import (
+    WorkloadExecutor,
+    battery_event_line,
+    charging_report_lines,
+    eligibility_report_lines,
+)
 from simulation_env.gazebo_bridge import (
     DEFAULT_PLAYBACK_HZ,
     DEFAULT_ROBOT_Z,
@@ -122,7 +128,9 @@ class FleetNode(Node):
 
         self.robots = build_fleet(config, self.warehouse, self.speed_mps)
 
-        self.homes = home_stations(config, self.warehouse)
+        # Spawn positions only. Final parking is the nearest free
+        # Stage Zone, decided at return time by StageParking.
+        self.spawn_stations = home_stations(config, self.warehouse)
 
         self.summary()
 
@@ -163,8 +171,10 @@ class FleetNode(Node):
                 ZoneType.SHELF,
                 ZoneType.DROPOFF,
                 ZoneType.CHARGING,
-                ZoneType.STAGING,
+                ZoneType.CHARGE_QUEUE,
+                *HOME_TYPES,
             )
+            if warehouse.zones_of_type(zone_type)
         }
 
         print()
@@ -191,13 +201,11 @@ class FleetNode(Node):
 
         for robot in self.robots:
 
-            world_x, world_y = grid_to_gazebo(
-                robot.cell, self.resolution
-            )
+            world_x, world_y = self._world_xy(robot.cell)
 
             print(
                 f"{robot.robot_id} -> "
-                f"{self.homes[robot.robot_id]} -> "
+                f"{self.spawn_stations[robot.robot_id]} -> "
                 f"cell={robot.cell} "
                 f"gazebo=({world_x:.1f}, {world_y:.1f})"
             )
@@ -220,7 +228,7 @@ class FleetNode(Node):
         results = [
             (f"{expected} unique robots", len(ids) == expected),
             (
-                f"{expected} unique staging cells",
+                f"{expected} unique home cells",
                 len(cells) == expected,
             ),
             (
@@ -238,10 +246,10 @@ class FleetNode(Node):
                 ),
             ),
             (
-                "all robots on staging cells",
+                "all robots on home cells",
                 all(
                     warehouse.zone_type_at(robot.cell)
-                    is ZoneType.STAGING
+                    in HOME_TYPES
                     for robot in robots
                 ),
             ),
@@ -314,9 +322,7 @@ class FleetNode(Node):
         initial = []
 
         for robot in self.robots:
-            world_x, world_y = grid_to_gazebo(
-                robot.cell, self.resolution
-            )
+            world_x, world_y = self._world_xy(robot.cell)
             initial.append(
                 FleetPose(
                     robot.robot_id,
@@ -336,9 +342,7 @@ class FleetNode(Node):
 
     def to_msg(self, robot) -> RobotState:
 
-        world_x, world_y = grid_to_gazebo(
-            robot.cell, self.resolution
-        )
+        world_x, world_y = self._world_xy(robot.cell)
 
         msg = RobotState()
 
@@ -351,11 +355,26 @@ class FleetNode(Node):
         msg.status = robot.status.value
         msg.current_target = ""
         msg.current_order = ""
-        msg.battery_percent = float(robot.battery_percent)
+        msg.battery_percent = self._soc_percent(robot.robot_id)
         msg.speed_mps = float(robot.speed_mps)
         msg.distance_m = float(robot.distance_m)
 
         return msg
+
+    def _soc_percent(self, robot_id: str) -> float:
+        """Live SOC from the engine's battery ledger. Display only.
+
+        Before the workload engine exists every robot is at its
+        configured initial SOC. With battery accounting disabled the
+        configured initial value is shown and never changes.
+        """
+
+        engine = getattr(self, "engine", None)
+
+        if engine is not None and engine.battery is not None:
+            return float(engine.battery.soc(robot_id, engine.time))
+
+        return float(self.config.battery.initial_soc_for(robot_id))
 
     def publish_fleet(self) -> None:
 
@@ -364,62 +383,6 @@ class FleetNode(Node):
         msg.robots = [self.to_msg(r) for r in self.robots]
 
         self.states_pub.publish(msg)
-
-    def park_zone_for(self, robot_id: str) -> str | None:
-        """Where this robot parks when it has nothing to do."""
-
-        mode = self.config.park_zone_mode
-
-        if mode == "start_zone":
-            return self.config.start_zone
-
-        if mode == "home":
-            return self.homes.get(robot_id)
-
-        self.get_logger().warn(
-            f"unknown park_zone_mode {mode!r}; not parking"
-        )
-
-        return None
-
-    def park_policy(self, robot):
-        """Send an idle robot home. Called when it runs out of work.
-
-        Returning None leaves it standing where it is. This is an
-        idle policy: it never runs between the legs of a mission.
-        """
-
-        if not self.config.park_when_idle:
-            return None
-
-        zone_id = self.park_zone_for(robot.robot_id)
-
-        if zone_id is None:
-            return None
-
-        home_cell = min(self.warehouse.zone_by_id(zone_id).cells)
-
-        if robot.cell == home_cell:
-            return None
-
-        print(
-            f"PARKING: {robot.robot_id} {robot.cell} -> {zone_id}"
-        )
-
-        # Robots already parked are stationary, so route around them
-        # rather than planning through them and then stalling on the
-        # reservation table.
-        blocked = service_cells(self.warehouse) | self.engine.blocked_by_others(
-            robot.robot_id
-        )
-
-        return plan_return_to_zone(
-            self.warehouse,
-            robot.cell,
-            zone_id,
-            from_label=robot.robot_id,
-            occupied=blocked,
-        )
 
     def load_workload(self) -> OrderQueue | None:
         """Load the configured deterministic FIFO workload.
@@ -519,7 +482,6 @@ class FleetNode(Node):
             robots=self.robots,
             queue=self.orders,
             allocator=allocator,
-            homes=self.homes,
             resolution=config.resolution_m,
             speed_mps=self.speed_mps,
             service_seconds={
@@ -533,6 +495,10 @@ class FleetNode(Node):
             on_progress=self.announce_progress,
             progress_interval_s=self.progress_interval_s,
             on_perf=self.announce_perf,
+            battery=config.battery,
+            on_battery_event=lambda event: print(
+                battery_event_line(event), flush=True
+            ),
         )
 
         self.engine = executor.engine
@@ -597,13 +563,23 @@ class FleetNode(Node):
             if order.status.value == "COMPLETED"
         ]
 
-        homes = self.homes
+        # The bank is shared, so "parked" means standing on the Stage
+        # Zone this robot claimed on the way in -- not the one it
+        # spawned on.
+        claims = executor.parking.claims
 
-        at_home = [
+        parked = [
             robot
             for robot in self.robots
-            if robot.cell
-            == min(self.warehouse.zone_by_id(homes[robot.robot_id]).cells)
+            if robot.robot_id in claims
+            and robot.cell == executor.parking.cell_for(robot.robot_id)
+        ]
+
+        moved = [
+            robot
+            for robot in parked
+            if claims[robot.robot_id]
+            != self.spawn_stations.get(robot.robot_id)
         ]
 
         idle = [
@@ -618,7 +594,8 @@ class FleetNode(Node):
         print("=" * 74)
         print(f"  orders completed      : {len(completed)}/{len(queue)}")
         print(f"  dispatches            : {len(result.dispatches)}")
-        print(f"  robots at own staging : {len(at_home)}/{len(self.robots)}")
+        print(f"  robots parked at stage: {len(parked)}/{len(self.robots)}")
+        print(f"  parked off spawn stage: {len(moved)}/{len(self.robots)}")
         print(f"  robots IDLE           : {len(idle)}/{len(self.robots)}")
         print()
         print(f"  makespan              : {totals['makespan_s']:.4f} s")
@@ -643,6 +620,30 @@ class FleetNode(Node):
         print(f"  events processed      : {totals['events']}")
         print(f"  routes cached         : {executor.routes.stats()}")
         print(f"  wall clock            : {wall:.1f} s")
+        print()
+
+        ledger = executor.engine.battery
+
+        if ledger is None:
+            print("BATTERY: disabled (battery.enabled is false)")
+        else:
+            for line in battery_report_lines(
+                ledger,
+                executor.engine.time,
+                executor.engine.robots,
+            ):
+                print(line)
+
+            print()
+
+            for line in eligibility_report_lines(executor):
+                print(line)
+
+            print()
+
+            for line in charging_report_lines(executor):
+                print(line)
+
         print()
 
     def on_advance(self, delta_sim: float) -> None:
@@ -725,9 +726,8 @@ class FleetNode(Node):
             transit = transits.get(robot.robot_id)
 
             if transit is None:
-                world_x, world_y = grid_to_gazebo(
+                world_x, world_y = self._world_xy(
                     robot.cell,
-                    self.resolution,
                 )
 
             else:
@@ -744,14 +744,12 @@ class FleetNode(Node):
 
                 fraction = min(1.0, max(0.0, fraction))
 
-                source_x, source_y = grid_to_gazebo(
+                source_x, source_y = self._world_xy(
                     source,
-                    self.resolution,
                 )
 
-                target_x, target_y = grid_to_gazebo(
+                target_x, target_y = self._world_xy(
                     target,
-                    self.resolution,
                 )
 
                 world_x = source_x + (target_x - source_x) * fraction
@@ -767,6 +765,23 @@ class FleetNode(Node):
             )
 
         return poses
+
+    def _world_xy(self, cell):
+        """Cell -> Gazebo XY, carrying the map origin.
+
+        Every pose the node emits goes through here, so Gazebo, the RMF
+        nav graph and the generated world all place a cell at the same
+        metric point.
+        """
+
+        grid = self.warehouse.grid
+
+        return grid_to_gazebo(
+            cell,
+            self.resolution,
+            grid.origin_x,
+            grid.origin_y,
+        )
 
     def _emit_gazebo_poses(self, _sim_time: float, poses) -> None:
         """Submit a visual frame; failures never feed into simulation state."""

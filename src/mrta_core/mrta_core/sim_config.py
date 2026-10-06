@@ -1,7 +1,8 @@
 """Central simulation configuration.
 
-One YAML file is authoritative for map, fleet, service durations,
-orders and Gazebo. Kept here in ``mrta_core`` -- plain Python, no ROS --
+One YAML file is authoritative for map, fleet, battery, service
+durations, orders and Gazebo. Kept here in ``mrta_core`` -- plain
+Python, no ROS --
 so the workload and simulation components read the same file
 through the same code instead of each carrying its own constants.
 """
@@ -10,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+
+from mrta_core.battery import BatteryConfig
 
 
 @dataclass(frozen=True)
@@ -23,17 +26,14 @@ class SimConfig:
     robot_prefix: str
     initial_position_mode: str
     speed_mps: float
-    initial_battery_percent: float
+
+    battery: BatteryConfig
 
     shelf_pick_s: float
     dropoff_s: float
 
     orders_path: Path
     orders_mode: str
-
-    start_zone: str
-    park_when_idle: bool
-    park_zone_mode: str
 
     deterministic: bool
     seed: int
@@ -109,11 +109,19 @@ def load_sim_config(path: str | Path) -> SimConfig:
     fleet = section("fleet")
     service = section("service")
     orders = section("orders")
-    mission = section("mission")
     simulation = section("simulation")
     visualization = section("visualization")
     ros = section("ros")
     gazebo = section("gazebo")
+
+    # Initial SOC used to live here. It moved into the battery section
+    # so there is one source of truth; refuse the old key rather than
+    # silently ignore a value someone expected to take effect.
+    if "initial_battery_percent" in fleet:
+        raise ValueError(
+            f"{path}: fleet.initial_battery_percent has moved to "
+            f"battery.initial_soc_percent"
+        )
 
     # maps/ sits beside config/ in both the source tree and the
     # installed share directory.
@@ -138,16 +146,11 @@ def load_sim_config(path: str | Path) -> SimConfig:
             fleet.get("initial_position_mode", "staging")
         ),
         speed_mps=float(fleet.get("speed_mps", 1.5)),
-        initial_battery_percent=float(
-            fleet.get("initial_battery_percent", 100.0)
-        ),
+        battery=BatteryConfig.from_mapping(section("battery")),
         shelf_pick_s=float(service.get("shelf_pick_s", 2.0)),
         dropoff_s=float(service.get("dropoff_s", 2.0)),
         orders_path=orders_path,
         orders_mode=str(orders.get("mode", "replay")),
-        start_zone=str(mission.get("start_zone", "collection_001")),
-        park_when_idle=bool(mission.get("park_when_idle", True)),
-        park_zone_mode=str(mission.get("park_zone_mode", "home")),
         deterministic=bool(simulation.get("deterministic", True)),
         seed=int(simulation.get("seed", 42)),
         visualization_time_scale=float(
