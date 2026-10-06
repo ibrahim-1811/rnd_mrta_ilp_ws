@@ -2,8 +2,8 @@
 
 Battery V1. The ledger is written by the fleet engine only. Since B2
 the executor reads SOC from it for eligibility, CHARGE_DUE and
-CHARGE_NEEDED; since B3 a REQUEST robot drives to a charger. Nothing
-here adds charge yet: SOC only ever falls.
+CHARGE_NEEDED; since B3 a REQUEST robot drives to a charger; since B4 a
+robot on a charger charges to 100% and rejoins the fleet.
 
 It is booked from the engine's own events, at the very call sites that
 already book the float travel / service / waiting counters on
@@ -13,11 +13,18 @@ GridRobot, with the same ``Fraction`` durations the clock used:
                                            retreat, yield side step, rejoin
     a completed pick or drop     service
     a closed traffic wait        waiting
+    a completed charge session   charge    the only term that raises SOC
 
 Idle is never booked. It is the remainder: every simulated second a
-robot exists it is moving, serving, traffic-waiting or idle, so
+robot exists it is moving, serving, traffic-waiting, charging or idle,
+so
 
-    idle_s = (now - registered_at) - moving_s - service_s - waiting_s
+    idle_s = (now - registered_at)
+             - moving_s - service_s - waiting_s - charging_s
+
+Charging is in that subtraction deliberately: the configured rate is
+the NET gain (docs/DECISIONS.md, "Charging Rate"), so a charging robot
+must not also be billed idle drain.
 
 which is why this is a ledger over the engine's clock and not a second
 clock of its own. A negative remainder can only mean some interval was
@@ -29,13 +36,20 @@ rates for waiting and idle are equal, so a live SOC read mid-wait is
 exact; mid-move or mid-service it lags by at most one move's or one
 service's worth of drain. At the end of a run nothing is in progress,
 so every category is exact.
+
+Charging is the exception: a session can run for up to 100 simulated
+seconds, and reading it as idle would show SOC falling while it is
+really rising. So an open session is tracked (``charging_since``) and
+both ``soc()`` and ``snapshot()`` account for it exactly at any instant.
 """
 
 from dataclasses import dataclass
 from fractions import Fraction
 
 from mrta_core.battery import (
+    FULL_SOC_PERCENT,
     BatteryConfig,
+    charge_energy,
     service_energy,
     stationary_energy,
     travel_energy,
@@ -50,10 +64,19 @@ class _Account:
     moving_s: Fraction = Fraction(0)
     service_s: Fraction = Fraction(0)
     waiting_s: Fraction = Fraction(0)
+    charging_s: Fraction = Fraction(0)
 
     travel: Fraction = Fraction(0)
     service: Fraction = Fraction(0)
     waiting: Fraction = Fraction(0)
+
+    # The only term that raises SOC. Positive.
+    charge: Fraction = Fraction(0)
+
+    # Start of a charge session still in progress, so a live SOC read
+    # mid-charge rises instead of reading as idle. None between
+    # sessions; cleared when the session is booked.
+    charging_since: Fraction | None = None
 
     # Running totals so a live SOC read costs three operations, not a
     # full snapshot: booked_soc is initial minus every booked drain, and
@@ -84,14 +107,17 @@ class BatterySnapshot:
     service_energy: Fraction
     waiting_energy: Fraction
     idle_energy: Fraction
+    charge_energy: Fraction
 
     moving_s: Fraction
     service_s: Fraction
     waiting_s: Fraction
     idle_s: Fraction
+    charging_s: Fraction
 
     @property
     def total_energy_consumed(self) -> Fraction:
+        """Everything the robot spent. Charging is a gain, not a cost."""
         return (
             self.travel_energy
             + self.service_energy
@@ -153,6 +179,66 @@ class BatteryLedger:
         account.booked_s += duration
         account.booked_soc -= energy
 
+    def begin_charge(self, robot_id: str, now: Fraction) -> Fraction:
+        """Open a charge session. Returns the SOC it starts from.
+
+        Latches the running minimum before the SOC starts to rise, so
+        ``minimum_soc`` keeps reporting the deepest SOC the robot ever
+        reached rather than being erased by the charge.
+
+        Nothing is booked here: the session is booked as one interval
+        when it completes. Until then ``soc()`` reads it as rising, so a
+        live read mid-charge is exact rather than reading as idle.
+        """
+
+        account = self._accounts[robot_id]
+
+        if account.charging_since is not None:
+            raise RuntimeError(
+                f"{robot_id} is already charging since "
+                f"t={float(account.charging_since):.4f}"
+            )
+
+        starting = self.soc(robot_id, now)
+
+        account.latched_minimum = (
+            starting
+            if account.latched_minimum is None
+            else min(account.latched_minimum, starting)
+        )
+
+        account.charging_since = now
+
+        return starting
+
+    def book_charge(self, robot_id: str, duration: Fraction) -> Fraction:
+        """Close a charge session of ``duration``. Returns the SOC gained.
+
+        The charging interval is booked as its own category, so it is
+        excluded from the idle remainder: a charging robot is charging,
+        not idling, and the configured rate is the net gain
+        (docs/DECISIONS.md, "Charging Rate").
+        """
+
+        account = self._accounts[robot_id]
+
+        if account.charging_since is None:
+            raise RuntimeError(f"{robot_id} has no open charge session to book")
+
+        if duration < 0:
+            raise ValueError("charge duration must not be negative")
+
+        energy = charge_energy(self.config, duration)
+
+        account.charging_s += duration
+        account.charge += energy
+        account.booked_s += duration
+        account.booked_soc += energy
+
+        account.charging_since = None
+
+        return energy
+
     # -- reading ------------------------------------------------
 
     @property
@@ -163,12 +249,23 @@ class BatteryLedger:
 
         account = self._accounts[robot_id]
 
+        # An open charge session is not booked yet, so count it here;
+        # otherwise its seconds would fall into the idle remainder and
+        # be charged idle drain.
+        open_charge_s = (
+            Fraction(0)
+            if account.charging_since is None
+            else now - account.charging_since
+        )
+
         idle_s = (
             now
             - account.registered_at
             - account.moving_s
             - account.service_s
             - account.waiting_s
+            - account.charging_s
+            - open_charge_s
         )
 
         if idle_s < 0:
@@ -180,12 +277,16 @@ class BatteryLedger:
 
         idle = stationary_energy(self.config, idle_s)
 
-        current = (
+        charge = account.charge + charge_energy(self.config, open_charge_s)
+
+        current = min(
+            FULL_SOC_PERCENT,
             account.initial_soc
             - account.travel
             - account.service
             - account.waiting
             - idle
+            + charge,
         )
 
         minimum = (
@@ -205,10 +306,12 @@ class BatteryLedger:
             service_energy=account.service,
             waiting_energy=account.waiting,
             idle_energy=idle,
+            charge_energy=charge,
             moving_s=account.moving_s,
             service_s=account.service_s,
             waiting_s=account.waiting_s,
             idle_s=idle_s,
+            charging_s=account.charging_s + open_charge_s,
         )
 
     def soc(self, robot_id: str, now: Fraction) -> Fraction:
@@ -216,19 +319,39 @@ class BatteryLedger:
 
         account = self._accounts[robot_id]
 
+        if account.charging_since is not None:
+            # Mid-charge: SOC rises from the moment the session opened.
+            # Exact at any instant, so the 2 Hz ROS readout and any
+            # mid-charge decision see the real value, not idle drain.
+            #
+            # Idle is never booked, so the idle accrued before the
+            # session still has to be subtracted. Nothing is booked
+            # while the session is open, so this stays constant for the
+            # whole session.
+            idle_before = (
+                account.charging_since - account.registered_at - account.booked_s
+            )
+
+            return min(
+                FULL_SOC_PERCENT,
+                account.booked_soc
+                - idle_before * self._idle_rate
+                + charge_energy(self.config, now - account.charging_since),
+            )
+
         idle_s = now - account.registered_at - account.booked_s
 
         if idle_s < 0:
             # Let snapshot() raise with the full diagnosis.
             return self.snapshot(robot_id, now).current_soc
 
-        return account.booked_soc - idle_s * self._idle_rate
+        return min(
+            FULL_SOC_PERCENT,
+            account.booked_soc - idle_s * self._idle_rate,
+        )
 
     def snapshots(self, now: Fraction) -> list[BatterySnapshot]:
-        return [
-            self.snapshot(robot_id, now)
-            for robot_id in self.robot_ids
-        ]
+        return [self.snapshot(robot_id, now) for robot_id in self.robot_ids]
 
 
 # ----------------------------------------------------------------------
@@ -251,34 +374,42 @@ def fleet_summary(snapshots: list[BatterySnapshot]) -> dict:
             (s.total_energy_consumed for s in snapshots),
             Fraction(0),
         ),
-        "below_zero": [
-            s.robot_id for s in snapshots if s.minimum_soc < 0
-        ],
+        "total_charge": sum((s.charge_energy for s in snapshots), Fraction(0)),
+        "total_charging_s": sum((s.charging_s for s in snapshots), Fraction(0)),
+        "below_zero": [s.robot_id for s in snapshots if s.minimum_soc < 0],
     }
 
 
 def cross_check(snapshot: BatterySnapshot, robot, config: BatteryConfig) -> float:
     """|ledger SOC - SOC re-derived from the robot's own float counters|.
 
-    GridRobot keeps distance, travel time, service time and waiting time
-    as floats, booked by the engine independently of this ledger. SOC
-    rebuilt from those, with idle as the remainder of elapsed time, must
-    agree with the ledger to float precision. A real disagreement means
-    an event was booked into one account and not the other.
+    GridRobot keeps distance, travel time, service time, waiting time
+    and charging time as floats, booked by the engine independently of
+    this ledger. SOC rebuilt from those, with idle as the remainder of
+    elapsed time, must agree with the ledger to float precision. A real
+    disagreement means an event was booked into one account and not the
+    other.
+
+    Charging time is taken out of the stationary remainder and added
+    back as a gain, because the configured rate is net: a charging robot
+    is charging, not idling.
     """
 
     elapsed = float(snapshot.time - snapshot.registered_at)
 
-    stationary = elapsed - robot.travel_time_s - robot.service_time_s
+    stationary = (
+        elapsed - robot.travel_time_s - robot.service_time_s - robot.charging_time_s
+    )
 
     rebuilt = (
         float(snapshot.initial_soc)
         - robot.distance_m * float(config.travel_percent_per_20m) / 20
         - robot.service_time_s * float(config.service_percent_per_60s) / 60
         - stationary * float(config.waiting_idle_percent_per_300s) / 300
+        + robot.charging_time_s * float(config.charging_percent_per_second)
     )
 
-    return abs(float(snapshot.current_soc) - rebuilt)
+    return abs(float(snapshot.current_soc) - min(100.0, rebuilt))
 
 
 def battery_report_lines(
@@ -295,8 +426,10 @@ def battery_report_lines(
     config = ledger.config
     snapshots = ledger.snapshots(now)
 
+    charged = [s for s in snapshots if s.charging_s > 0]
+
     lines = [
-        "BATTERY (SOC ledger; drains only -- no charging before B4)",
+        "BATTERY (SOC ledger; charging raises SOC from B4)",
         f"  model            : {float(config.travel_percent_per_20m):g}% "
         f"/ 20 m travel, "
         f"{float(config.service_percent_per_60s):g}% / 60 s service, "
@@ -304,11 +437,12 @@ def battery_report_lines(
         f"waiting or idle",
         f"  thresholds       : reserve {float(config.reserve_percent):g}%, "
         f"charge due <= {float(config.charge_due_percent):g}%; charge "
-        f"{float(config.charging_percent_per_second):g}%/s not yet used",
+        f"+{float(config.charging_percent_per_second):g}%/s net, "
+        f"target 100%",
         f"  at               : t={float(now):.4f} s",
         "",
         "  robot        initial     final   minimum    travel   service"
-        "   waiting      idle     total",
+        "   waiting      idle     total    charge",
     ]
 
     for s in snapshots:
@@ -325,16 +459,14 @@ def battery_report_lines(
                     s.waiting_energy,
                     s.idle_energy,
                     s.total_energy_consumed,
+                    s.charge_energy,
                 )
             )
         )
 
     summary = fleet_summary(snapshots)
 
-    worst = max(
-        cross_check(s, robots[s.robot_id], config)
-        for s in snapshots
-    )
+    worst = max(cross_check(s, robots[s.robot_id], config) for s in snapshots)
 
     lines += [
         "",
@@ -344,12 +476,14 @@ def battery_report_lines(
         f"  lowest minimum   : {float(summary['lowest_minimum_soc']):.4f}",
         f"  fleet energy     : "
         f"{float(summary['total_energy_consumed']):.4f} % SOC in total",
+        f"  charging         : {len(charged)} robot(s) charged, "
+        f"{float(summary['total_charge']):.4f} % SOC gained over "
+        f"{float(summary['total_charging_s']):.4f} simulated s",
         "  SOC identity     : final = initial - travel - service"
-        " - waiting - idle, exact (rational arithmetic)",
+        " - waiting - idle + charge, exact (rational arithmetic)",
         f"  cross-check      : SOC rebuilt from the engine's own counters"
         f" differs by at most {worst:.3e} %",
-        "  below 0 % SOC    : "
-        + (", ".join(summary["below_zero"]) or "none"),
+        "  below 0 % SOC    : " + (", ".join(summary["below_zero"]) or "none"),
     ]
 
     return lines

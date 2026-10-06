@@ -33,6 +33,7 @@ from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from mrta_core.warehouse_routing import best_path_to_zone, non_transit_cells
+from simulation_env.charging import ResourceState
 from simulation_env.fleet import build_fleet
 from simulation_env.workload_executor import (
     IneligibleAssignmentError,
@@ -48,9 +49,9 @@ from task_management.features import order_route_cost, route_energy
 CONFIGS = Path(__file__).resolve().parents[1] / "config"
 
 # Measured on the V2 map from robot_001's spawn cell (0, 12):
-SHORT = "O0053"   # the cheapest order to reach and finish
-LONG = "O0099"    # the dearest
-FAR = "O0001"     # ends at (14, 29): 28 m to a charger by A*, 4 by Manhattan
+SHORT = "O0053"  # the cheapest order to reach and finish
+LONG = "O0099"  # the dearest
+FAR = "O0001"  # ends at (14, 29): 28 m to a charger by A*, 4 by Manhattan
 
 
 @pytest.fixture(scope="module")
@@ -177,9 +178,7 @@ def test_negative_margin_is_ineligible(config, warehouse, all_orders):
     short_config = controlled(
         config,
         robots=1,
-        overrides={
-            "robot_001": needed.required_soc_percent - Fraction(1, 10_000)
-        },
+        overrides={"robot_001": needed.required_soc_percent - Fraction(1, 10_000)},
     )
 
     executor = executor_for(short_config, warehouse, [all_orders[SHORT]])
@@ -209,7 +208,10 @@ def test_closer_but_ineligible_robot_is_skipped(config, warehouse, all_orders):
     costs = sorted(
         (
             order_route_cost(
-                warehouse, robot.cell, order.shelf_ids, order.dropoff_id,
+                warehouse,
+                robot.cell,
+                order.shelf_ids,
+                order.dropoff_id,
                 cache=executor.routes,
             ).distance_m,
             robot_id,
@@ -235,7 +237,11 @@ def test_closer_but_ineligible_robot_is_skipped(config, warehouse, all_orders):
         warehouse, robots, [order], executor.fifo_position, executor.routes
     )
     masked = allocator.assign(
-        warehouse, robots, [order], executor.fifo_position, executor.routes,
+        warehouse,
+        robots,
+        [order],
+        executor.fifo_position,
+        executor.routes,
         battery=context,
     )
 
@@ -262,7 +268,9 @@ def test_charger_distance_is_directed_astar(config, warehouse, all_orders):
 
     chargers = [z.zone_id for z in warehouse.zones_of_type(ZoneType.CHARGING)]
     by_astar = min(
-        best_path_to_zone(warehouse, end, zone_id, non_transit_cells(warehouse)).distance
+        best_path_to_zone(
+            warehouse, end, zone_id, non_transit_cells(warehouse)
+        ).distance
         for zone_id in chargers
     )
 
@@ -357,8 +365,11 @@ def test_realized_waiting_still_drains_soc(config, warehouse):
     for snap in waited:
         assert snap.waiting_energy == snap.waiting_s / 300 > 0
         assert snap.current_soc == (
-            snap.initial_soc - snap.travel_energy - snap.service_energy
-            - snap.waiting_energy - snap.idle_energy
+            snap.initial_soc
+            - snap.travel_energy
+            - snap.service_energy
+            - snap.waiting_energy
+            - snap.idle_energy
         )
 
 
@@ -381,7 +392,7 @@ def test_busy_robot_crossing_ten_percent_finishes_its_order(
     busy = controlled(
         config,
         robots=1,
-        overrides={"robot_001": Fraction(23, 2)},   # 11.5%
+        overrides={"robot_001": Fraction(23, 2)},  # 11.5%
         reserve=0,
     )
 
@@ -403,8 +414,15 @@ def test_busy_robot_crossing_ten_percent_finishes_its_order(
     executor.engine.run()
 
     # B3: the request is followed at once by a charger reservation, and
-    # the robot then drives onto that charger.
-    due, request, reserve, arrive = events
+    # the robot then drives onto that charger. B4 then adds
+    # CHARGE_START, CHARGE_FULL and REJOIN for the same robot.
+    due, request, reserve, arrive = events[:4]
+
+    assert [e.kind for e in events[4:]] == [
+        "CHARGE_START",
+        "CHARGE_FULL",
+        "REJOIN",
+    ]
 
     assert (reserve.kind, arrive.kind) == ("RESERVE", "ARRIVE")
     assert reserve.sim_time == request.sim_time
@@ -419,14 +437,47 @@ def test_busy_robot_crossing_ten_percent_finishes_its_order(
     retreats = [t for t, kind in kinds if kind == "RETREAT_COMPLETE"]
     finished = [t for t, kind in kinds if kind == "MISSION_COMPLETE"]
 
-    assert len(services) == len(all_orders[FAR].shelf_ids) + 1
-    assert float(due.sim_time) < services[-1]
+    # Up to the charge request: every service of the FAR order and
+    # nothing else. (B4 lets the robot rejoin afterwards and take the
+    # SHORT order, which adds services later in the run.)
+    asked = float(request.sim_time)
+
+    before = [t for t in services if t <= asked]
+
+    assert len(before) == len(all_orders[FAR].shelf_ids) + 1
+    assert float(due.sim_time) < before[-1]
     # finished[0] is the order mission; finished[1] the charger trip.
-    assert float(request.sim_time) == retreats[-1] == finished[0]
+    retreats_before = [t for t in retreats if t <= asked]
+
+    assert asked == retreats_before[-1] == finished[0]
 
     assert executor.queue.order(FAR).status is OrderStatus.COMPLETED
-    assert executor.queue.order(SHORT).status is OrderStatus.PENDING
-    assert "robot_001" in executor.requesting
+
+    # The SHORT order was NOT taken while the robot was charging: its
+    # dispatch, if any, comes only after the rejoin (B4).
+    record = executor.charge["robot_001"]
+
+    assert record.rejoined_at is not None
+
+    # The charge itself lands on exactly 100%.
+    assert record.arrival_soc + record.charge_gained == 100
+
+    # Reversing off the charger is one cell of real driving, so it
+    # rejoins exactly one move's travel energy below full.
+    step = travel_energy(executor.battery.config, executor.warehouse.grid.resolution)
+
+    assert record.rejoin_soc == 100 - step
+
+    shorts = [d for d in executor.result.dispatches if d.order_id == SHORT]
+
+    assert shorts
+    assert all(d.sim_time >= float(record.rejoined_at) for d in shorts)
+    assert executor.queue.order(SHORT).status is OrderStatus.COMPLETED
+
+    # Having charged, it is back in the fleet rather than parked on the
+    # charger, and it cleared the slot behind it.
+    assert "robot_001" not in executor.requesting
+    assert executor.chargers.slots[record.zone_id].state is (ResourceState.FREE)
 
 
 # ----------------------------------------------------------------------
@@ -452,7 +503,7 @@ def test_charge_needed_scans_all_pending_orders(config, warehouse, all_orders):
     assert both.queue.eligible(1)[0].order_id == LONG
     assert "robot_001" not in both.requesting
     assert both.result.availability_pairs == 2
-    assert both.result.dispatches == []            # its batch pair is refused
+    assert both.result.dispatches == []  # its batch pair is refused
     assert both.result.ineligible_pairs == 1
 
 
@@ -486,18 +537,27 @@ class _MaskBlindAllocator(NearestAStarAllocator):
 
     name = "mask_blind"
 
-    def assign(self, warehouse, robots, orders, fifo_position, cache=None,
-               battery=None):
+    def assign(
+        self, warehouse, robots, orders, fifo_position, cache=None, battery=None
+    ):
         candidates = sorted(
-            (c for c in self.score(warehouse, robots, orders, fifo_position,
-                                   cache, battery) if c.reachable),
+            (
+                c
+                for c in self.score(
+                    warehouse, robots, orders, fifo_position, cache, battery
+                )
+                if c.reachable
+            ),
             key=lambda c: (c.cost, c.fifo_position, c.robot_id),
         )
         from task_management.allocation_strategy import OrderAssignment
 
         best = candidates[0]
-        return [OrderAssignment(best.robot_id, best.order_id, best.cost,
-                                best.route, best.energy)]
+        return [
+            OrderAssignment(
+                best.robot_id, best.order_id, best.cost, best.route, best.energy
+            )
+        ]
 
 
 def test_ineligible_assignment_raises(config, warehouse, all_orders):
@@ -509,7 +569,9 @@ def test_ineligible_assignment_raises(config, warehouse, all_orders):
     between = controlled(config, robots=1, overrides={"robot_001": soc})
 
     executor = executor_for(
-        between, warehouse, [all_orders[LONG], all_orders[SHORT]],
+        between,
+        warehouse,
+        [all_orders[LONG], all_orders[SHORT]],
         allocator=_MaskBlindAllocator(),
     )
 
@@ -594,9 +656,9 @@ def test_low_fleet_classification(low_fleet_first_decision):
     }
 
     assert state == {
-        "robot_003": "CHARGE_NEEDED",   # 12%: not due, but nothing fits
-        "robot_004": "CHARGE_DUE",      # exactly 10%
-        "robot_005": "CHARGE_DUE",      # 9%
+        "robot_003": "CHARGE_NEEDED",  # 12%: not due, but nothing fits
+        "robot_004": "CHARGE_DUE",  # exactly 10%
+        "robot_005": "CHARGE_DUE",  # 9%
     }
 
     assigned = {d.robot_id for d in executor.result.dispatches}

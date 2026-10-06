@@ -135,7 +135,7 @@ Chargers and holding cells form two one-cell-deep terminal banks (y=2 and y=32) 
 
 The current V2 map is not yet the final multi-map scalability family. It is the basis for the W20-class warehouse.
 
-Battery state of charge is accounted and reported (Battery V1 B1), and gates allocation (B2): a robot may take an order only if it can finish it and still reach a charger with the 10% reserve, a hard constraint for every strategy. A robot that needs charging reserves a free charger (or, when all are taken, a holding cell) and drives there by directed A* (B3). Charging itself is designed but **not implemented yet**: the robot stays on the charger and its SOC does not rise.
+Battery state of charge is accounted and reported (Battery V1 B1), and gates allocation (B2): a robot may take an order only if it can finish it and still reach a charger with the 10% reserve, a hard constraint for every strategy. A robot that needs charging reserves a free charger (or, when all are taken, a holding cell) and drives there by directed A* (B3). On a charger it then charges to exactly 100%, reverses into the aisle and rejoins the fleet, where the same eligibility test applies again (B4). The configured charge rate is the net gain, so a charging robot is not also billed idle drain. A robot that reached a *holding* cell stays there: queue promotion and preemption are **not implemented yet** (B5).
 
 ILP, outcome logging, experiment orchestration, and explanations are **not implemented yet**.
 
@@ -283,7 +283,10 @@ B1 SOC accounting                      IMPLEMENTED
 B2 eligibility, CHARGE_DUE / NEEDED    IMPLEMENTED
 B3 charger / holding reservation,
    travel to the reserved cell         IMPLEMENTED
-charging, preemption, queue promotion  NOT IMPLEMENTED
+B4 charging to 100%, leaving the
+   charger, rejoining the fleet        IMPLEMENTED
+preemption, holding promotion (B5)     NOT IMPLEMENTED
+battery metrics, end-of-work G6 (B6)   NOT IMPLEMENTED
 ```
 
 Battery V1 is a normalized deterministic experimental model.

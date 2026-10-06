@@ -9,7 +9,8 @@ three things and nothing else:
     waiting and idle   waiting_idle_percent_per_300s   per 300 s standing still
 
 It is raised only by charging (``charging_percent_per_second``), which
-is configured here but not implemented yet.
+is the NET gain while a robot is physically on a charger: the idle drain
+is not also subtracted over that interval (B4).
 
 The arithmetic is exact. Distances and durations arrive as the same
 ``Fraction`` values the fleet engine's clock uses, so an energy total is
@@ -31,6 +32,9 @@ from fractions import Fraction
 TRAVEL_REFERENCE_M = 20
 SERVICE_REFERENCE_S = 60
 STATIONARY_REFERENCE_S = 300
+
+# A full battery. The normal charge target (B4).
+FULL_SOC_PERCENT = Fraction(100)
 
 
 def exact(value) -> Fraction:
@@ -84,9 +88,7 @@ class BatteryConfig:
             "charge_due_percent",
         ):
             if not 0 <= getattr(self, name) <= 100:
-                raise ValueError(
-                    f"battery.{name} must be within 0..100"
-                )
+                raise ValueError(f"battery.{name} must be within 0..100")
 
         for robot_id, soc in self.initial_soc_overrides.items():
             if not 0 <= soc <= 100:
@@ -127,8 +129,7 @@ class BatteryConfig:
 
         if unknown:
             raise ValueError(
-                f"unknown battery config key(s) {unknown}; "
-                f"known: {sorted(known)}"
+                f"unknown battery config key(s) {unknown}; known: {sorted(known)}"
             )
 
         enabled = raw.pop("enabled", True)
@@ -140,15 +141,13 @@ class BatteryConfig:
 
         if not isinstance(overrides, dict):
             raise ValueError(
-                "battery.initial_soc_overrides must map "
-                "robot_id -> initial SOC percent"
+                "battery.initial_soc_overrides must map robot_id -> initial SOC percent"
             )
 
         return cls(
             enabled=enabled,
             initial_soc_overrides={
-                str(robot_id): exact(soc)
-                for robot_id, soc in overrides.items()
+                str(robot_id): exact(soc) for robot_id, soc in overrides.items()
             },
             **{name: exact(value) for name, value in raw.items()},
         )
@@ -157,31 +156,57 @@ class BatteryConfig:
 def travel_energy(config: BatteryConfig, distance_m) -> Fraction:
     """SOC percent spent driving ``distance_m``."""
 
-    return (
-        exact(distance_m)
-        * config.travel_percent_per_20m
-        / TRAVEL_REFERENCE_M
-    )
+    return exact(distance_m) * config.travel_percent_per_20m / TRAVEL_REFERENCE_M
 
 
 def service_energy(config: BatteryConfig, seconds) -> Fraction:
     """SOC percent spent on ``seconds`` of pick or drop service."""
 
-    return (
-        exact(seconds)
-        * config.service_percent_per_60s
-        / SERVICE_REFERENCE_S
-    )
+    return exact(seconds) * config.service_percent_per_60s / SERVICE_REFERENCE_S
 
 
 def stationary_energy(config: BatteryConfig, seconds) -> Fraction:
     """SOC percent spent standing still, waiting or idle, for ``seconds``."""
 
     return (
-        exact(seconds)
-        * config.waiting_idle_percent_per_300s
-        / STATIONARY_REFERENCE_S
+        exact(seconds) * config.waiting_idle_percent_per_300s / STATIONARY_REFERENCE_S
     )
+
+
+# ----------------------------------------------------------------------
+# Charging (Battery V1, increment B4).
+# ----------------------------------------------------------------------
+#
+# ``charging_percent_per_second`` is the NET gain while a robot is
+# physically charging (docs/DECISIONS.md, "Charging Rate"): the idle
+# drain is NOT also subtracted. A robot on a charger is charging, not
+# idling, so the execution ledger books the charging interval as its own
+# category and leaves it out of the idle remainder.
+
+
+def charge_energy(config: BatteryConfig, seconds) -> Fraction:
+    """SOC percent gained by charging for ``seconds``. Positive."""
+
+    return exact(seconds) * config.charging_percent_per_second
+
+
+def charge_seconds_to_full(config: BatteryConfig, current_soc) -> Fraction:
+    """Simulated seconds to take ``current_soc`` to exactly 100%.
+
+    Exact rational arithmetic, so the duration lands on the target
+    rather than near it:
+
+        duration = (100 - SOC) / charging_percent_per_second
+
+    A robot already at or above 100% needs no time at all.
+    """
+
+    soc = exact(current_soc)
+
+    if soc >= FULL_SOC_PERCENT:
+        return Fraction(0)
+
+    return (FULL_SOC_PERCENT - soc) / config.charging_percent_per_second
 
 
 # ----------------------------------------------------------------------
@@ -306,10 +331,7 @@ class BatteryDecisionContext:
             self.config,
             current_soc=self.soc[robot_id],
             order_distance_m=order_distance_m,
-            service_s=(
-                shelf_services * self.shelf_service_s
-                + self.dropoff_service_s
-            ),
+            service_s=(shelf_services * self.shelf_service_s + self.dropoff_service_s),
             charger_distance_m=charger_distance_m,
             charger_id=charger_id,
         )

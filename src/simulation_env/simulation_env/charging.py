@@ -1,10 +1,13 @@
 """Charger and holding terminals: who holds each cell, and in what state.
 
-Battery V1, increment B3. A robot in charge REQUEST is taken off the
-transit network: it reserves a dedicated non-transit terminal and drives
-there by the production directed A* route. There is no charging yet --
-a robot that reaches a charger stays on it and its SOC keeps draining at
-the idle rate.
+Battery V1, increments B3 and B4. A robot in charge REQUEST is taken
+off the transit network: it reserves a dedicated non-transit terminal
+and drives there by the production directed A* route (B3). On a charger
+it then charges to 100%, reverses into the access aisle cell and rejoins
+the fleet (B4).
+
+A robot that reaches a *holding* cell still stays there: queue promotion
+is B5.
 
 Resource states
 ---------------
@@ -31,8 +34,14 @@ access edge is two-way. A head-on swap on it needs one robot entering
 while another leaves the same terminal. The slot rule above excludes
 that: the only robot that may enter a terminal is its reservation
 holder, and the slot is not FREE again until any robot leaving it has
-cleared the edge. In B3 nothing ever leaves a charger or holding cell at
-all. See docs/CURRENT_PHASE.md, "B3 traffic-safety argument".
+cleared the edge. See docs/CURRENT_PHASE.md, "B3 traffic-safety
+argument".
+
+That rule is what makes B4's departure safe. A full robot goes
+OCCUPIED -> VACATING *before* it moves, and the slot becomes FREE only
+once the robot physically stands on the aisle cell. So no robot can be
+entering while another is leaving, and the access edge never carries an
+opposite-direction swap.
 
 Selection
 ---------
@@ -69,6 +78,12 @@ class ChargeState(str, Enum):
     REQUEST = "REQUEST"
     TO_CHARGER = "TO_CHARGER"
     OCCUPIED_CHARGER = "OCCUPIED_CHARGER"
+    # Charging to 100% on its own reserved charger (B4).
+    CHARGING = "CHARGING"
+    # Full: reversing off the charger into the access aisle cell (B4).
+    LEAVING_CHARGER = "LEAVING_CHARGER"
+    # Off the charger, access edge cleared, back in the fleet (B4).
+    REJOINED = "REJOINED"
     TO_HOLDING = "TO_HOLDING"
     HOLDING = "HOLDING"
     # Saturation: every charger and holding cell is taken.
@@ -76,19 +91,45 @@ class ChargeState(str, Enum):
     STAGE_FALLBACK = "STAGE_FALLBACK"
 
 
-TRAVEL_STATES = frozenset({
-    ChargeState.TO_CHARGER,
-    ChargeState.TO_HOLDING,
-    ChargeState.TO_STAGE_FALLBACK,
-})
+# Driving *to* a reserved terminal. Arrival settles the robot onto it.
+TRAVEL_STATES = frozenset(
+    {
+        ChargeState.TO_CHARGER,
+        ChargeState.TO_HOLDING,
+        ChargeState.TO_STAGE_FALLBACK,
+    }
+)
 
-# Standing on a reserved non-transit terminal. B3 has no way out of
-# these: charging completion and holding promotion come later.
-SETTLED_STATES = frozenset({
-    ChargeState.OCCUPIED_CHARGER,
-    ChargeState.HOLDING,
-    ChargeState.STAGE_FALLBACK,
-})
+# Driving *off* a terminal. Arrival clears the slot instead (B4), so
+# this is deliberately not part of TRAVEL_STATES.
+LEAVING_STATES = frozenset(
+    {
+        ChargeState.LEAVING_CHARGER,
+    }
+)
+
+# In flight either way: the robot is not a stationary obstacle.
+MOVING_STATES = TRAVEL_STATES | LEAVING_STATES
+
+# Standing on a reserved non-transit terminal with no way out in V1 so
+# far. A charging robot is NOT settled -- its charge will finish and it
+# will rejoin -- so the run must not be considered over while it
+# charges. Holding promotion is still B5.
+SETTLED_STATES = frozenset(
+    {
+        ChargeState.OCCUPIED_CHARGER,
+        ChargeState.HOLDING,
+        ChargeState.STAGE_FALLBACK,
+    }
+)
+
+# Anywhere in the charging workflow except back in the fleet. A robot
+# in any of these is never offered an order.
+BUSY_STATES = (
+    frozenset({ChargeState.REQUEST, ChargeState.CHARGING})
+    | MOVING_STATES
+    | SETTLED_STATES
+)
 
 # (travel state, settled state) for each kind of destination.
 DESTINATION = {
@@ -126,12 +167,12 @@ class ChargeRecord:
     """One robot's trip through the charging workflow."""
 
     robot_id: str
-    reason: str                     # CHARGE_DUE or CHARGE_NEEDED
+    reason: str  # CHARGE_DUE or CHARGE_NEEDED
     requested_at: Fraction
     request_cell: tuple
     request_soc: Fraction
     state: ChargeState = ChargeState.REQUEST
-    kind: str = ""                  # charger, holding or stage
+    kind: str = ""  # charger, holding or stage
     zone_id: str | None = None
     target_cell: tuple | None = None
     route_cost_m: float | None = None
@@ -139,6 +180,18 @@ class ChargeRecord:
     departed_at: Fraction | None = None
     arrived_at: Fraction | None = None
     arrival_soc: Fraction | None = None
+
+    # -- charging (B4). Only a charger trip fills these in. --------
+    charge_started_at: Fraction | None = None
+    charge_duration_s: Fraction | None = None
+    charge_completed_at: Fraction | None = None
+    charge_gained: Fraction | None = None
+    # The aisle cell the robot reverses into, i.e. the cell it entered
+    # the terminal from.
+    access_cell: tuple | None = None
+    left_charger_at: Fraction | None = None
+    rejoined_at: Fraction | None = None
+    rejoin_soc: Fraction | None = None
 
 
 class TerminalBank:
@@ -174,8 +227,7 @@ class TerminalBank:
         return [
             zone_id
             for zone_id, slot in self.slots.items()
-            if slot.state is ResourceState.FREE
-            and slot.cell not in blocked_cells
+            if slot.state is ResourceState.FREE and slot.cell not in blocked_cells
         ]
 
     def count(self, state: ResourceState) -> int:
@@ -206,8 +258,7 @@ class TerminalBank:
 
         if robot_id in self._by_robot:
             raise ResourceError(
-                f"{robot_id} already holds {self.kind} "
-                f"{self._by_robot[robot_id]}"
+                f"{robot_id} already holds {self.kind} {self._by_robot[robot_id]}"
             )
 
         slot = self._slot(zone_id, robot_id, ResourceState.FREE)
@@ -227,8 +278,7 @@ class TerminalBank:
 
         if cell != slot.cell:
             raise ResourceError(
-                f"{robot_id} is at {cell}, not on {self.kind} {zone_id} "
-                f"at {slot.cell}"
+                f"{robot_id} is at {cell}, not on {self.kind} {zone_id} at {slot.cell}"
             )
 
         slot.state = ResourceState.OCCUPIED
@@ -274,8 +324,9 @@ class TerminalBank:
         except RuntimeError:
             return None
 
-    def assign(self, robot_cells: dict, *, now, blocked_cells=frozenset(),
-               cache=None) -> dict:
+    def assign(
+        self, robot_cells: dict, *, now, blocked_cells=frozenset(), cache=None
+    ) -> dict:
         """Reserve the cheapest FREE slot for each robot, without duplicates.
 
         ``robot_cells`` is robot_id -> the cell it stands on. Returns
@@ -289,7 +340,6 @@ class TerminalBank:
 
         for robot_id in sorted(robot_cells):
             for zone_id in available:
-
                 cost = self.route_cost(robot_cells[robot_id], zone_id, cache)
 
                 if cost is not None:
@@ -301,7 +351,6 @@ class TerminalBank:
         taken = set()
 
         for cost, zone_id, robot_id in candidates:
-
             if robot_id in result or zone_id in taken:
                 continue
 

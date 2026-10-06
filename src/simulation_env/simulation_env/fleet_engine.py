@@ -53,6 +53,7 @@ class EventType(str, Enum):
     MOVE_COMPLETE = "MOVE_COMPLETE"
     WAIT_COMPLETE = "WAIT_COMPLETE"
     SERVICE_COMPLETE = "SERVICE_COMPLETE"
+    CHARGE_COMPLETE = "CHARGE_COMPLETE"
     RETREAT_COMPLETE = "RETREAT_COMPLETE"
     YIELD_COMPLETE = "YIELD_COMPLETE"
     REJOIN_COMPLETE = "REJOIN_COMPLETE"
@@ -198,6 +199,10 @@ class FleetSimulationEngine:
         # head-on conflict.
         self._yielding: dict[str, _YieldState] = {}
 
+        # Duration and exact completion event for each open session.
+        # The watchdog may exempt a dwell only while that event is queued.
+        self._charging: dict[str, tuple[Fraction, Event]] = {}
+
         # The complete timed trajectory remains owned by each rolling buffer;
         # only a six-cell delivery window is exposed to execution.
 
@@ -294,6 +299,64 @@ class FleetSimulationEngine:
         if self.battery is not None:
             self.battery.book_service(robot.robot_id, duration)
 
+    def _book_charge(self, robot: GridRobot, duration: Fraction) -> None:
+        """One completed charge session. The only booking that adds SOC."""
+
+        robot.book_charge(float(duration))
+
+        if self.battery is not None:
+            self.battery.book_charge(robot.robot_id, duration)
+
+    # -- charging (B4) ------------------------------------
+    #
+    # A charge is a timed dwell on the robot's own reserved charger
+    # cell, exactly like a pick or a drop is a timed dwell on a station:
+    # the clock advances through it, the cell stays reserved, and the
+    # energy is booked when it completes. The charging *policy* -- who
+    # charges, for how long, and what happens next -- stays in the
+    # executor; this only runs the dwell.
+
+    def begin_charge(self, robot_id: str, duration: Fraction) -> Event:
+        """Hold ``robot_id`` on its cell, charging, for ``duration``.
+
+        The robot must be standing still with no mission in flight: a
+        charge is only ever started once it has arrived on its reserved
+        charger. Returns the scheduled CHARGE_COMPLETE event.
+        """
+
+        robot = self.robots[robot_id]
+
+        # A finished assignment is left in place rather than deleted,
+        # so the test is whether the robot has driven its path out, not
+        # whether an assignment object exists.
+        if not robot.finished:
+            raise RuntimeError(f"{robot_id} cannot charge with a mission in flight")
+
+        if robot.status is not GridRobotStatus.IDLE:
+            raise RuntimeError(
+                f"{robot_id} cannot charge from status {robot.status.value}"
+            )
+
+        if duration < 0:
+            raise ValueError("charge duration must not be negative")
+
+        if robot_id in self._charging:
+            raise RuntimeError(f"{robot_id} is already charging")
+
+        if self.battery is not None:
+            self.battery.begin_charge(robot_id, self.time)
+
+        robot.status = GridRobotStatus.CHARGING
+
+        event = self._schedule(
+            robot_id,
+            EventType.CHARGE_COMPLETE,
+            duration,
+            detail="charging",
+        )
+        self._charging[robot_id] = (duration, event)
+        return event
+
     def _prepare_mission_start(self, robot_id: str):
         """Prepare the first movement request for one raw mission.
 
@@ -305,11 +368,7 @@ class FleetSimulationEngine:
         robot = self.robots[robot_id]
 
         while True:
-
-            if (
-                assignment.segment_index
-                >= len(assignment.plan.segments)
-            ):
+            if assignment.segment_index >= len(assignment.plan.segments):
                 self._schedule(
                     robot_id,
                     EventType.MISSION_COMPLETE,
@@ -317,15 +376,11 @@ class FleetSimulationEngine:
                 )
                 return None
 
-            segment = assignment.plan.segments[
-                assignment.segment_index
-            ]
+            segment = assignment.plan.segments[assignment.segment_index]
 
             assignment.retreating = False
 
-            robot.assign_path(
-                list(segment.path)
-            )
+            robot.assign_path(list(segment.path))
 
             if not robot.finished:
                 return (
@@ -359,18 +414,12 @@ class FleetSimulationEngine:
         unknown = parking - set(missions)
 
         if unknown:
-            raise ValueError(
-                f"parking robots missing missions: "
-                f"{sorted(unknown)}"
-            )
+            raise ValueError(f"parking robots missing missions: {sorted(unknown)}")
 
         # Validate the whole batch before mutating engine state.
         for robot_id in sorted(missions):
-
             if robot_id not in self.robots:
-                raise KeyError(
-                    f"unknown robot {robot_id}"
-                )
+                raise KeyError(f"unknown robot {robot_id}")
 
             robot = self.robots[robot_id]
             plan = missions[robot_id]
@@ -383,7 +432,6 @@ class FleetSimulationEngine:
 
         # Install every assignment first.
         for robot_id in sorted(missions):
-
             self.assignments[robot_id] = _Assignment(
                 plan=missions[robot_id],
                 is_parking=(robot_id in parking),
@@ -394,10 +442,7 @@ class FleetSimulationEngine:
         # Existing waiting robots should compete in the same local
         # traffic decision as newly dispatched robots.
         for robot_id in sorted(self._waiting):
-
-            kind, detail, _since = self._waiting[
-                robot_id
-            ]
+            kind, detail, _since = self._waiting[robot_id]
 
             requests.append(
                 (
@@ -409,10 +454,7 @@ class FleetSimulationEngine:
 
         # Prepare all new first moves without claiming any cells yet.
         for robot_id in sorted(missions):
-
-            request = self._prepare_mission_start(
-                robot_id
-            )
+            request = self._prepare_mission_start(robot_id)
 
             if request is not None:
                 requests.append(request)
@@ -432,14 +474,8 @@ class FleetSimulationEngine:
 
         self.assign_missions_batch(
             {robot_id: plan},
-            parking=(
-                {robot_id}
-                if is_parking
-                else frozenset()
-            ),
+            parking=({robot_id} if is_parking else frozenset()),
         )
-
-
 
     def _begin_segment(self, robot_id: str) -> None:
 
@@ -447,9 +483,7 @@ class FleetSimulationEngine:
         robot = self.robots[robot_id]
 
         if assignment.segment_index >= len(assignment.plan.segments):
-            self._schedule(
-                robot_id, EventType.MISSION_COMPLETE, Fraction(0)
-            )
+            self._schedule(robot_id, EventType.MISSION_COMPLETE, Fraction(0))
             return
 
         segment = assignment.plan.segments[assignment.segment_index]
@@ -461,9 +495,7 @@ class FleetSimulationEngine:
         if robot.finished:
             self._arrive(robot_id)
         else:
-            self._try_move(
-                robot_id, EventType.MOVE_COMPLETE, segment.to_zone
-            )
+            self._try_move(robot_id, EventType.MOVE_COMPLETE, segment.to_zone)
 
     def _arrive(self, robot_id: str) -> None:
         """Robot reached this segment's target station."""
@@ -492,9 +524,7 @@ class FleetSimulationEngine:
             self._begin_segment(robot_id)
             return
 
-        zone_type = self.warehouse.zone_by_id(
-            segment.to_zone
-        ).zone_type
+        zone_type = self.warehouse.zone_by_id(segment.to_zone).zone_type
 
         robot.status = SERVICE_STATUS[zone_type]
 
@@ -547,17 +577,12 @@ class FleetSimulationEngine:
                 Ordinary traffic movement.
         """
 
-        assignment = self.assignments.get(
-            robot_id
-        )
+        assignment = self.assignments.get(robot_id)
 
         if assignment is None:
             return None
 
-        if (
-            assignment.segment_index
-            >= len(assignment.plan.segments)
-        ):
+        if assignment.segment_index >= len(assignment.plan.segments):
             return None
 
         robot = self.robots[robot_id]
@@ -565,17 +590,13 @@ class FleetSimulationEngine:
         if robot.finished:
             return None
 
-        segment = assignment.plan.segments[
-            assignment.segment_index
-        ]
+        segment = assignment.plan.segments[assignment.segment_index]
 
         if segment.exit_cell is None:
             return None
 
         source = robot.cell
-        target = robot.path[
-            robot.path_index + 1
-        ]
+        target = robot.path[robot.path_index + 1]
 
         if (
             kind is EventType.MOVE_COMPLETE
@@ -595,7 +616,6 @@ class FleetSimulationEngine:
 
         return None
 
-
     def _try_moves_batch(self, requests) -> set[str]:
         """Resolve simultaneous one-cell movement requests.
 
@@ -614,11 +634,8 @@ class FleetSimulationEngine:
         request_by_robot = {}
 
         for robot_id, kind, detail in requests:
-
             if robot_id in request_by_robot:
-                raise RuntimeError(
-                    f"duplicate movement request for {robot_id}"
-                )
+                raise RuntimeError(f"duplicate movement request for {robot_id}")
 
             request_by_robot[robot_id] = (
                 kind,
@@ -638,7 +655,6 @@ class FleetSimulationEngine:
         ordinary_requests = []
 
         for robot_id, kind, detail in requests:
-
             mode = self._service_protected_move(
                 robot_id,
                 kind,
@@ -657,9 +673,7 @@ class FleetSimulationEngine:
             robot = self.robots[robot_id]
 
             source = robot.cell
-            target = robot.path[
-                robot.path_index + 1
-            ]
+            target = robot.path[robot.path_index + 1]
 
             conflict = self.reservations.check_move(
                 robot_id,
@@ -668,9 +682,7 @@ class FleetSimulationEngine:
             )
 
             if conflict is not None:
-
                 if robot_id not in self._waiting:
-
                     robot.wait_event_count += 1
 
                     if conflict == EDGE:
@@ -684,9 +696,7 @@ class FleetSimulationEngine:
                         self.time,
                     )
 
-                robot.status = (
-                    GridRobotStatus.WAITING
-                )
+                robot.status = GridRobotStatus.WAITING
 
                 continue
 
@@ -701,9 +711,7 @@ class FleetSimulationEngine:
                     self.time - pending_wait[2],
                 )
 
-            duration = self._move_duration(
-                robot
-            )
+            duration = self._move_duration(robot)
 
             # Conservative single-edge reservation.
             #
@@ -736,7 +744,6 @@ class FleetSimulationEngine:
         intents = []
 
         for robot_id, _kind, _detail in requests:
-
             robot = self.robots[robot_id]
 
             if robot.finished:
@@ -746,15 +753,9 @@ class FleetSimulationEngine:
                 MovementIntent(
                     robot_id=robot_id,
                     source=robot.cell,
-                    target=robot.path[
-                        robot.path_index + 1
-                    ],
+                    target=robot.path[robot.path_index + 1],
                     busy=self._traffic_busy(robot_id),
-                    remaining_distance=(
-                        self._remaining_to_destination(
-                            robot_id
-                        )
-                    ),
+                    remaining_distance=(self._remaining_to_destination(robot_id)),
                 )
             )
 
@@ -764,10 +765,7 @@ class FleetSimulationEngine:
         occupied = {}
 
         for robot_id in self.robots:
-
-            for cell in self.reservations.held_cells(
-                robot_id
-            ):
+            for cell in self.reservations.held_cells(robot_id):
                 occupied[cell] = robot_id
 
         decisions = self.local_traffic.resolve(
@@ -775,10 +773,7 @@ class FleetSimulationEngine:
             occupied_by=occupied,
         )
 
-        intent_by_robot = {
-            intent.robot_id: intent
-            for intent in intents
-        }
+        intent_by_robot = {intent.robot_id: intent for intent in intents}
 
         # ----------------------------------------------------
         # Identify explicit head-on pairs.
@@ -788,41 +783,24 @@ class FleetSimulationEngine:
         yield_partner = {}
 
         for index, first in enumerate(intents):
-
-            for second in intents[index + 1:]:
-
+            for second in intents[index + 1 :]:
                 if not (
-                    first.source == second.target
-                    and first.target == second.source
+                    first.source == second.target and first.target == second.source
                 ):
                     continue
 
                 head_on.add(first.robot_id)
                 head_on.add(second.robot_id)
 
-                first_decision = decisions[
-                    first.robot_id
-                ].decision
+                first_decision = decisions[first.robot_id].decision
 
-                second_decision = decisions[
-                    second.robot_id
-                ].decision
+                second_decision = decisions[second.robot_id].decision
 
-                if (
-                    first_decision
-                    is TrafficDecision.YIELD_REQUIRED
-                ):
-                    yield_partner[
-                        first.robot_id
-                    ] = second.robot_id
+                if first_decision is TrafficDecision.YIELD_REQUIRED:
+                    yield_partner[first.robot_id] = second.robot_id
 
-                if (
-                    second_decision
-                    is TrafficDecision.YIELD_REQUIRED
-                ):
-                    yield_partner[
-                        second.robot_id
-                    ] = first.robot_id
+                if second_decision is TrafficDecision.YIELD_REQUIRED:
+                    yield_partner[second.robot_id] = first.robot_id
 
         # ----------------------------------------------------
         # Helper for stationary waiting.
@@ -833,7 +811,6 @@ class FleetSimulationEngine:
             robot = self.robots[robot_id]
 
             if robot_id not in self._waiting:
-
                 robot.wait_event_count += 1
 
                 if edge:
@@ -841,9 +818,7 @@ class FleetSimulationEngine:
                 else:
                     robot.vertex_conflict_count += 1
 
-                kind, detail = request_by_robot[
-                    robot_id
-                ]
+                kind, detail = request_by_robot[robot_id]
 
                 self._waiting[robot_id] = (
                     kind,
@@ -861,16 +836,12 @@ class FleetSimulationEngine:
         yield_required = []
 
         for robot_id in sorted(intent_by_robot):
-
             intent = intent_by_robot[robot_id]
             decision = decisions[robot_id]
 
-            kind, _detail = request_by_robot[
-                robot_id
-            ]
+            kind, _detail = request_by_robot[robot_id]
 
             if decision.decision is TrafficDecision.MOVE:
-
                 approved.append(
                     (
                         robot_id,
@@ -884,14 +855,11 @@ class FleetSimulationEngine:
             # A yielder that is trying to rejoin simply remains in
             # its side cell if the corridor cannot clear yet.
             if kind is EventType.REJOIN_COMPLETE:
-                self.robots[
-                    robot_id
-                ].status = GridRobotStatus.WAITING
+                self.robots[robot_id].status = GridRobotStatus.WAITING
                 continue
 
             if (
-                decision.decision
-                is TrafficDecision.YIELD_REQUIRED
+                decision.decision is TrafficDecision.YIELD_REQUIRED
                 and robot_id in yield_partner
             ):
                 yield_required.append(robot_id)
@@ -909,22 +877,15 @@ class FleetSimulationEngine:
 
         # A temporary yield cell must not interfere with any
         # movement already being requested at this timestamp.
-        reserved_targets = {
-            intent.target
-            for intent in intents
-        }
+        reserved_targets = {intent.target for intent in intents}
 
         # Existing yielding robots intend to return to these cells.
         # Do not use those corridor cells as new yield bays.
-        reserved_targets |= {
-            state.corridor_cell
-            for state in self._yielding.values()
-        }
+        reserved_targets |= {state.corridor_cell for state in self._yielding.values()}
 
         yield_moves = []
 
         for robot_id in sorted(yield_required):
-
             if robot_id in self._yielding:
                 continue
 
@@ -959,32 +920,22 @@ class FleetSimulationEngine:
             next_index = winner.path_index + 2
 
             if next_index < len(winner.path):
-                forbidden.add(
-                    winner.path[next_index]
-                )
+                forbidden.add(winner.path[next_index])
 
             # Do not interfere with any existing temporary
             # yield corridor either.
-            forbidden |= {
-                state.corridor_cell
-                for state in self._yielding.values()
-            }
+            forbidden |= {state.corridor_cell for state in self._yielding.values()}
 
             yield_cell = select_local_yield_cell(
                 warehouse=self.warehouse,
                 source=intent.source,
                 intended_target=intent.target,
                 occupied=frozenset(occupied),
-                reserved_targets=frozenset(
-                    reserved_targets
-                ),
-                forbidden=frozenset(
-                    forbidden
-                ),
+                reserved_targets=frozenset(reserved_targets),
+                forbidden=frozenset(forbidden),
             )
 
             if yield_cell is None:
-
                 register_wait(
                     robot_id,
                     edge=True,
@@ -1045,19 +996,14 @@ class FleetSimulationEngine:
         # ----------------------------------------------------
 
         if approved:
-
             durations = {
-                self._move_duration(
-                    self.robots[robot_id]
-                )
-                for robot_id, _source, _target
-                in approved
+                self._move_duration(self.robots[robot_id])
+                for robot_id, _source, _target in approved
             }
 
             if len(durations) != 1:
                 raise RuntimeError(
-                    "simultaneous movement requires "
-                    "one common grid move duration"
+                    "simultaneous movement requires one common grid move duration"
                 )
 
             duration = durations.pop()
@@ -1069,35 +1015,25 @@ class FleetSimulationEngine:
             )
 
             for robot_id, _source, _target in approved:
-
                 pending_wait = self._waiting.pop(
                     robot_id,
                     None,
                 )
 
                 if pending_wait is not None:
-
                     self._book_wait(
                         self.robots[robot_id],
                         self.time - pending_wait[2],
                     )
 
-                kind, detail = request_by_robot[
-                    robot_id
-                ]
+                kind, detail = request_by_robot[robot_id]
 
                 # Rejoining robots have waited in their side cell
                 # since YIELD_COMPLETE.
-                if (
-                    kind is EventType.REJOIN_COMPLETE
-                    and robot_id in self._yielding
-                ):
-                    state = self._yielding[
-                        robot_id
-                    ]
+                if kind is EventType.REJOIN_COMPLETE and robot_id in self._yielding:
+                    state = self._yielding[robot_id]
 
                     if state.wait_since is not None:
-
                         self._book_wait(
                             self.robots[robot_id],
                             self.time - state.wait_since,
@@ -1127,7 +1063,6 @@ class FleetSimulationEngine:
         # ----------------------------------------------------
 
         for robot_id, source, target in yield_moves:
-
             robot = self.robots[robot_id]
 
             duration = self._move_duration(robot)
@@ -1171,12 +1106,9 @@ class FleetSimulationEngine:
         source = robot.cell
         target = robot.path[robot.path_index + 1]
 
-        conflict = self.reservations.check_move(
-            robot_id, source, target
-        )
+        conflict = self.reservations.check_move(robot_id, source, target)
 
         if conflict is not None:
-
             if conflict == VERTEX:
                 robot.vertex_conflict_count += 1
             elif conflict == EDGE:
@@ -1198,9 +1130,7 @@ class FleetSimulationEngine:
 
         duration = self._move_duration(robot)
 
-        self.reservations.begin_move(
-            robot_id, source, target, self.time, duration
-        )
+        self.reservations.begin_move(robot_id, source, target, self.time, duration)
 
         robot.status = GridRobotStatus.MOVING
 
@@ -1217,10 +1147,7 @@ class FleetSimulationEngine:
         requests = []
 
         for robot_id in sorted(self._waiting):
-
-            kind, detail, _since = self._waiting[
-                robot_id
-            ]
+            kind, detail, _since = self._waiting[robot_id]
 
             requests.append(
                 (
@@ -1240,28 +1167,47 @@ class FleetSimulationEngine:
             self._mission_complete_events += 1
 
         # --------------------------------------------------
+        # Charge session finished (B4).
+        #
+        # A dwell on the robot's own reserved charger, like a service
+        # dwell on a station: book the interval, hand the robot back
+        # IDLE on the same cell. What happens next -- vacating the slot
+        # and rejoining the fleet -- is the executor's policy, driven
+        # off this event.
+        # --------------------------------------------------
+
+        if event.kind is EventType.CHARGE_COMPLETE:
+            session = self._charging.get(event.robot_id)
+
+            if session is None or session[1] is not event:
+                raise RuntimeError(
+                    f"{event.robot_id} completed a charge without an open session"
+                )
+
+            duration, _ = self._charging.pop(event.robot_id)
+            self._book_charge(robot, duration)
+
+            robot.status = GridRobotStatus.IDLE
+
+            return
+
+        # --------------------------------------------------
         # Temporary local head-on side step completed.
         # --------------------------------------------------
 
         if event.kind is EventType.YIELD_COMPLETE:
-
-            state = self._yielding.get(
-                event.robot_id
-            )
+            state = self._yielding.get(event.robot_id)
 
             if state is None:
                 raise RuntimeError(
-                    f"{event.robot_id} completed a yield "
-                    f"without yield state"
+                    f"{event.robot_id} completed a yield without yield state"
                 )
 
             duration = self._move_duration(robot)
 
             source = robot.cell
 
-            robot.advance_cell(
-                float(self.resolution)
-            )
+            robot.advance_cell(float(self.resolution))
 
             self._book_travel(robot, duration)
 
@@ -1295,24 +1241,18 @@ class FleetSimulationEngine:
         # --------------------------------------------------
 
         if event.kind is EventType.REJOIN_COMPLETE:
-
-            state = self._yielding.get(
-                event.robot_id
-            )
+            state = self._yielding.get(event.robot_id)
 
             if state is None:
                 raise RuntimeError(
-                    f"{event.robot_id} completed a rejoin "
-                    f"without yield state"
+                    f"{event.robot_id} completed a rejoin without yield state"
                 )
 
             duration = self._move_duration(robot)
 
             source = robot.cell
 
-            robot.advance_cell(
-                float(self.resolution)
-            )
+            robot.advance_cell(float(self.resolution))
 
             self._book_travel(robot, duration)
 
@@ -1325,18 +1265,12 @@ class FleetSimulationEngine:
 
             # Restore the exact mission route and progress point that
             # existed before the temporary side step.
-            robot.path = list(
-                state.original_path
-            )
+            robot.path = list(state.original_path)
 
-            robot.path_index = (
-                state.original_index
-            )
+            robot.path_index = state.original_index
 
             robot.status = (
-                GridRobotStatus.IDLE
-                if robot.finished
-                else GridRobotStatus.MOVING
+                GridRobotStatus.IDLE if robot.finished else GridRobotStatus.MOVING
             )
 
             del self._yielding[event.robot_id]
@@ -1368,12 +1302,9 @@ class FleetSimulationEngine:
             if (
                 event.kind is EventType.MOVE_COMPLETE
                 and assignment is not None
-                and assignment.segment_index
-                    < len(assignment.plan.segments)
+                and assignment.segment_index < len(assignment.plan.segments)
             ):
-                segment = assignment.plan.segments[
-                    assignment.segment_index
-                ]
+                segment = assignment.plan.segments[assignment.segment_index]
 
                 retain_service_exit = (
                     not assignment.retreating
@@ -1387,9 +1318,7 @@ class FleetSimulationEngine:
                 source,
                 robot.cell,
                 self.time,
-                release_source=(
-                    not retain_service_exit
-                ),
+                release_source=(not retain_service_exit),
             )
 
             # Deciding the next move is deferred so every release in
@@ -1397,14 +1326,9 @@ class FleetSimulationEngine:
             self._pending.append((event.robot_id, event.kind))
 
         elif event.kind is EventType.SERVICE_COMPLETE:
+            segment = assignment.plan.segments[assignment.segment_index]
 
-            segment = assignment.plan.segments[
-                assignment.segment_index
-            ]
-
-            zone_type = self.warehouse.zone_by_id(
-                segment.to_zone
-            ).zone_type
+            zone_type = self.warehouse.zone_by_id(segment.to_zone).zone_type
 
             self._book_service(
                 robot,
@@ -1419,7 +1343,6 @@ class FleetSimulationEngine:
             self._pending.append((event.robot_id, event.kind))
 
         elif event.kind is EventType.MISSION_COMPLETE:
-
             robot.status = GridRobotStatus.IDLE
 
             assignment.completion_time = self.time
@@ -1437,9 +1360,7 @@ class FleetSimulationEngine:
             follow_up = self.on_mission_complete(robot)
 
             if follow_up is not None:
-                self.assign_mission(
-                    event.robot_id, follow_up, is_parking=True
-                )
+                self.assign_mission(event.robot_id, follow_up, is_parking=True)
 
     # -- driving ----------------------------------------
 
@@ -1459,10 +1380,7 @@ class FleetSimulationEngine:
         # Existing blocked robots participate in the same arbitration
         # as robots that became ready at this timestamp.
         for robot_id in sorted(self._waiting):
-
-            kind, detail, _since = self._waiting[
-                robot_id
-            ]
+            kind, detail, _since = self._waiting[robot_id]
 
             move_requests[robot_id] = (
                 robot_id,
@@ -1471,10 +1389,7 @@ class FleetSimulationEngine:
             )
 
         for robot_id, kind in sorted(pending):
-
-            assignment = self.assignments.get(
-                robot_id
-            )
+            assignment = self.assignments.get(robot_id)
 
             if assignment is None:
                 continue
@@ -1482,10 +1397,7 @@ class FleetSimulationEngine:
             robot = self.robots[robot_id]
 
             if kind is EventType.SERVICE_COMPLETE:
-
-                segment = assignment.plan.segments[
-                    assignment.segment_index
-                ]
+                segment = assignment.plan.segments[assignment.segment_index]
 
                 move_requests[robot_id] = (
                     robot_id,
@@ -1494,13 +1406,9 @@ class FleetSimulationEngine:
                 )
 
             elif kind is EventType.RETREAT_COMPLETE:
-
                 assignment.segment_index += 1
 
-                if (
-                    assignment.segment_index
-                    >= len(assignment.plan.segments)
-                ):
+                if assignment.segment_index >= len(assignment.plan.segments):
                     self._schedule(
                         robot_id,
                         EventType.MISSION_COMPLETE,
@@ -1508,22 +1416,16 @@ class FleetSimulationEngine:
                     )
                     continue
 
-                segment = assignment.plan.segments[
-                    assignment.segment_index
-                ]
+                segment = assignment.plan.segments[assignment.segment_index]
 
                 assignment.retreating = False
 
-                robot.assign_path(
-                    list(segment.path)
-                )
+                robot.assign_path(list(segment.path))
 
                 if robot.finished:
-
                     self._arrive(robot_id)
 
                 else:
-
                     move_requests[robot_id] = (
                         robot_id,
                         EventType.MOVE_COMPLETE,
@@ -1556,16 +1458,13 @@ class FleetSimulationEngine:
             # ------------------------------------------------
 
             elif kind is EventType.REJOIN_COMPLETE:
-
                 if robot.finished:
                     raise RuntimeError(
                         f"{robot_id} rejoined with no original "
                         f"mission edge left to resume"
                     )
 
-                segment = assignment.plan.segments[
-                    assignment.segment_index
-                ]
+                segment = assignment.plan.segments[assignment.segment_index]
 
                 resume_kind = (
                     EventType.RETREAT_COMPLETE
@@ -1580,14 +1479,10 @@ class FleetSimulationEngine:
                 )
 
             elif robot.finished:
-
                 self._arrive(robot_id)
 
             else:
-
-                segment = assignment.plan.segments[
-                    assignment.segment_index
-                ]
+                segment = assignment.plan.segments[assignment.segment_index]
 
                 move_requests[robot_id] = (
                     robot_id,
@@ -1620,7 +1515,6 @@ class FleetSimulationEngine:
         corridor_waiters = {}
 
         for robot_id in sorted(self._yielding):
-
             state = self._yielding[robot_id]
 
             if state.wait_since is None:
@@ -1640,24 +1534,14 @@ class FleetSimulationEngine:
                 robot_id,
             )
 
-            current = corridor_waiters.get(
-                corridor
-            )
+            current = corridor_waiters.get(corridor)
 
-            if (
-                current is None
-                or candidate < current
-            ):
-                corridor_waiters[
-                    corridor
-                ] = candidate
+            if current is None or candidate < current:
+                corridor_waiters[corridor] = candidate
 
         # Exactly one rejoin request per free corridor.
         for corridor in sorted(corridor_waiters):
-
-            _wait_since, robot_id = (
-                corridor_waiters[corridor]
-            )
+            _wait_since, robot_id = corridor_waiters[corridor]
 
             move_requests[robot_id] = (
                 robot_id,
@@ -1666,13 +1550,8 @@ class FleetSimulationEngine:
             )
 
         if move_requests:
-
             self._try_moves_batch(
-                [
-                    move_requests[robot_id]
-                    for robot_id
-                    in sorted(move_requests)
-                ]
+                [move_requests[robot_id] for robot_id in sorted(move_requests)]
             )
 
     def _stamp_all(self) -> None:
@@ -1691,8 +1570,7 @@ class FleetSimulationEngine:
 
         if target < self.time:
             raise RuntimeError(
-                f"clock would move backwards: "
-                f"{float(target)} < {self.sim_time}"
+                f"clock would move backwards: {float(target)} < {self.sim_time}"
             )
 
         delta = target - self.time
@@ -1729,6 +1607,37 @@ class FleetSimulationEngine:
 
         return batch
 
+    def _only_scheduled_charging(self) -> bool:
+        """Can this interval be excluded from the mission watchdog?
+
+        Only charge-only intervals qualify. An unrelated unfinished
+        mission or traffic wait keeps the watchdog running, even if
+        another robot has a valid future charge completion.
+        """
+        if not self._charging or self._waiting or self._yielding:
+            return False
+
+        for robot_id, robot in self.robots.items():
+            if robot_id not in self._charging:
+                assignment = self.assignments.get(robot_id)
+                if (
+                    robot.status is not GridRobotStatus.IDLE
+                    or not robot.finished
+                    or (assignment is not None and assignment.completion_time is None)
+                ):
+                    return False
+
+        queued = {id(event) for _, _, event in self._queue}
+        return all(
+            self.robots[robot_id].status is GridRobotStatus.CHARGING
+            and event.kind is EventType.CHARGE_COMPLETE
+            and event.robot_id == robot_id
+            and isinstance(event.time, Fraction)
+            and self.time <= event.time <= self.time + duration
+            and id(event) in queued
+            for robot_id, (duration, event) in self._charging.items()
+        )
+
     def run(
         self,
         max_events: int = 1_000_000,
@@ -1737,44 +1646,37 @@ class FleetSimulationEngine:
 
         self._stamp_all()
 
-        last_progress_count = (
-            self._mission_complete_events
-        )
+        last_progress_count = self._mission_complete_events
 
         last_progress_time = self.time
 
         while self._queue:
-
+            charge_only = self._only_scheduled_charging()
+            before = self.time
             self.step_once()
 
-            if (
-                self._mission_complete_events
-                != last_progress_count
-            ):
-                last_progress_count = (
-                    self._mission_complete_events
-                )
+            # Inspect before handling: completion closes the session and
+            # may start the exit mission in this same batch. Exclude only
+            # the actual charge-only elapsed interval, never future time.
+            if charge_only:
+                last_progress_time += self.time - before
+
+            if self._mission_complete_events != last_progress_count:
+                last_progress_count = self._mission_complete_events
                 last_progress_time = self.time
 
-            no_progress_s = float(
-                self.time - last_progress_time
-            )
+            no_progress_s = float(self.time - last_progress_time)
 
             if no_progress_s > max_no_progress_s:
-
                 lines = [
                     "",
                     "NO-PROGRESS / LIVELOCK DIAGNOSTICS",
                     "=" * 72,
                     f"time: {self.sim_time:.4f}",
                     (
-                        "seconds without mission completion: "
-                        f"{no_progress_s:.4f}"
+                        f"non-charging seconds without mission completion: {no_progress_s:.4f}"
                     ),
-                    (
-                        "mission completion events: "
-                        f"{self._mission_complete_events}"
-                    ),
+                    (f"mission completion events: {self._mission_complete_events}"),
                     f"waiting robots: {len(self._waiting)}",
                     f"yielding robots: {len(self._yielding)}",
                     "",
@@ -1783,39 +1685,24 @@ class FleetSimulationEngine:
                 ]
 
                 for robot_id in sorted(self.robots):
-
                     robot = self.robots[robot_id]
 
                     if robot.finished:
                         target = None
                     else:
-                        target = robot.path[
-                            robot.path_index + 1
-                        ]
+                        target = robot.path[robot.path_index + 1]
 
-                    assignment = self.assignments.get(
-                        robot_id
-                    )
+                    assignment = self.assignments.get(robot_id)
 
                     segment_index = (
-                        None
-                        if assignment is None
-                        else assignment.segment_index
+                        None if assignment is None else assignment.segment_index
                     )
 
-                    retreating = (
-                        None
-                        if assignment is None
-                        else assignment.retreating
-                    )
+                    retreating = None if assignment is None else assignment.retreating
 
-                    waiting = (
-                        robot_id in self._waiting
-                    )
+                    waiting = robot_id in self._waiting
 
-                    yielding = (
-                        robot_id in self._yielding
-                    )
+                    yielding = robot_id in self._yielding
 
                     lines.append(
                         f"{robot_id}: "
@@ -1839,13 +1726,8 @@ class FleetSimulationEngine:
                 if not self._yielding:
                     lines.append("none")
 
-                for robot_id in sorted(
-                    self._yielding
-                ):
-
-                    state = self._yielding[
-                        robot_id
-                    ]
+                for robot_id in sorted(self._yielding):
+                    state = self._yielding[robot_id]
 
                     lines.append(
                         f"{robot_id}: "
@@ -1855,9 +1737,7 @@ class FleetSimulationEngine:
                         f"wait_since={state.wait_since}"
                     )
 
-                raise DeadlockError(
-                    "\n".join(lines)
-                )
+                raise DeadlockError("\n".join(lines))
 
             if self.processed > max_events:
                 raise RuntimeError(
@@ -1865,8 +1745,12 @@ class FleetSimulationEngine:
                     f"the simulation is probably looping"
                 )
 
-        if self._waiting:
+        if self._charging:
+            raise DeadlockError(
+                f"open charge session(s) without queued completion: {sorted(self._charging)}"
+            )
 
+        if self._waiting:
             # ------------------------------------------------
             # Terminal wait diagnostics.
             #
@@ -1877,8 +1761,7 @@ class FleetSimulationEngine:
             # ------------------------------------------------
 
             occupants = {
-                robot.cell: robot_id
-                for robot_id, robot in self.robots.items()
+                robot.cell: robot_id for robot_id, robot in self.robots.items()
             }
 
             dependencies = {}
@@ -1892,34 +1775,21 @@ class FleetSimulationEngine:
             ]
 
             for robot_id in sorted(self._waiting):
-
                 robot = self.robots[robot_id]
 
-                kind, detail, since = self._waiting[
-                    robot_id
-                ]
+                kind, detail, since = self._waiting[robot_id]
 
                 if robot.finished:
                     target = None
                 else:
-                    target = robot.path[
-                        robot.path_index + 1
-                    ]
+                    target = robot.path[robot.path_index + 1]
 
-                blocker = (
-                    occupants.get(target)
-                    if target is not None
-                    else None
-                )
+                blocker = occupants.get(target) if target is not None else None
 
                 if blocker == robot_id:
                     blocker = None
 
-                dependencies[robot_id] = (
-                    blocker
-                    if blocker in self._waiting
-                    else None
-                )
+                dependencies[robot_id] = blocker if blocker in self._waiting else None
 
                 lo = max(
                     0,
@@ -1940,15 +1810,8 @@ class FleetSimulationEngine:
                         f"  event        : {kind.value}",
                         f"  detail       : {detail}",
                         f"  waiting_since: {float(since):.4f}",
-                        (
-                            f"  path_index   : "
-                            f"{robot.path_index}/"
-                            f"{len(robot.path) - 1}"
-                        ),
-                        (
-                            f"  path_slice   : "
-                            f"{robot.path[lo:hi]}"
-                        ),
+                        (f"  path_index   : {robot.path_index}/{len(robot.path) - 1}"),
+                        (f"  path_slice   : {robot.path[lo:hi]}"),
                         "",
                     ]
                 )
@@ -1967,7 +1830,6 @@ class FleetSimulationEngine:
             globally_seen = set()
 
             for start in sorted(dependencies):
-
                 if start in globally_seen:
                     continue
 
@@ -1980,12 +1842,8 @@ class FleetSimulationEngine:
                     and current in dependencies
                     and current not in globally_seen
                 ):
-
                     if current in position:
-
-                        cycle = order[
-                            position[current]:
-                        ]
+                        cycle = order[position[current] :]
 
                         cycles.append(cycle)
                         break
@@ -1993,29 +1851,17 @@ class FleetSimulationEngine:
                     position[current] = len(order)
                     order.append(current)
 
-                    current = dependencies.get(
-                        current
-                    )
+                    current = dependencies.get(current)
 
                 globally_seen.update(order)
 
-            lines.append(
-                "WAIT DEPENDENCIES"
-            )
-            lines.append(
-                "-" * 72
-            )
+            lines.append("WAIT DEPENDENCIES")
+            lines.append("-" * 72)
 
             for robot_id in sorted(dependencies):
+                blocker = dependencies[robot_id]
 
-                blocker = dependencies[
-                    robot_id
-                ]
-
-                lines.append(
-                    f"  {robot_id} -> "
-                    f"{blocker or 'NONE'}"
-                )
+                lines.append(f"  {robot_id} -> {blocker or 'NONE'}")
 
             lines.append("")
 
@@ -2028,52 +1874,31 @@ class FleetSimulationEngine:
             blocker_ids = set()
 
             for robot_id in sorted(self._waiting):
-
                 robot = self.robots[robot_id]
 
                 if robot.finished:
                     continue
 
-                target = robot.path[
-                    robot.path_index + 1
-                ]
+                target = robot.path[robot.path_index + 1]
 
                 blocker = occupants.get(target)
 
-                if (
-                    blocker is not None
-                    and blocker != robot_id
-                ):
+                if blocker is not None and blocker != robot_id:
                     blocker_ids.add(blocker)
 
-            lines.append(
-                "BLOCKER STATES"
-            )
-            lines.append(
-                "-" * 72
-            )
+            lines.append("BLOCKER STATES")
+            lines.append("-" * 72)
 
             if not blocker_ids:
-                lines.append(
-                    "  none"
-                )
+                lines.append("  none")
 
             for blocker_id in sorted(blocker_ids):
+                blocker = self.robots[blocker_id]
 
-                blocker = self.robots[
-                    blocker_id
-                ]
-
-                assignment = self.assignments.get(
-                    blocker_id
-                )
+                assignment = self.assignments.get(blocker_id)
 
                 target = (
-                    None
-                    if blocker.finished
-                    else blocker.path[
-                        blocker.path_index + 1
-                    ]
+                    None if blocker.finished else blocker.path[blocker.path_index + 1]
                 )
 
                 lines.append(
@@ -2090,25 +1915,14 @@ class FleetSimulationEngine:
 
             lines.append("")
 
-            lines.append(
-                "YIELD STATES"
-            )
-            lines.append(
-                "-" * 72
-            )
+            lines.append("YIELD STATES")
+            lines.append("-" * 72)
 
             if not self._yielding:
-                lines.append(
-                    "  none"
-                )
+                lines.append("  none")
 
-            for yielding_id in sorted(
-                self._yielding
-            ):
-
-                state = self._yielding[
-                    yielding_id
-                ]
+            for yielding_id in sorted(self._yielding):
+                state = self._yielding[yielding_id]
 
                 lines.append(
                     f"{yielding_id}: "
@@ -2121,34 +1935,19 @@ class FleetSimulationEngine:
 
             lines.append("")
 
-            lines.append(
-                "CYCLES"
-            )
-            lines.append(
-                "-" * 72
-            )
+            lines.append("CYCLES")
+            lines.append("-" * 72)
 
             if cycles:
-
                 for cycle in cycles:
+                    closed = cycle + [cycle[0]]
 
-                    closed = cycle + [
-                        cycle[0]
-                    ]
-
-                    lines.append(
-                        "  "
-                        + " -> ".join(closed)
-                    )
+                    lines.append("  " + " -> ".join(closed))
 
             else:
-                lines.append(
-                    "  none detected"
-                )
+                lines.append("  none detected")
 
-            raise DeadlockError(
-                "\n".join(lines)
-            )
+            raise DeadlockError("\n".join(lines))
 
     # -- reporting --------------------------------------
 

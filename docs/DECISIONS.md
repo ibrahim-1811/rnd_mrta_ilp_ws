@@ -382,6 +382,56 @@ charger trip that settled last would extend it too; none has so far.
 The separate `order_makespan` / `fleet_recovery_time` metrics of End of
 Workload below are what enforce point 2.
 
+## Charging Rate
+
+Approved 2026-10-06, for implementation in B4.
+
+`charging_percent_per_second` is the **net** SOC increase while a robot
+is physically charging:
+
+```text
+SOC(t + dt) = min(100%, SOC(t) + charging_percent_per_second * dt)
+```
+
+Waiting / idle drain is **not** additionally subtracted while charging.
+A robot standing on a charger is charging, not idling, so the charging
+interval is booked as its own category and is excluded from the idle
+remainder in the battery ledger.
+
+Consequence, with the default 1 %/s:
+
+```text
+arrival SOC 71 %  ->  charge duration exactly 29 simulated seconds
+arrival SOC  9 %  ->  charge duration exactly 91 simulated seconds
+```
+
+The duration is exact rational arithmetic:
+
+```text
+duration = (100 - SOC_arrival) / charging_percent_per_second
+```
+
+so `SOC(arrival + duration)` is exactly 100 %, and the 100 % clamp is a
+guard rather than a rounding rule.
+
+## Charge Target
+
+Approved 2026-10-06.
+
+B4 charges to exactly 100 %. There is no partial-charge policy in B4.
+
+End-of-workload partial charging is G6 (End of Workload below) and
+stays in B6. Its "enough SOC to safely reach a free Stage Zone" rule is
+deliberately not a fixed percentage; the intended form is
+
+```text
+minimum SOC before leaving the charger
+    = directed-A* energy to a safe reachable Stage Zone
+    + configured reserve
+```
+
+to be implemented and tested in B6, not B4.
+
 ## Charger Saturation and Preemption
 
 Approved 2026-09-13.

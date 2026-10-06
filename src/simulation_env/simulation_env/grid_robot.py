@@ -56,9 +56,7 @@ class GridRobot:
     status: GridRobotStatus = GridRobotStatus.IDLE
     sim_time: float = 0.0
 
-    path: list[Cell] = field(
-        default_factory=list
-    )
+    path: list[Cell] = field(default_factory=list)
 
     path_index: int = 0
 
@@ -69,13 +67,17 @@ class GridRobot:
     travel_time_s: float = 0.0
     service_time_s: float = 0.0
 
+    # Time spent physically charging on a charger cell. Kept out of
+    # waiting and idle: the configured charge rate is the net gain, so
+    # a charging second is not an idle second.
+    charging_time_s: float = 0.0
+
     # Time lost to reservation conflicts. Waiting is not travel: it
     # adds no distance and no travel time.
     waiting_time_s: float = 0.0
     wait_event_count: int = 0
     vertex_conflict_count: int = 0
     edge_conflict_count: int = 0
-
 
     def move_duration(self, resolution: float) -> float:
         """Simulated seconds for one grid edge. Pure."""
@@ -96,6 +98,14 @@ class GridRobot:
 
         self.waiting_time_s += duration_s
 
+    def book_charge(self, duration_s: float) -> None:
+        """Account for one completed charge session. No distance."""
+
+        if duration_s < 0.0:
+            raise ValueError("charge duration must not be negative")
+
+        self.charging_time_s += duration_s
+
     def book_service(
         self,
         duration_s: float,
@@ -104,9 +114,7 @@ class GridRobot:
         """Account for a stationary service. No clock advance."""
 
         if duration_s < 0.0:
-            raise ValueError(
-                "service duration must not be negative"
-            )
+            raise ValueError("service duration must not be negative")
 
         self.status = status
         self.service_time_s += duration_s
@@ -118,13 +126,8 @@ class GridRobot:
         where the robot goes next.
         """
 
-        if (
-            abs(cell[0] - self.cell[0])
-            + abs(cell[1] - self.cell[1])
-        ) != 1:
-            raise ValueError(
-                f"non-Manhattan move {self.cell} -> {cell}"
-            )
+        if (abs(cell[0] - self.cell[0]) + abs(cell[1] - self.cell[1])) != 1:
+            raise ValueError(f"non-Manhattan move {self.cell} -> {cell}")
 
         self.cell = cell
         self.distance_m += resolution
@@ -136,9 +139,7 @@ class GridRobot:
         """Move one grid edge along the stored path. No time."""
 
         if self.finished:
-            raise RuntimeError(
-                f"{self.robot_id} has no edge left to advance"
-            )
+            raise RuntimeError(f"{self.robot_id} has no edge left to advance")
 
         expected_current = self.path[self.path_index]
         next_cell = self.path[self.path_index + 1]
@@ -186,15 +187,10 @@ class GridRobot:
     ) -> None:
 
         if not path:
-            raise ValueError(
-                "path must not be empty"
-            )
+            raise ValueError("path must not be empty")
 
         if path[0] != self.cell:
-            raise ValueError(
-                f"path starts at {path[0]} "
-                f"but robot is at {self.cell}"
-            )
+            raise ValueError(f"path starts at {path[0]} but robot is at {self.cell}")
 
         self.path = list(path)
         self.path_index = 0
@@ -218,10 +214,7 @@ class GridRobot:
         if not self.path:
             return True
 
-        return (
-            self.path_index
-            >= len(self.path) - 1
-        )
+        return self.path_index >= len(self.path) - 1
 
     # -- single-robot conveniences --------------------------------
     #

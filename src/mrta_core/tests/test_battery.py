@@ -9,7 +9,10 @@ from fractions import Fraction
 import pytest
 
 from mrta_core.battery import (
+    FULL_SOC_PERCENT,
     BatteryConfig,
+    charge_energy,
+    charge_seconds_to_full,
     exact,
     service_energy,
     stationary_energy,
@@ -79,24 +82,25 @@ def test_yaml_numbers_are_read_exactly():
 
 def test_per_robot_override():
 
-    parsed = BatteryConfig.from_mapping(
-        {"initial_soc_overrides": {"robot_003": 12.5}}
-    )
+    parsed = BatteryConfig.from_mapping({"initial_soc_overrides": {"robot_003": 12.5}})
 
     assert parsed.initial_soc_for("robot_003") == Fraction(25, 2)
     assert parsed.initial_soc_for("robot_001") == 100
 
 
-@pytest.mark.parametrize("raw", [
-    {"travel_percent_per_20": 1.0},              # misspelt key
-    {"travel_percent_per_20m": 0.0},             # rate must be > 0
-    {"waiting_idle_percent_per_300s": -1.0},
-    {"initial_soc_percent": 100.5},              # out of 0..100
-    {"reserve_percent": -1.0},
-    {"initial_soc_overrides": {"robot_003": 101.0}},
-    {"initial_soc_overrides": [12.5]},           # must be a mapping
-    {"enabled": "yes"},                          # must be a boolean
-])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {"travel_percent_per_20": 1.0},  # misspelt key
+        {"travel_percent_per_20m": 0.0},  # rate must be > 0
+        {"waiting_idle_percent_per_300s": -1.0},
+        {"initial_soc_percent": 100.5},  # out of 0..100
+        {"reserve_percent": -1.0},
+        {"initial_soc_overrides": {"robot_003": 101.0}},
+        {"initial_soc_overrides": [12.5]},  # must be a mapping
+        {"enabled": "yes"},  # must be a boolean
+    ],
+)
 def test_bad_config_is_refused(raw):
     with pytest.raises(ValueError):
         BatteryConfig.from_mapping(raw)
@@ -106,11 +110,80 @@ def test_old_fleet_key_is_refused(tmp_path):
     """Initial SOC has one home now; the old key must not be ignored."""
 
     config = tmp_path / "sim.yaml"
-    config.write_text(
-        "fleet:\n"
-        "  robot_count: 1\n"
-        "  initial_battery_percent: 50.0\n"
-    )
+    config.write_text("fleet:\n  robot_count: 1\n  initial_battery_percent: 50.0\n")
 
     with pytest.raises(ValueError, match="battery.initial_soc_percent"):
         load_sim_config(config)
+
+
+# ----------------------------------------------------------------------
+# Charging (B4). The configured rate is the NET gain: no idle drain is
+# subtracted over a charge interval (docs/DECISIONS.md, "Charging Rate").
+# ----------------------------------------------------------------------
+
+
+def test_one_second_of_charging_is_exactly_one_percent():
+    assert charge_energy(DEFAULT, 1) == 1
+
+
+def test_charge_energy_is_linear_and_exact():
+    assert charge_energy(DEFAULT, 29) == 29
+    assert charge_energy(DEFAULT, Fraction(1, 3)) == Fraction(1, 3)
+
+
+def test_the_frozen_example_is_twenty_nine_seconds():
+    """71% at 1%/s charges for exactly 29 simulated seconds."""
+
+    duration = charge_seconds_to_full(DEFAULT, 71)
+
+    assert duration == 29
+    assert isinstance(duration, Fraction)
+
+    # And it lands exactly on the target, not near it.
+    assert 71 + charge_energy(DEFAULT, duration) == FULL_SOC_PERCENT
+
+
+def test_duration_always_lands_exactly_on_full():
+    for soc in (0, Fraction(1, 7), 6.6367, 9, 71, Fraction(9999, 100)):
+        duration = charge_seconds_to_full(DEFAULT, soc)
+        assert exact(soc) + charge_energy(DEFAULT, duration) == 100
+
+
+def test_a_full_battery_needs_no_time():
+    assert charge_seconds_to_full(DEFAULT, 100) == 0
+    assert charge_seconds_to_full(DEFAULT, 150) == 0
+
+
+def test_a_negative_soc_still_charges_to_full():
+    """Over-drained is allowed by the model, so it must be handled."""
+
+    duration = charge_seconds_to_full(DEFAULT, -5)
+
+    assert duration == 105
+    assert -5 + charge_energy(DEFAULT, duration) == 100
+
+
+def test_the_rate_follows_the_config():
+    fast = replace_rate(DEFAULT, Fraction(2))
+
+    assert charge_energy(fast, 10) == 20
+    assert charge_seconds_to_full(fast, 50) == 25
+
+
+def test_a_fractional_rate_stays_exact():
+    """A configured 0.3 %/s must not drift into binary floats."""
+
+    slow = BatteryConfig.from_mapping({"charging_percent_per_second": 0.3})
+
+    assert slow.charging_percent_per_second == Fraction(3, 10)
+
+    duration = charge_seconds_to_full(slow, 70)
+
+    assert duration == Fraction(100)
+    assert 70 + charge_energy(slow, duration) == 100
+
+
+def replace_rate(config, rate):
+    from dataclasses import replace
+
+    return replace(config, charging_percent_per_second=rate)

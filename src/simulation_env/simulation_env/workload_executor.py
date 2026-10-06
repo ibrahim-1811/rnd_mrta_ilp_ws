@@ -31,13 +31,19 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from time import perf_counter
 
-from mrta_core.battery import BatteryDecisionContext, EnergyRequirement
+from mrta_core.battery import (
+    BatteryDecisionContext,
+    EnergyRequirement,
+    charge_seconds_to_full,
+)
 from mrta_core.order_queue import OrderQueue
 from mrta_core.orders import OrderStatus
 from mrta_core.warehouse_map import ZoneType
 
 from simulation_env.charging import (
     DESTINATION,
+    LEAVING_STATES,
+    MOVING_STATES,
     SETTLED_STATES,
     TRAVEL_STATES,
     ChargeRecord,
@@ -50,6 +56,8 @@ from simulation_env.fleet_engine import EventType, FleetSimulationEngine
 from simulation_env.grid_robot import GridRobotStatus
 from simulation_env.stage_parking import StageParking
 from mrta_core.warehouse_routing import (
+    MissionPlan,
+    MissionSegment,
     RouteCache,
     nearest_reachable_zone,
     non_transit_cells,
@@ -61,7 +69,6 @@ from mrta_core.warehouse_routing import (
 MAX_ORDER_LEGS = 4
 
 
-
 @dataclass
 class Dispatch:
     """One robot-order assignment as actually dispatched."""
@@ -69,7 +76,7 @@ class Dispatch:
     sim_time: float
     robot_id: str
     order_id: str
-    static_cost_m: float          # C_static(r, o), the prediction
+    static_cost_m: float  # C_static(r, o), the prediction
     shelf_sequence: tuple[str, ...]
     dropoff_id: str
     start_cell: tuple
@@ -105,6 +112,9 @@ class BatteryEvent:
     #                   was reserved and the robot set off (B3)
     # ARRIVE            the robot is on its reserved terminal (B3)
     # SATURATION        no charger or holding cell was free (B3)
+    # CHARGE_START      charging began on its own charger (B4)
+    # CHARGE_FULL       reached 100%; the slot is VACATING (B4)
+    # REJOIN            off the charger, access edge clear, available (B4)
     kind: str
     reason: str
     soc_percent: Fraction
@@ -167,9 +177,7 @@ class PerfBudget:
             yield
         finally:
             self._open = None
-            self.spans[name] = self.spans.get(name, 0.0) + (
-                perf_counter() - started
-            )
+            self.spans[name] = self.spans.get(name, 0.0) + (perf_counter() - started)
 
     @property
     def total(self) -> float:
@@ -231,8 +239,7 @@ class Progress:
             f"  deferred now: {self.deferred_now} | "
             f"cumulative deferrals: {self.cumulative_deferrals}",
             f"  robots: {self.busy} busy | {self.available} available | "
-            f"{self.returning} returning | {self.parked} parked"
-            + waiting_for_charge,
+            f"{self.returning} returning | {self.parked} parked" + waiting_for_charge,
         )
 
 
@@ -250,24 +257,26 @@ class WorkloadResult:
 
     # Wall-clock planning cost, by stage. Profiling only: none of it
     # can change a simulated outcome.
-    perf: dict = field(
-        default_factory=lambda: dict.fromkeys(PerfBudget.STAGES, 0.0)
-    )
+    perf: dict = field(default_factory=lambda: dict.fromkeys(PerfBudget.STAGES, 0.0))
     slow_dispatches: int = 0
     worst_dispatch_s: float = 0.0
     static_route_reuses: int = 0
 
     # Battery eligibility, decision time. Reporting only.
     battery_events: list = field(default_factory=list)
-    candidate_pairs: int = 0            # scored by the allocator
-    ineligible_pairs: int = 0           # of those, battery-ineligible
-    availability_pairs: int = 0         # scored by CHARGE_NEEDED checks
+    candidate_pairs: int = 0  # scored by the allocator
+    ineligible_pairs: int = 0  # of those, battery-ineligible
+    availability_pairs: int = 0  # scored by CHARGE_NEEDED checks
     assignments_validated: int = 0
     min_assigned_margin: Fraction | None = None
 
     # Charger travel (B3). Reporting only.
     saturation_events: int = 0
     yield_events: int = 0
+
+    # Charging (B4). Reporting only.
+    charge_sessions: int = 0
+    rejoins: int = 0
 
 
 class WorkloadExecutor:
@@ -352,8 +361,7 @@ class WorkloadExecutor:
         self.routes = RouteCache(warehouse)
 
         self.fifo_position = {
-            order_id: index
-            for index, order_id in enumerate(queue.order_ids)
+            order_id: index for index, order_id in enumerate(queue.order_ids)
         }
 
         # robot_id -> order_id it is currently executing.
@@ -409,11 +417,17 @@ class WorkloadExecutor:
         # A requesting robot takes no new order. It is sent at once to a
         # reserved charger, holding cell or, when both banks are full, a
         # Stage Zone, and it is never left standing on a transit cell.
-        # B3 has no charging: it stays on that terminal for the run.
+        # B4 removes this exclusion only after physical charger exit.
+        # Holding and fallback robots remain excluded until B5.
         self.requesting: dict = {}
 
-        # robot_id -> its trip through the charging workflow.
+        # robot_id -> its current trip through the charging workflow.
         self.charge: dict[str, ChargeRecord] = {}
+
+        # Every completed trip, in completion order. A robot may charge
+        # more than once in a long run, and ``charge`` only holds its
+        # latest trip, so the report reads this for the full history.
+        self.charge_history: list[ChargeRecord] = []
         self.chargers: TerminalBank | None = None
         self.holding: TerminalBank | None = None
 
@@ -426,11 +440,11 @@ class WorkloadExecutor:
         self._nearest_charger_memo: dict = {}
 
         if self.battery is not None:
-
-            self._chargers = tuple(sorted(
-                zone.zone_id
-                for zone in warehouse.zones_of_type(ZoneType.CHARGING)
-            ))
+            self._chargers = tuple(
+                sorted(
+                    zone.zone_id for zone in warehouse.zones_of_type(ZoneType.CHARGING)
+                )
+            )
 
             if not self._chargers:
                 raise ValueError(
@@ -439,12 +453,8 @@ class WorkloadExecutor:
                     "eligible"
                 )
 
-            self.chargers = TerminalBank(
-                warehouse, ZoneType.CHARGING, "charger"
-            )
-            self.holding = TerminalBank(
-                warehouse, ZoneType.CHARGE_QUEUE, "holding"
-            )
+            self.chargers = TerminalBank(warehouse, ZoneType.CHARGING, "charger")
+            self.holding = TerminalBank(warehouse, ZoneType.CHARGE_QUEUE, "holding")
 
     # -- lifecycle ------------------------------------------
 
@@ -464,9 +474,7 @@ class WorkloadExecutor:
             order.completion_time = now
 
         if self.on_order_status is not None:
-            self.on_order_status(
-                order.order_id, status, now, order.assigned_robot
-            )
+            self.on_order_status(order.order_id, status, now, order.assigned_robot)
 
     # -- availability ---------------------------------------
 
@@ -502,7 +510,6 @@ class WorkloadExecutor:
         found = self._nearest_charger_memo.get(cell)
 
         if found is None:
-
             found = nearest_reachable_zone(
                 self.warehouse,
                 cell,
@@ -528,10 +535,7 @@ class WorkloadExecutor:
 
         return BatteryDecisionContext(
             config=self.battery.config,
-            soc={
-                robot_id: self.battery.soc(robot_id, now)
-                for robot_id in robot_ids
-            },
+            soc={robot_id: self.battery.soc(robot_id, now) for robot_id in robot_ids},
             shelf_service_s=service.get(ZoneType.SHELF, Fraction(0)),
             dropoff_service_s=service.get(ZoneType.DROPOFF, Fraction(0)),
             nearest_charger=self._nearest_charger,
@@ -608,23 +612,18 @@ class WorkloadExecutor:
         # Bank cells somebody outside this batch is standing on are not
         # free to give away.
         blocked = frozenset(
-            robot.cell
-            for robot_id, robot in robots.items()
-            if robot_id not in cells
+            robot.cell for robot_id, robot in robots.items() if robot_id not in cells
         )
 
         claims = {}
 
         for bank in (self.chargers, self.holding):
-
             left = {r: c for r, c in cells.items() if r not in claims}
 
             if not left:
                 break
 
-            found = bank.assign(
-                left, now=now, blocked_cells=blocked, cache=self.routes
-            )
+            found = bank.assign(left, now=now, blocked_cells=blocked, cache=self.routes)
 
             for robot_id, (zone_id, cost) in found.items():
                 claims[robot_id] = (bank.kind, zone_id, bank.slots[zone_id].cell, cost)
@@ -632,7 +631,6 @@ class WorkloadExecutor:
         left = {r: c for r, c in cells.items() if r not in claims}
 
         if left:
-
             for robot_id in sorted(left):
                 self.result.saturation_events += 1
                 self._battery_event(
@@ -644,9 +642,7 @@ class WorkloadExecutor:
                     f"free Stage Zone instead",
                 )
 
-            stage = self.parking.assign(
-                left, blocked_cells=blocked, cache=self.routes
-            )
+            stage = self.parking.assign(left, blocked_cells=blocked, cache=self.routes)
 
             for robot_id, zone_id in stage.items():
                 claims[robot_id] = (
@@ -668,7 +664,6 @@ class WorkloadExecutor:
         missions = {}
 
         for robot_id in waiting:
-
             kind, zone_id, target, cost = claims[robot_id]
             record = self.charge[robot_id]
 
@@ -708,9 +703,7 @@ class WorkloadExecutor:
         if missions:
             # Recovery moves, like parking: they never outrank order
             # work in traffic and never count as mission completion.
-            self.engine.assign_missions_batch(
-                missions, parking=set(missions)
-            )
+            self.engine.assign_missions_batch(missions, parking=set(missions))
 
         return len(missions)
 
@@ -737,11 +730,162 @@ class WorkloadExecutor:
         record.arrived_at = now
         record.arrival_soc = self.battery.soc(robot_id, now)
 
+        # The aisle cell it came from is the cell it will reverse into.
+        if len(record.path) >= 2:
+            record.access_cell = record.path[-2]
+
         self._battery_event(
             robot_id,
             "ARRIVE",
             record.reason,
             f"{record.state.value} {record.zone_id}",
+        )
+
+        if record.kind == "charger":
+            self._begin_charge(robot_id)
+
+    # -- charging (B4) --------------------------------------
+
+    def _begin_charge(self, robot_id) -> None:
+        """Start charging the robot standing on its reserved charger.
+
+        The charge runs to exactly 100% (docs/DECISIONS.md, "Charge
+        Target"). The duration is exact rational arithmetic, so the
+        session lands on the target rather than near it.
+        """
+
+        record = self.charge[robot_id]
+        now = self.engine.time
+
+        soc = self.battery.soc(robot_id, now)
+
+        duration = charge_seconds_to_full(self.battery.config, soc)
+
+        record.state = ChargeState.CHARGING
+        record.charge_started_at = now
+        record.charge_duration_s = duration
+
+        self.engine.begin_charge(robot_id, duration)
+
+        self.result.charge_sessions += 1
+
+        self._battery_event(
+            robot_id,
+            "CHARGE_START",
+            record.reason,
+            f"{record.zone_id}; to 100% in {float(duration):.4f} simulated s",
+        )
+
+    def _charge_complete(self, robot_id) -> None:
+        """The robot is full: release the slot and reverse into the aisle.
+
+        The slot goes OCCUPIED -> VACATING *before* the robot moves and
+        stays unavailable until the robot has physically cleared the
+        access edge, so an entering and a leaving robot can never meet
+        on it.
+        """
+
+        record = self.charge[robot_id]
+        now = self.engine.time
+        robot = self.engine.robots[robot_id]
+
+        record.charge_completed_at = now
+        record.charge_gained = self.battery.soc(robot_id, now) - record.arrival_soc
+
+        self.chargers.vacate(record.zone_id, robot_id)
+
+        self._battery_event(
+            robot_id,
+            "CHARGE_FULL",
+            record.reason,
+            f"{record.zone_id}; gained "
+            f"{float(record.charge_gained):.4f}% in "
+            f"{float(record.charge_duration_s):.4f} s; vacating",
+        )
+
+        target = record.access_cell
+
+        if target is None:
+            raise RuntimeError(
+                f"{robot_id} has no access cell to reverse into from "
+                f"{record.zone_id}; the arrival path was not recorded"
+            )
+
+        record.state = ChargeState.LEAVING_CHARGER
+        record.left_charger_at = now
+
+        # One cell, off the terminal, back into the aisle it came from.
+        # Built here rather than planned: the destination is a bare
+        # aisle cell, not a zone, and the move is the exact reverse of
+        # the entry the topology gate already proves legal. The segment
+        # carries no exit_cell, so the engine drives it as a plain move
+        # and never treats the charger as a service station.
+        resolution = self.warehouse.grid.resolution
+
+        segment = MissionSegment(
+            from_zone=record.zone_id,
+            to_zone=record.zone_id,
+            start_cell=robot.cell,
+            goal_cell=target,
+            path=(robot.cell, target),
+            distance_m=resolution,
+            cost=resolution,
+            exit_cell=None,
+        )
+
+        plan = MissionPlan(
+            zones=(record.zone_id,),
+            segments=(segment,),
+            path=(robot.cell, target),
+            total_distance_m=resolution,
+            total_cost=resolution,
+        )
+
+        # A recovery move, like parking: order work keeps right of way
+        # and this never counts as an order completion.
+        self.engine.assign_missions_batch({robot_id: plan}, parking={robot_id})
+
+    def _rejoin(self, robot_id) -> None:
+        """The robot has cleared the access edge: free the slot, rejoin.
+
+        From here it is an ordinary robot again. The unchanged B2 gate
+        re-tests it at its new SOC on the next dispatch, so it can take
+        work, and nothing about its order history changed.
+        """
+
+        record = self.charge[robot_id]
+        now = self.engine.time
+
+        robot = self.engine.robots[robot_id]
+        if (
+            record.state is not ChargeState.LEAVING_CHARGER
+            or record.access_cell is None
+            or robot.cell != record.access_cell
+            or robot.status is not GridRobotStatus.IDLE
+            or not robot.finished
+        ):
+            raise RuntimeError(
+                f"{robot_id} cannot rejoin before physically clearing "
+                f"{record.zone_id} into {record.access_cell}; at {robot.cell}"
+            )
+
+        self.chargers.cleared(record.zone_id, robot_id)
+
+        record.state = ChargeState.REJOINED
+        record.rejoined_at = now
+        record.rejoin_soc = self.battery.soc(robot_id, now)
+
+        self.requesting.pop(robot_id, None)
+
+        self.charge_history.append(record)
+
+        self.result.rejoins += 1
+
+        self._battery_event(
+            robot_id,
+            "REJOIN",
+            record.reason,
+            f"off {record.zone_id}, access edge clear; available again",
         )
 
     def _has_eligible_order(self, robot_id, pending) -> bool:
@@ -759,7 +903,6 @@ class WorkloadExecutor:
         found = False
 
         for order in pending:
-
             (candidate,) = self.allocator.score(
                 self.warehouse,
                 [(robot_id, cell)],
@@ -790,21 +933,17 @@ class WorkloadExecutor:
         offered = []
 
         for robot_id in free:
-
             soc = self.battery.soc(robot_id, now)
 
             if soc <= due:
-                self._battery_event(
-                    robot_id, "CHARGE_DUE", "CHARGE_DUE", "while idle"
-                )
+                self._battery_event(robot_id, "CHARGE_DUE", "CHARGE_DUE", "while idle")
                 self._enter_request(robot_id, "CHARGE_DUE", "while idle")
 
             elif not self._has_eligible_order(robot_id, pending):
                 self._enter_request(
                     robot_id,
                     "CHARGE_NEEDED",
-                    f"no battery-eligible order among "
-                    f"{len(pending)} pending",
+                    f"no battery-eligible order among {len(pending)} pending",
                 )
 
             else:
@@ -824,7 +963,6 @@ class WorkloadExecutor:
         due = self.battery.config.charge_due_percent
 
         for robot_id in sorted({event.robot_id for event in batch}):
-
             if robot_id not in self.active or robot_id in self._due_flag:
                 continue
 
@@ -833,8 +971,7 @@ class WorkloadExecutor:
                     robot_id,
                     "CHARGE_DUE",
                     "CHARGE_DUE",
-                    f"while busy on {self.active[robot_id]}; "
-                    f"the order continues",
+                    f"while busy on {self.active[robot_id]}; the order continues",
                 )
 
     def _after_order(self, robot_id) -> None:
@@ -862,14 +999,14 @@ class WorkloadExecutor:
             return
 
         # No work left: end-of-work recovery (G6) decides. Returning to
-        # a Stage Zone is today's behaviour; charging first when a Stage
-        # Zone is out of reach needs a charger, which B2 does not have.
+        # a Stage Zone is today's behaviour. G6 -- charging only enough
+        # to make final parking feasible -- is deliberately B6, not B4
+        # (docs/DECISIONS.md, "Charge Target").
         self._battery_event(
             robot_id,
             "CHARGE_DUE_AT_END",
             "CHARGE_DUE",
-            "no pending work; parks as usual (G6 charge-first not "
-            "implemented before charging exists)",
+            "no pending work; parks as usual (G6 partial charge is B6)",
         )
 
     def _check_battery_feasibility(self, assignments, battery) -> None:
@@ -880,7 +1017,6 @@ class WorkloadExecutor:
         """
 
         for assignment in assignments:
-
             if assignment.robot_id not in battery.soc:
                 raise IneligibleAssignmentError(
                     f"allocator assigned {assignment.robot_id}, which was "
@@ -941,8 +1077,7 @@ class WorkloadExecutor:
             and robot_id not in self.active
             and robot_id not in self.returning
             and not (
-                robot_id in self.charge
-                and self.charge[robot_id].state in TRAVEL_STATES
+                robot_id in self.charge and self.charge[robot_id].state in MOVING_STATES
             )
         )
 
@@ -965,8 +1100,7 @@ class WorkloadExecutor:
             self.deferred[robot_id]
             for robot_id in sorted(self.deferred)
             if self._deferred_at.get(robot_id) != self._traffic_version
-            and self.engine.robots[robot_id].status
-            is GridRobotStatus.IDLE
+            and self.engine.robots[robot_id].status is GridRobotStatus.IDLE
         ]
 
         return self.launch_batch(ready)
@@ -996,15 +1130,11 @@ class WorkloadExecutor:
             return
 
         for name, spent in budget.spans.items():
-            self.result.perf[name] = (
-                self.result.perf.get(name, 0.0) + spent
-            )
+            self.result.perf[name] = self.result.perf.get(name, 0.0) + spent
 
         total = budget.total
 
-        self.result.worst_dispatch_s = max(
-            self.result.worst_dispatch_s, total
-        )
+        self.result.worst_dispatch_s = max(self.result.worst_dispatch_s, total)
 
         if not budget.slow():
             return
@@ -1031,7 +1161,6 @@ class WorkloadExecutor:
         pending = self.queue.pending()
 
         if self.battery is not None:
-
             # Battery first: a robot that is CHARGE_DUE, or CHARGE_NEEDED
             # against every pending order, is not offered work at all,
             # so the FIFO batch below is sized for robots that can take
@@ -1075,7 +1204,6 @@ class WorkloadExecutor:
             )
 
         if battery is not None:
-
             self.result.candidate_pairs += battery.evaluated
             self.result.ineligible_pairs += battery.ineligible
 
@@ -1088,7 +1216,6 @@ class WorkloadExecutor:
             return started
 
         for assignment in assignments:
-
             # The MRTA decision is recorded before any planning, so a
             # deferral retries this exact pairing rather than
             # re-allocating the order to somebody else. ASSIGNED also
@@ -1160,16 +1287,13 @@ class WorkloadExecutor:
         missions = {}
 
         for assignment in assignments:
-
             with self._stage("mission_build"):
                 mission = self._build_mission(assignment)
 
             if mission is None:
                 self.result.plan_failures += 1
 
-                self._deferred_at[
-                    assignment.robot_id
-                ] = self._traffic_version
+                self._deferred_at[assignment.robot_id] = self._traffic_version
 
                 continue
 
@@ -1187,23 +1311,15 @@ class WorkloadExecutor:
         # --------------------------------------------------
 
         for robot_id in sorted(missions):
-
             assignment = by_robot[robot_id]
-            order = self.queue.order(
-                assignment.order_id
-            )
+            order = self.queue.order(assignment.order_id)
 
             self._clear_deferred(robot_id)
 
             self.active[robot_id] = order.order_id
 
             # Every shelf service plus the final drop-off service.
-            self._services_left[robot_id] = (
-                len(
-                    assignment.route.shelf_sequence
-                )
-                + 1
-            )
+            self._services_left[robot_id] = len(assignment.route.shelf_sequence) + 1
 
             self._set_status(
                 order,
@@ -1218,9 +1334,7 @@ class WorkloadExecutor:
         # controller together.
         # --------------------------------------------------
 
-        self.engine.assign_missions_batch(
-            missions
-        )
+        self.engine.assign_missions_batch(missions)
 
         # --------------------------------------------------
         # Dispatch records.
@@ -1230,34 +1344,25 @@ class WorkloadExecutor:
         # --------------------------------------------------
 
         for robot_id in sorted(missions):
-
             assignment = by_robot[robot_id]
             plan = missions[robot_id]
 
-            order = self.queue.order(
-                assignment.order_id
-            )
+            order = self.queue.order(assignment.order_id)
 
             record = Dispatch(
                 sim_time=self.engine.sim_time,
                 robot_id=robot_id,
                 order_id=order.order_id,
                 static_cost_m=assignment.cost,
-                shelf_sequence=(
-                    assignment.route.shelf_sequence
-                ),
+                shelf_sequence=(assignment.route.shelf_sequence),
                 dropoff_id=order.dropoff_id,
                 start_cell=plan.path[0],
-                planned_distance_m=(
-                    plan.total_distance_m
-                ),
+                planned_distance_m=(plan.total_distance_m),
                 planned_wait_s=0.0,
                 energy=assignment.energy,
             )
 
-            self.result.dispatches.append(
-                record
-            )
+            self.result.dispatches.append(record)
 
             if self.on_dispatch is not None:
                 self.on_dispatch(record)
@@ -1290,10 +1395,7 @@ class WorkloadExecutor:
         )
 
         claims = self.parking.assign(
-            {
-                robot_id: self.engine.robots[robot_id].cell
-                for robot_id in free
-            },
+            {robot_id: self.engine.robots[robot_id].cell for robot_id in free},
             blocked_cells=blocked,
             cache=self.routes,
         )
@@ -1302,7 +1404,6 @@ class WorkloadExecutor:
         parking = set()
 
         for robot_id in free:
-
             robot = self.engine.robots[robot_id]
 
             zone_id = claims.get(robot_id)
@@ -1317,17 +1418,13 @@ class WorkloadExecutor:
 
             # Already standing on the cell it claimed.
             if robot.cell == stage_cell:
-
                 self.parked.add(robot_id)
 
-                self.result.returns[
-                    robot_id
-                ] = self.engine.sim_time
+                self.result.returns[robot_id] = self.engine.sim_time
 
                 continue
 
             try:
-
                 plan = plan_from_cell(
                     self.warehouse,
                     robot.cell,
@@ -1336,7 +1433,6 @@ class WorkloadExecutor:
                 )
 
             except (RuntimeError, ValueError):
-
                 # Hand the cell back, or it stays claimed by a robot
                 # that never drove to it.
                 self.parking.release(robot_id)
@@ -1355,14 +1451,12 @@ class WorkloadExecutor:
         self.returning.update(missions)
 
         try:
-
             self.engine.assign_missions_batch(
                 missions,
                 parking=parking,
             )
 
         except Exception:
-
             # Keep executor state consistent if assignment itself
             # fails before execution begins.
             for robot_id in missions:
@@ -1404,9 +1498,7 @@ class WorkloadExecutor:
         if order_id is None:
             return
 
-        self._set_status(
-            self.queue.order(order_id), OrderStatus.COMPLETED, robot_id
-        )
+        self._set_status(self.queue.order(order_id), OrderStatus.COMPLETED, robot_id)
 
         self.result.completions.append(
             Completion(
@@ -1506,7 +1598,6 @@ class WorkloadExecutor:
             self._flag_charge_due(batch)
 
         for robot_id, robot in self.engine.robots.items():
-
             if robot.status is not GridRobotStatus.IDLE:
                 continue
 
@@ -1528,7 +1619,20 @@ class WorkloadExecutor:
             record = self.charge.get(robot_id)
 
             if record is not None and record.state in TRAVEL_STATES:
+                # Arrived on its reserved terminal. For a charger this
+                # also starts the charge, in this same instant.
                 self._settle(robot_id)
+                self._retire(robot_id)
+
+            elif record is not None and record.state is ChargeState.CHARGING:
+                # IDLE while CHARGING means the engine has just booked
+                # the session: the robot is full.
+                self._charge_complete(robot_id)
+                self._retire(robot_id)
+
+            elif record is not None and record.state in LEAVING_STATES:
+                # Standing on the access aisle cell: the edge is clear.
+                self._rejoin(robot_id)
                 self._retire(robot_id)
 
             if robot_id in self.repositioning:
@@ -1557,10 +1661,11 @@ class WorkloadExecutor:
         )
 
     def finished(self) -> bool:
-        # B3 has no charging, so a robot on its charger, holding cell or
-        # fallback Stage Zone stays there. A robot still in REQUEST or
-        # still driving to its terminal is not finished. Every other
-        # robot must be parked.
+        # A robot on a holding cell or fallback Stage Zone stays there
+        # (promotion is B5), so those count as settled. A robot that is
+        # in REQUEST, driving to a terminal, charging, or reversing off
+        # a charger is NOT finished: its charge will complete and it
+        # will rejoin the fleet. Every other robot must be parked.
         return (
             not self.queue.pending()
             and not self.deferred
@@ -1600,8 +1705,7 @@ class WorkloadExecutor:
         idle = [
             robot_id
             for robot_id in sorted(self.engine.robots)
-            if self.engine.robots[robot_id].status
-            is GridRobotStatus.IDLE
+            if self.engine.robots[robot_id].status is GridRobotStatus.IDLE
             and robot_id not in self.active
             and robot_id not in self.returning
             and robot_id not in self.repositioning
@@ -1611,7 +1715,6 @@ class WorkloadExecutor:
         ]
 
         if idle:
-
             started = self._send_home(idle)
 
             if started:
@@ -1626,7 +1729,6 @@ class WorkloadExecutor:
         """Execute the whole workload, then bring the fleet home."""
 
         for _ in range(max_rounds):
-
             # Seeds the first batch, and restarts the clock whenever a
             # round ended with robots still owed work.
             self.dispatch()
@@ -1674,9 +1776,7 @@ class WorkloadExecutor:
             "travel_time_s": sum(r.travel_time_s for r in robots),
             "waiting_time_s": sum(r.waiting_time_s for r in robots),
             "service_time_s": sum(r.service_time_s for r in robots),
-            "reservation_violations": len(
-                self.engine.reservations.audit()
-            ),
+            "reservation_violations": len(self.engine.reservations.audit()),
             "events": self.engine.processed,
         }
 
@@ -1705,10 +1805,7 @@ def eligibility_report_lines(executor: "WorkloadExecutor") -> list[str]:
     due_busy = sum(1 for e in due if e.detail.startswith("while busy"))
     due_idle = sum(1 for e in due if e.detail == "while idle")
 
-    needed = [
-        e for e in events
-        if e.kind == "REQUEST" and e.reason == "CHARGE_NEEDED"
-    ]
+    needed = [e for e in events if e.kind == "REQUEST" and e.reason == "CHARGE_NEEDED"]
 
     at_end = [e for e in events if e.kind == "CHARGE_DUE_AT_END"]
 
@@ -1723,14 +1820,16 @@ def eligibility_report_lines(executor: "WorkloadExecutor") -> list[str]:
         f"  assignments      : {result.assignments_validated} validated by "
         f"the executor, 0 ineligible",
         "  lowest margin    : "
-        + ("n/a" if margin is None else f"{float(margin):.4f} % of SOC "
-           f"over an assigned pair"),
+        + (
+            "n/a"
+            if margin is None
+            else f"{float(margin):.4f} % of SOC over an assigned pair"
+        ),
         f"  CHARGE_DUE       : {len(due)} "
         f"({due_busy} while busy, {due_idle} while idle; "
         f"{len(at_end)} with no work left)",
         f"  CHARGE_NEEDED    : {len(needed)}",
-        "  charge request   : "
-        + (", ".join(sorted(executor.requesting)) or "none"),
+        "  charge request   : " + (", ".join(sorted(executor.requesting)) or "none"),
     ]
 
     return lines
@@ -1751,11 +1850,12 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
         lines = [f"  {bank.kind:<8s} : {len(bank.slots)} cells | {counts}"]
 
         for slot in bank.slots.values():
-
             if slot.state is ResourceState.FREE and not every_row:
                 continue
 
-            line = f"    {slot.zone_id:<16s} {str(slot.cell):<9s} {slot.state.value:<9s}"
+            line = (
+                f"    {slot.zone_id:<16s} {str(slot.cell):<9s} {slot.state.value:<9s}"
+            )
 
             if slot.robot_id is not None:
                 line += (
@@ -1776,32 +1876,39 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
     def count(*states):
         return sum(1 for record in records if record.state in states)
 
-    # Not driving, yet standing on a transit cell: must never happen.
+    # In the charging workflow, not driving, yet standing on a transit
+    # cell: must never happen. A rejoined robot is deliberately exempt
+    # -- it is back in the fleet and an aisle cell is where it belongs.
     stuck = [
         record.robot_id
         for record in records
-        if record.state not in TRAVEL_STATES
+        if record.state not in MOVING_STATES
+        and record.state is not ChargeState.REJOINED
         and executor.engine.robots[record.robot_id].cell not in terminals
     ]
 
     lines = [
-        "CHARGER TRAVEL (B3: evacuation only -- no charging, SOC never rises)",
+        "CHARGING (B4: charge to 100%, leave the charger, rejoin the fleet)",
         *bank_lines(executor.chargers, every_row=True),
         *bank_lines(executor.holding, every_row=False),
-        f"  requests : {len(records)} | at charger "
-        f"{count(ChargeState.OCCUPIED_CHARGER)} | in holding "
+        f"  requests : {len(records)} | charging "
+        f"{count(ChargeState.CHARGING)} | leaving "
+        f"{count(*LEAVING_STATES)} | rejoined "
+        f"{count(ChargeState.REJOINED)} | in holding "
         f"{count(ChargeState.HOLDING)} | Stage Zone fallback "
         f"{count(ChargeState.STAGE_FALLBACK)} | still travelling "
         f"{count(*TRAVEL_STATES)} | still in REQUEST "
         f"{count(ChargeState.REQUEST)}",
+        f"  charge sessions   : {executor.result.charge_sessions} started, "
+        f"{executor.result.rejoins} robot(s) back in the fleet",
         f"  saturation events : {executor.result.saturation_events}",
         f"  yield events      : {executor.result.yield_events} (whole run)",
     ]
 
     for record in records:
-
         arrived = (
-            "not yet" if record.arrived_at is None
+            "not yet"
+            if record.arrived_at is None
             else f"t={float(record.arrived_at):.4f} SOC "
             f"{float(record.arrival_soc):.4f}%"
         )
@@ -1816,6 +1923,55 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
             f"t={float(record.departed_at):.4f}  arrived {arrived}"
         )
 
+    sessions = [
+        record
+        for record in (*executor.charge_history, *records)
+        if record.charge_started_at is not None
+    ]
+
+    # charge_history holds completed trips; records holds current ones,
+    # so a robot mid-charge appears once and a finished one once.
+    seen: set = set()
+    unique = []
+
+    for record in sessions:
+        key = (record.robot_id, record.charge_started_at)
+        if key not in seen:
+            seen.add(key)
+            unique.append(record)
+
+    if unique:
+        lines.append(
+            "  charge sessions (SOC rises at the net configured rate; target 100%)"
+        )
+
+        for record in sorted(unique, key=lambda r: (r.charge_started_at, r.robot_id)):
+            done = (
+                "charging"
+                if record.charge_completed_at is None
+                else f"t={float(record.charge_completed_at):.4f}"
+            )
+
+            back = (
+                "not yet"
+                if record.rejoined_at is None
+                else f"t={float(record.rejoined_at):.4f} SOC "
+                f"{float(record.rejoin_soc):.4f}%"
+            )
+
+            lines.append(
+                f"    {record.robot_id} {record.zone_id} "
+                f"start t={float(record.charge_started_at):.4f} SOC "
+                f"{float(record.arrival_soc):.4f}%  "
+                f"{float(record.charge_duration_s):.4f} s  full {done}"
+                + (
+                    ""
+                    if record.charge_gained is None
+                    else f"  +{float(record.charge_gained):.4f}%"
+                )
+                + f"  rejoined {back}"
+            )
+
     waited = [
         record.departed_at - record.requested_at
         for record in records
@@ -1825,8 +1981,7 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
     lines.append(
         f"  REQUEST -> departure : max "
         f"{float(max(waited, default=0)):.4f} s; REQUEST robots standing "
-        f"on a transit cell now: {len(stuck)}"
-        + (f" {stuck}" if stuck else "")
+        f"on a transit cell now: {len(stuck)}" + (f" {stuck}" if stuck else "")
     )
 
     return lines

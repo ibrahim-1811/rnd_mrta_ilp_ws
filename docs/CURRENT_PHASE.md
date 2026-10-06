@@ -21,7 +21,9 @@ Battery scheduler V1         IN PROGRESS
                              B3 charger / holding travel DONE,
                                 approved, verified in Gazebo
                                 2026-10-06
-                             B4..B6 NOT STARTED
+                             B4 charging + leaving + rejoin COMPLETE,
+                                VERIFIED, APPROVED 2026-10-06
+                             B5..B6 NOT STARTED
 W20/W30/W50 map family       PLANNED, after Battery V1 (decided 2026-09-13)
 Additional MRTA baselines    NOT IMPLEMENTED
 Outcome logging              NOT IMPLEMENTED
@@ -235,7 +237,7 @@ B0  charging-apron topology              DONE, visually approved
 B1  SOC accounting                       DONE, approved
 B2  eligibility + CHARGE_DUE / NEEDED    DONE, approved
 B3  charger reservation + travel         DONE, approved 2026-10-06
-B4  charging + leaving + fleet rejoin    NOT STARTED
+B4  charging + leaving + fleet rejoin    COMPLETE, VERIFIED, APPROVED 2026-10-06
 B5  preemption + holding                 NOT STARTED
 B6  decision / outcome battery metrics   NOT STARTED
 ```
@@ -395,6 +397,180 @@ B3 traffic-safety argument (the two B2 blockers):
 2. a REQUEST robot holding still in an aisle -- resolved
    REQUEST now reserves and departs at the same instant; the B2
    deadlock fleet completes 100/100.
+```
+
+B4 acceptance, measured 2026-10-06. A robot that reaches its reserved
+charger now charges to exactly 100%, reverses into the aisle cell it
+came from, and rejoins the fleet. The charge is a timed dwell on the
+engine's own Fraction clock, booked as its own ledger category:
+
+```text
+duration = (100 - SOC_arrival) / charging_percent_per_second
+SOC(t+dt) = min(100, SOC(t) + charging_percent_per_second * dt)
+```
+
+The configured rate is the NET gain -- no idle drain is subtracted over
+a charge interval (docs/DECISIONS.md, "Charging Rate"). The slot goes
+OCCUPIED -> VACATING before the robot moves and becomes FREE only once
+it physically stands on the access aisle cell, so an entering and a
+leaving robot can never meet on that edge. Holding cells are unchanged:
+promotion is B5.
+
+```text
+71% at 1%/s charges for exactly 29 simulated s          MET  exact Fraction
+every session lands on exactly 100%                     MET  all scenarios
+60 s of charging adds exactly 60%, no idle subtracted   MET
+charging time excluded from the idle remainder          MET
+conservation: final = initial - travel - service
+  - waiting - idle + charge                             MET  exact
+SOC clamped at 100%, never above                        MET
+live mid-charge SOC read rises and is exact             MET  ledger-read tests
+minimum SOC latched before the charge raises it         MET
+cross-check vs the engine's float counters              MET  <= 1.4e-14 %
+no order dispatched between request and rejoin          MET
+slot OCCUPIED for the whole charge, VACATING while
+  reversing out, FREE only after clearance              MET  sampled per instant
+two robots never overlap on one charger cell            MET
+a freed charger is reused only after full clearance     MET  recycle scenario
+a charged robot rejoins and completes further orders    MET  single scenario
+holding robots are NOT promoted (B5 scope guard)        MET
+deterministic repeat                                    MET
+
+unit + integration tests                                189 passed (179 before correction)
+ruff                                                    clean
+map topology / highways / nav graph                     OK
+traffic behaviour suite                                 7/7
+check_battery_eligibility.py                            OK
+check_charger_evacuation.py                             5/5
+check_b4_charging.py                                    6/6
+  single / four / twelve / recycle / contested / slow
+
+100-order scientific run vs the B0-B3 checkpoint        identical
+  100/100, 22/22 parked, 282.0000 s, 6430.0 m,
+  waiting 264.6667 s, 0 violations,
+  final SOC min 80.7222 mean 84.7322 max 86.6256,
+  0 charge sessions
+500-order original B4 result (not rerun for correction)  identical
+  500/500, 22/22 parked, 1123.3333 s, 29338.0 m,
+  waiting 1242.6667 s, 0 violations,
+  final SOC min 27.8989 mean 30.7151 max 33.6000,
+  0 charge sessions
+```
+
+Controlled B4 runs on the V2 map, 22 robots unless stated:
+
+```text
+single    1 robot at 9%, 6 orders
+          6/6, 1 session, 1 rejoin, 441.7667 s, 0 violations
+four      4 at 9%, 40 orders
+          40/40, 4 sessions, 4 rejoins, 167.3333 s, 0 violations
+twelve    12 at 9%, 100 orders
+          100/100, 8 sessions, 8 rejoins, 4 still in holding,
+          375.2633 s, 0 violations, 0 yields, 0 saturation
+          (the same fleet settled at 496.6667 s in B3, where nothing
+           could charge or come back)
+recycle   A at 9%, B at 18%, 4 robots, 12 orders, 1 usable charger
+          12/12, 2 sessions, 2 rejoins, 272.3367 s, 0 violations
+          both charge on charging_001; B requests after A clears
+contested 12 at 9%, 100 orders, departures merging into order traffic
+          100/100, 8 sessions, 8 rejoins, 375.2633 s, 0 violations
+slow      1 robot at 9%, 6 orders, charge rate 0.1%/s
+          arrival t=28, SOC 6.9%; 931 s charge, full t=959
+          rejoin t=959.6667, SOC 99.95%; all 6 orders complete
+          fleet-end makespan 1279.6667 s, 0 violations
+```
+
+B4 correction: the 600-second mission watchdog previously rejected
+that valid slow charge at t=959. It now excludes only elapsed intervals
+where all in-flight work consists of CHARGING robots whose exact finite
+completion events remain queued. Existing waiting/unfinished traffic
+disables that exemption; elapsed no-progress debt before and after a
+charge is preserved, and the event budget still detects zero-time loops.
+Missing completion events cannot exempt a session, and a drained queue
+with an open charge session raises an error.
+
+The reuse regression observes A clear charging_001 at t=123.2000, then
+B reserve it at t=140.6667 and physically occupy it at t=165.3333. Clearance tests
+inspect both the physical move and zero-delay mission-completion batches;
+`_rejoin()` verifies the expected access cell and completed idle exit
+before freeing the slot. Post-rejoin assignment is non-empty and the
+later order completes. A controlled six-order run also completes two
+charge/rejoin sessions for the same robot without stale reservations.
+
+Live charging SOC tests validate rational ledger reads, not live 2 Hz
+ROS publication. During synchronous execution FleetNode publishes via
+engine ticks; its periodic timer is created after the workload returns.
+Gazebo visual acceptance PASSED on 2026-10-06, verified and approved by
+the user with `warehouse_sim_b3_twelve_low.yaml` and `orders:=true`:
+
+```text
+12 low-SOC robots entered the charging workflow
+8 reached chargers, charged, physically reversed out and rejoined
+rejoined robots resumed warehouse work
+4 remained in holding until the end (promotion is B5)
+100/100 orders completed; 8 charge sessions; 8 rejoins
+all 8 charger slots FREE at the end
+0 reservation violations; 0 yield events
+SOC identity exact; gain matched the configured 1%/s net rate
+no visible collision or opposite-edge swap
+no completed charging robot remained on a charger
+```
+
+B4 is COMPLETE, VERIFIED, APPROVED. It is not yet committed. B5 and B6
+remain NOT STARTED; no further implementation is authorized here.
+
+Worked example from the `twelve` run, exactly as reported:
+
+```text
+robot_011 charging_005 start t=21.3333 SOC 7.4000%  92.6000 s
+          full t=113.9333  +92.6000%  rejoined t=114.6000 SOC 99.9500%
+```
+
+7.4000 + 92.6000 = 100 exactly. It rejoins at 99.9500% because
+reversing one cell off the charger is real driving and costs one move's
+travel energy (1 m at 1% / 20 m = 0.05%). Fleet total: 743.6344% gained
+over 743.6344 simulated seconds, i.e. exactly 1%/s net.
+
+Deliberately NOT in B4, and verified absent: holding-cell promotion and
+preemption (B5), the `order_makespan` / `fleet_recovery_time` split and
+battery metrics (B6), G6 end-of-work partial charging (B6). The
+eligibility equation, order schema, strategy set, FIFO window, traffic
+and lane policy are untouched.
+
+B3/B4 test supersession, for the record. Nine tests written in B3
+asserted that charging does not exist. They were retargeted, not
+deleted, because B4 makes the asserted behaviour wrong:
+
+```text
+test_no_soc_increase_exists_yet        -> test_soc_rises_only_while_charging
+                                          plus two new B4 invariants
+test_robot_physically_reaches_the_reserved_charger
+                                       -> asserts arrival from the record
+                                          and the sampled history, since
+                                          the robot no longer ends there
+test_charger_arrival_makes_the_resource_occupied
+                                       -> OCCUPIED during the charge,
+                                          then VACATING, then FREE
+test_holding_cells_receive_unique_reservations
+                                       -> counts charger trips, not slots
+                                          still occupied at the end
+test_no_request_robot_remains_stopped_on_a_transit_cell
+                                       -> a REJOINED robot in an aisle is
+                                          legal; CHARGING must be on a
+                                          terminal
+test_terminal_access_cannot_create_an_opposite_edge_swap
+                                       -> an exit is legal only by the
+                                          slot's own holder, and never at
+                                          the same instant as an entry
+test_resource_remains_unavailable_while_occupied
+                                       -> unavailable through the charge
+                                          AND the vacating move
+test_charging_scheduler_never_modifies_order_ownership
+                                       -> no dispatch between request and
+                                          rejoin, rather than none ever
+test_busy_robot_crossing_ten_percent_finishes_its_order
+                                       -> scoped to the charge request;
+                                          the robot may work again after
 ```
 
 ## Definition of Done for Phase B

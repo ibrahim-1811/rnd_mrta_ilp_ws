@@ -98,7 +98,8 @@ def engine_for(warehouse, service_seconds=None, battery=BATTERY):
     return FleetSimulationEngine(
         warehouse=warehouse,
         resolution=1.0,
-        service_seconds=service_seconds or {
+        service_seconds=service_seconds
+        or {
             ZoneType.SHELF: 2.0,
             ZoneType.DROPOFF: 2.0,
         },
@@ -110,9 +111,7 @@ def run_workload(config, warehouse, battery, orders=100):
     executor = WorkloadExecutor(
         warehouse=warehouse,
         robots=build_fleet(config, warehouse),
-        queue=OrderQueue(
-            load_orders_csv(config.orders_path, warehouse)[:orders]
-        ),
+        queue=OrderQueue(load_orders_csv(config.orders_path, warehouse)[:orders]),
         allocator=get_batch_strategy("nearest_astar"),
         resolution=config.resolution_m,
         speed_mps=config.speed_mps,
@@ -275,9 +274,7 @@ def test_combined_accounting_matches_hand_calculation(warehouse):
     later = engine.battery.snapshot("robot_001", engine.time + 150)
 
     assert later.idle_s == 150
-    assert later.current_soc == (
-        100 - distance / 20 - Fraction(4, 60) - Fraction(1, 2)
-    )
+    assert later.current_soc == (100 - distance / 20 - Fraction(4, 60) - Fraction(1, 2))
 
     # 7. Service time is booked as service, never as waiting or idle.
     assert at_end.service_s == 4
@@ -292,7 +289,6 @@ def test_service_and_waiting_match_the_engine_counters(workload):
     now = workload.engine.time
 
     for robot_id, robot in workload.engine.robots.items():
-
         snap = ledger.snapshot(robot_id, now)
 
         assert float(snap.service_s) == pytest.approx(robot.service_time_s)
@@ -301,9 +297,7 @@ def test_service_and_waiting_match_the_engine_counters(workload):
         assert snap.travel_energy == Fraction(int(robot.distance_m), 20)
         assert snap.idle_s >= 0
 
-        assert snap.moving_s + snap.service_s + snap.waiting_s + (
-            snap.idle_s
-        ) == now
+        assert snap.moving_s + snap.service_s + snap.waiting_s + (snap.idle_s) == now
 
 
 # ----------------------------------------------------------------------
@@ -332,9 +326,7 @@ def test_yield_and_rejoin_moves_are_booked_as_travel(monkeypatch):
     kinds = []
 
     engine = engine_for(open_floor(5, 3))
-    engine.on_event = lambda event: kinds.append(
-        (event.robot_id, event.kind)
-    )
+    engine.on_event = lambda event: kinds.append((event.robot_id, event.kind))
 
     engine.add_robot(GridRobot("robot_001", (1, 1)))
     engine.add_robot(GridRobot("robot_002", (2, 1)))
@@ -373,10 +365,7 @@ def test_yield_and_rejoin_moves_are_booked_as_travel(monkeypatch):
     assert snap["robot_001"].waiting_s > 0
 
     for robot_id, robot in engine.robots.items():
-
-        assert float(snap[robot_id].waiting_s) == pytest.approx(
-            robot.waiting_time_s
-        )
+        assert float(snap[robot_id].waiting_s) == pytest.approx(robot.waiting_time_s)
         assert cross_check(snap[robot_id], robot, BATTERY) < 1e-12
 
 
@@ -390,7 +379,6 @@ def test_final_soc_identity_holds_for_every_robot(workload):
     now = workload.engine.time
 
     for robot_id, robot in workload.engine.robots.items():
-
         snap = ledger.snapshot(robot_id, now)
 
         assert snap.current_soc == (
@@ -468,11 +456,14 @@ def test_override_for_a_robot_outside_the_fleet_is_refused(config, warehouse):
         build_fleet(stray, warehouse)
 
 
-@pytest.mark.parametrize("name", [
-    "warehouse_sim.yaml",
-    "warehouse_sim_10.yaml",
-    "warehouse_sim_500.yaml",
-])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "warehouse_sim.yaml",
+        "warehouse_sim_10.yaml",
+        "warehouse_sim_500.yaml",
+    ],
+)
 def test_scientific_configs_carry_no_overrides(name):
     battery = load_sim_config(CONFIGS / name).battery
 
@@ -484,9 +475,7 @@ def test_scientific_configs_carry_no_overrides(name):
 # ----------------------------------------------------------------------
 
 
-def test_battery_accounting_changes_no_execution_result(
-    config, warehouse, workload
-):
+def test_battery_accounting_changes_no_execution_result(config, warehouse, workload):
     """Battery on or off, the 100-order fleet does exactly the same thing.
 
     Since B2 battery can constrain allocation. On the standard workload
@@ -524,8 +513,244 @@ def test_battery_accounting_changes_no_execution_result(
     for robot_id, robot in workload.engine.robots.items():
         other = off.engine.robots[robot_id]
 
-        assert (robot.cell, robot.distance_m, robot.travel_time_s,
-                robot.waiting_time_s, robot.service_time_s) == (
-            other.cell, other.distance_m, other.travel_time_s,
-            other.waiting_time_s, other.service_time_s,
+        assert (
+            robot.cell,
+            robot.distance_m,
+            robot.travel_time_s,
+            robot.waiting_time_s,
+            robot.service_time_s,
+        ) == (
+            other.cell,
+            other.distance_m,
+            other.travel_time_s,
+            other.waiting_time_s,
+            other.service_time_s,
         )
+
+
+# ----------------------------------------------------------------------
+# Charging (B4). The ledger is the only place SOC can rise, and the
+# configured rate is the NET gain: a charging second is not an idle
+# second (docs/DECISIONS.md, "Charging Rate").
+# ----------------------------------------------------------------------
+
+
+def ledger_with(robot_id="robot_001", soc=None):
+    """A bare ledger with one registered robot at t=0."""
+
+    config = (
+        BATTERY
+        if soc is None
+        else replace(BATTERY, initial_soc_overrides={robot_id: Fraction(soc)})
+    )
+
+    ledger = BatteryLedger(config, Fraction(1))
+    ledger.register(robot_id, Fraction(0))
+
+    return ledger
+
+
+def test_sixty_seconds_of_charging_adds_exactly_sixty_percent():
+    """The net rule: no idle drain is subtracted over the session."""
+
+    ledger = ledger_with(soc=20)
+
+    ledger.begin_charge("robot_001", Fraction(0))
+    gained = ledger.book_charge("robot_001", Fraction(60))
+
+    assert gained == 60
+
+    # 20 + 60 = 80 exactly. With idle also charged it would be 79.8.
+    assert ledger.soc("robot_001", Fraction(60)) == 80
+
+
+def test_charging_time_is_excluded_from_idle():
+    ledger = ledger_with(soc=50)
+
+    ledger.begin_charge("robot_001", Fraction(0))
+    ledger.book_charge("robot_001", Fraction(30))
+
+    snap = ledger.snapshot("robot_001", Fraction(30))
+
+    assert snap.charging_s == 30
+    assert snap.idle_s == 0
+    assert snap.idle_energy == 0
+    assert snap.charge_energy == 30
+
+
+def test_idle_before_and_after_a_session_is_still_charged():
+    """Only the charging interval is exempt, not the rest of the run."""
+
+    ledger = ledger_with(soc=50)
+
+    # 300 s idle, then 10 s charging, then 300 s idle.
+    ledger.begin_charge("robot_001", Fraction(300))
+    ledger.book_charge("robot_001", Fraction(10))
+
+    snap = ledger.snapshot("robot_001", Fraction(610))
+
+    assert snap.charging_s == 10
+    assert snap.idle_s == 600
+    assert snap.idle_energy == 2
+    assert snap.charge_energy == 10
+    assert snap.current_soc == 50 - 2 + 10
+
+
+def test_the_conservation_identity_holds_with_every_term():
+    ledger = ledger_with(soc=40)
+
+    ledger.book_move("robot_001", Fraction(2, 3))
+    ledger.book_service("robot_001", Fraction(2))
+    ledger.book_wait("robot_001", Fraction(5))
+    ledger.begin_charge("robot_001", Fraction(100))
+    ledger.book_charge("robot_001", Fraction(20))
+
+    now = Fraction(500)
+    snap = ledger.snapshot("robot_001", now)
+
+    assert snap.travel_energy > 0
+    assert snap.service_energy > 0
+    assert snap.waiting_energy > 0
+    assert snap.idle_energy > 0
+    assert snap.charge_energy == 20
+
+    assert snap.current_soc == (
+        snap.initial_soc
+        - snap.travel_energy
+        - snap.service_energy
+        - snap.waiting_energy
+        - snap.idle_energy
+        + snap.charge_energy
+    )
+
+    # And the time partition is complete.
+    assert (
+        snap.moving_s + snap.service_s + snap.waiting_s + snap.charging_s + snap.idle_s
+    ) == now - snap.registered_at
+
+
+def test_soc_is_clamped_at_one_hundred():
+    ledger = ledger_with(soc=90)
+
+    ledger.begin_charge("robot_001", Fraction(0))
+    ledger.book_charge("robot_001", Fraction(50))
+
+    assert ledger.soc("robot_001", Fraction(50)) == 100
+    assert ledger.snapshot("robot_001", Fraction(50)).current_soc == 100
+
+
+def test_a_live_read_mid_session_rises_and_is_exact():
+    """Live ledger reads reflect net gain; this does not test ROS publication."""
+
+    ledger = ledger_with(soc=30)
+
+    ledger.begin_charge("robot_001", Fraction(0))
+
+    assert ledger.soc("robot_001", Fraction(0)) == 30
+    assert ledger.soc("robot_001", Fraction(10)) == 40
+    assert ledger.soc("robot_001", Fraction(35, 2)) == Fraction(95, 2)
+
+    # snapshot() agrees with soc() at the same instant.
+    assert ledger.snapshot("robot_001", Fraction(10)).current_soc == 40
+
+    ledger.book_charge("robot_001", Fraction(70))
+
+    assert ledger.soc("robot_001", Fraction(70)) == 100
+
+
+def test_a_live_read_mid_session_keeps_earlier_idle_drain():
+    """Idle accrued before the session is not erased by charging."""
+
+    ledger = ledger_with(soc=50)
+
+    # 300 s idle costs exactly 1 %, then charging begins.
+    ledger.begin_charge("robot_001", Fraction(300))
+
+    assert ledger.soc("robot_001", Fraction(300)) == 49
+    assert ledger.soc("robot_001", Fraction(310)) == 59
+
+
+def test_the_minimum_is_latched_before_the_soc_rises():
+    ledger = ledger_with(soc=9)
+
+    ledger.begin_charge("robot_001", Fraction(0))
+    ledger.book_charge("robot_001", Fraction(91))
+
+    snap = ledger.snapshot("robot_001", Fraction(91))
+
+    assert snap.current_soc == 100
+    assert snap.minimum_soc == 9
+
+
+def test_two_sessions_accumulate():
+    ledger = ledger_with(soc=20)
+
+    ledger.begin_charge("robot_001", Fraction(0))
+    ledger.book_charge("robot_001", Fraction(10))
+
+    ledger.begin_charge("robot_001", Fraction(10))
+    ledger.book_charge("robot_001", Fraction(5))
+
+    snap = ledger.snapshot("robot_001", Fraction(15))
+
+    assert snap.charge_energy == 15
+    assert snap.charging_s == 15
+    assert snap.current_soc == 35
+
+
+def test_a_second_open_session_is_refused():
+    ledger = ledger_with()
+
+    ledger.begin_charge("robot_001", Fraction(0))
+
+    with pytest.raises(RuntimeError, match="already charging"):
+        ledger.begin_charge("robot_001", Fraction(1))
+
+
+def test_booking_without_an_open_session_is_refused():
+    ledger = ledger_with()
+
+    with pytest.raises(RuntimeError, match="no open charge session"):
+        ledger.book_charge("robot_001", Fraction(1))
+
+
+def test_a_negative_charge_duration_is_refused():
+    ledger = ledger_with()
+
+    ledger.begin_charge("robot_001", Fraction(0))
+
+    with pytest.raises(ValueError):
+        ledger.book_charge("robot_001", Fraction(-1))
+
+
+def test_the_engine_books_a_charge_into_both_accounts():
+    """The ledger and GridRobot's float counter must not disagree."""
+
+    engine = engine_for(open_floor(3, 1))
+    engine.add_robot(GridRobot("robot_001", (0, 0)))
+
+    engine.begin_charge("robot_001", Fraction(40))
+    engine.run()
+
+    robot = engine.robots["robot_001"]
+    snap = engine.battery.snapshot("robot_001", engine.time)
+
+    assert engine.time == 40
+    assert robot.charging_time_s == 40.0
+    assert snap.charging_s == 40
+    assert snap.charge_energy == 40
+    assert snap.current_soc == 100  # started full, clamped
+    assert cross_check(snap, robot, BATTERY) < 1e-9
+
+
+def test_fleet_summary_reports_the_charge():
+    ledger = ledger_with(soc=10)
+
+    ledger.begin_charge("robot_001", Fraction(0))
+    ledger.book_charge("robot_001", Fraction(90))
+
+    summary = fleet_summary(ledger.snapshots(Fraction(90)))
+
+    assert summary["total_charge"] == 90
+    assert summary["total_charging_s"] == 90
+    assert summary["below_zero"] == []

@@ -6,9 +6,9 @@ On entering REQUEST a robot reserves, before it moves,
     2. the FREE holding cell with the cheapest directed A* route, else
     3. (saturation) the nearest free Stage Zone,
 
-and drives there by the production router. There is no charging: a
-robot on a charger stays there and its SOC keeps draining at the idle
-rate. Controlled SOCs come from ``battery.initial_soc_overrides`` only.
+and drives there by the production router. B4 charges to full, then
+physically clears the charger and rejoins. Holding robots remain there
+until B5. Controlled SOCs come from ``battery.initial_soc_overrides`` only.
 """
 
 from dataclasses import asdict, replace
@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-from mrta_core.battery import stationary_energy
 from mrta_core.order_queue import OrderQueue
 from mrta_core.orders import OrderStatus, load_orders_csv
 from mrta_core.sim_config import load_sim_config
@@ -81,8 +80,8 @@ class Monitor:
 
     def __init__(self):
         self.executor = None
-        self.moves = []        # (t, robot_id, source, target)
-        self.samples = []      # (t, robots, slots)
+        self.moves = []  # (t, robot_id, source, target)
+        self.samples = []  # (t, robots, slots)
         self._cells = {}
 
     def attach(self, executor):
@@ -97,7 +96,6 @@ class Monitor:
         robots = {}
 
         for robot_id, robot in ex.engine.robots.items():
-
             if robot.cell != self._cells[robot_id]:
                 self.moves.append((now, robot_id, self._cells[robot_id], robot.cell))
                 self._cells[robot_id] = robot.cell
@@ -147,9 +145,7 @@ def build(config, warehouse, overrides, *, holding=None, orders=None):
     executor = WorkloadExecutor(
         warehouse=warehouse,
         robots=build_fleet(config, warehouse),
-        queue=OrderQueue(
-            load_orders_csv(config.orders_path, warehouse)[:orders]
-        ),
+        queue=OrderQueue(load_orders_csv(config.orders_path, warehouse)[:orders]),
         allocator=get_batch_strategy("nearest_astar"),
         resolution=config.resolution_m,
         speed_mps=config.speed_mps,
@@ -165,9 +161,7 @@ def build(config, warehouse, overrides, *, holding=None, orders=None):
 
     if holding is not None:
         # Controlled saturation: this run's holding bank is cut short.
-        executor.holding.slots = dict(
-            list(executor.holding.slots.items())[:holding]
-        )
+        executor.holding.slots = dict(list(executor.holding.slots.items())[:holding])
 
     monitor.attach(executor)
 
@@ -254,7 +248,6 @@ def test_manhattan_can_disagree_and_does_not_decide(warehouse, terminals):
     )
 
     for cell in transit:
-
         costs = astar_costs(warehouse, cell, cells)
         by_astar = min(costs, key=lambda z: (costs[z], z))
         by_manhattan = min(cells, key=lambda z: (manhattan(cell, cells[z]), z))
@@ -323,19 +316,32 @@ def test_robot_physically_reaches_the_reserved_charger(four):
     executor, monitor, _ = four
 
     for robot_id in FOUR:
-
         record = executor.charge[robot_id]
         slot = executor.chargers.slots[record.zone_id]
 
-        assert record.state is ChargeState.OCCUPIED_CHARGER
-        assert executor.engine.robots[robot_id].cell == slot.cell
+        # It physically reached and occupied the charger. After B4 it
+        # then charged and reversed off, so the arrival is asserted from
+        # the record and the sampled history, not from the end state.
+        assert record.arrived_at is not None
         assert warehouse_type(executor, slot.cell) is ZoneType.CHARGING
 
-        realized = [record.request_cell] + [
-            target for _, r, _, target in monitor.moves if r == robot_id
+        on_charger = [
+            now
+            for now, robots, _ in monitor.samples
+            if robots[robot_id][0] == slot.cell
         ]
 
-        assert tuple(realized) == record.path
+        assert on_charger, robot_id
+        assert min(on_charger) == record.arrived_at
+
+        # The drive in is still exactly the costed route.
+        arrival = [
+            target
+            for now, r, _, target in monitor.moves
+            if r == robot_id and now <= record.arrived_at
+        ]
+
+        assert tuple([record.request_cell] + arrival) == record.path
 
 
 def warehouse_type(executor, cell):
@@ -346,9 +352,7 @@ def test_no_terminal_is_used_as_intermediate_transit(scenarios, warehouse, termi
     blocked_edges = directional_blocked_edges(warehouse)
 
     for executor, monitor, _ in scenarios.values():
-
         for record in executor.charge.values():
-
             assert record.path[-1] == record.target_cell
             assert not set(record.path[1:-1]) & terminals
 
@@ -364,22 +368,36 @@ def test_charger_arrival_makes_the_resource_occupied(four):
     executor, monitor, _ = four
 
     for robot_id in FOUR:
-
         record = executor.charge[robot_id]
 
-        states = [
-            (now, slots[record.zone_id])
-            for now, _, slots in monitor.instants()
-        ]
+        states = [(now, slots[record.zone_id]) for now, _, slots in monitor.instants()]
 
         before = {s for now, s in states if now < record.arrived_at}
-        after = {s for now, s in states if now >= record.arrived_at}
 
         assert before == {(ResourceState.RESERVED, robot_id)}
-        assert after == {(ResourceState.OCCUPIED, robot_id)}
 
-        slot = executor.chargers.slots[record.zone_id]
-        assert slot.occupied_at == record.arrived_at
+        # OCCUPIED from the arrival instant until the robot is full.
+        during = {
+            s
+            for now, s in states
+            if record.arrived_at <= now < record.charge_completed_at
+        }
+
+        assert during == {(ResourceState.OCCUPIED, robot_id)}
+
+        # Then VACATING while it reverses out, and FREE once clear --
+        # never OCCUPIED by anybody else in between (B4).
+        after = [(now, s) for now, s in states if now >= record.charge_completed_at]
+
+        assert after
+        assert all(
+            s
+            in (
+                (ResourceState.VACATING, robot_id),
+                (ResourceState.FREE, None),
+            )
+            for _, s in after
+        ), after
 
 
 # ----------------------------------------------------------------------
@@ -393,7 +411,7 @@ def test_all_chargers_occupied_sends_the_robot_to_holding(late, terminals):
     record = executor.charge["robot_009"]
 
     assert record.reason == "CHARGE_NEEDED"
-    assert record.request_cell not in terminals       # asked from an aisle
+    assert record.request_cell not in terminals  # asked from an aisle
     assert (record.kind, record.state) == ("holding", ChargeState.HOLDING)
 
     (slots,) = [s for now, _, s in monitor.instants() if now == record.requested_at]
@@ -405,14 +423,18 @@ def test_all_chargers_occupied_sends_the_robot_to_holding(late, terminals):
 def test_holding_cells_receive_unique_reservations(twelve):
     executor, _, _ = twelve
 
-    at_charger = executor.chargers.count(ResourceState.OCCUPIED)
-    holders = [
-        record.zone_id
-        for record in executor.charge.values()
-        if record.kind == "holding"
-    ]
+    # Eight robots took the eight chargers. In B4 a charger is released
+    # again once its robot is full, so this counts the trips, not the
+    # slots still occupied at the end of the run.
+    trips = {
+        id(record): record
+        for record in (*executor.charge_history, *executor.charge.values())
+    }.values()
 
-    assert at_charger == 8
+    charged = [r.zone_id for r in trips if r.kind == "charger"]
+    holders = [r.zone_id for r in trips if r.kind == "holding"]
+
+    assert len(charged) == 8 == len(set(charged))
     assert len(holders) == 4 == len(set(holders))
 
     for zone_id in holders:
@@ -431,17 +453,15 @@ def test_holding_cells_receive_unique_reservations(twelve):
 
 def test_no_request_robot_remains_stopped_on_a_transit_cell(scenarios, terminals):
     for executor, monitor, _ in scenarios.values():
-
         for now, robots, _ in monitor.samples:
             for robot_id, (cell, status, state, _) in robots.items():
-
                 if state is None:
                     continue
 
                 # Never an unlaunched REQUEST at the end of an instant.
                 assert state is not ChargeState.REQUEST, (robot_id, now)
 
-                if state in SETTLED_STATES:
+                if state in SETTLED_STATES or state is ChargeState.CHARGING:
                     assert cell in terminals, (robot_id, now)
 
                 if state in TRAVEL_STATES:
@@ -449,7 +469,11 @@ def test_no_request_robot_remains_stopped_on_a_transit_cell(scenarios, terminals
 
         for record in executor.charge.values():
             assert record.departed_at == record.requested_at
-            assert record.state in SETTLED_STATES
+            # Settled on a terminal, or back in the fleet having charged
+            # and cleared the access edge (B4).
+            assert (
+                record.state in SETTLED_STATES or record.state is ChargeState.REJOINED
+            )
 
 
 def test_terminal_access_cannot_create_an_opposite_edge_swap(scenarios, warehouse):
@@ -471,24 +495,44 @@ def test_terminal_access_cannot_create_an_opposite_edge_swap(scenarios, warehous
     bank.cleared(zone_id, "robot_a")
     assert zone_id in bank.free()
 
-    # Execution: each charger / holding cell is entered once, by its
-    # holder, and never left -- so no opposite request on its edge.
+    # Execution: a charger / holding cell is entered only by its
+    # holder, and left only by that same holder after it is full (B4),
+    # so the access edge never carries two opposing requests.
     for executor, monitor, _ in scenarios.values():
-
         cells = {
             slot.cell: slot
             for b in (executor.chargers, executor.holding)
             for slot in b.slots.values()
         }
 
-        entries = [(r, t) for _, r, _, t in monitor.moves if t in cells]
-        exits = [(r, s) for _, r, s, _ in monitor.moves if s in cells]
+        entries = [(now, r, t) for now, r, _, t in monitor.moves if t in cells]
+        exits = [(now, r, src) for now, r, src, _ in monitor.moves if src in cells]
 
-        assert exits == []
-        assert len(entries) == len({t for _, t in entries})
+        # Only a charger is ever left, and only by the robot that was
+        # charging on it. Holding cells are still never left in B4.
+        charger_cells = {slot.cell for slot in executor.chargers.slots.values()}
 
-        for robot_id, cell in entries:
-            assert cells[cell].robot_id == robot_id
+        history = {
+            (record.robot_id, record.target_cell)
+            for record in (
+                *executor.charge_history,
+                *executor.charge.values(),
+            )
+        }
+
+        for _, robot_id, cell in exits:
+            assert cell in charger_cells, (robot_id, cell)
+            assert (robot_id, cell) in history, (robot_id, cell)
+
+        # Each terminal is entered at most once per occupancy, by its
+        # own holder, and an entry never coincides with an exit.
+        for now, robot_id, cell in entries:
+            assert (robot_id, cell) in history, (robot_id, cell)
+            assert not any(other == now and src == cell for other, _, src in exits), (
+                robot_id,
+                cell,
+                now,
+            )
 
         assert executor.result.yield_events == 0
         assert len(executor.engine.reservations.audit()) == 0
@@ -497,21 +541,34 @@ def test_terminal_access_cannot_create_an_opposite_edge_swap(scenarios, warehous
 def test_resource_remains_unavailable_while_occupied(late):
     executor, monitor, _ = late
 
-    occupants = {
-        zone_id: slot.robot_id
-        for zone_id, slot in executor.chargers.slots.items()
-    }
+    # Once occupied, a charger keeps its robot for the whole charge and
+    # is handed to nobody else while that robot reverses out (B4).
+    records = [
+        record
+        for record in (*executor.charge_history, *executor.charge.values())
+        if record.kind == "charger"
+    ]
 
-    # Once occupied, every charger kept its robot to the end of the run.
-    for zone_id, robot_id in occupants.items():
+    assert records
 
-        arrived = executor.charge[robot_id].arrived_at
-
+    for record in records:
         for now, _, slots in monitor.instants():
-            if now >= arrived:
-                assert slots[zone_id] == (ResourceState.OCCUPIED, robot_id)
+            if not record.arrived_at <= now:
+                continue
 
-    assert executor.chargers.free() == []
+            state, holder = slots[record.zone_id]
+
+            if now < record.charge_completed_at:
+                assert (state, holder) == (
+                    ResourceState.OCCUPIED,
+                    record.robot_id,
+                )
+
+            elif record.rejoined_at is not None and now < record.rejoined_at:
+                assert (state, holder) == (
+                    ResourceState.VACATING,
+                    record.robot_id,
+                )
 
 
 # ----------------------------------------------------------------------
@@ -546,11 +603,9 @@ def test_saturation_falls_back_to_a_safe_stage_zone(saturated, terminals):
 
 def test_charging_scheduler_never_modifies_order_ownership(scenarios):
     for executor, _, statuses in scenarios.values():
-
         owner = {}
 
         for order_id, status, _, robot_id in statuses:
-
             if status is OrderStatus.ASSIGNED:
                 assert order_id not in owner
                 owner[order_id] = robot_id
@@ -560,13 +615,24 @@ def test_charging_scheduler_never_modifies_order_ownership(scenarios):
         assert len(owner) == len(executor.queue)
         assert all(o.status is OrderStatus.COMPLETED for o in executor.queue.orders)
 
-        for record in executor.charge.values():
-            later = [
-                d for d in executor.result.dispatches
+        # A robot in the charging workflow takes no new order while it
+        # is in it. After B4 it may be given work again once it has
+        # charged and rejoined, so the window that must stay empty ends
+        # at the rejoin, not at the end of the run.
+        for record in {
+            id(r): r for r in (*executor.charge_history, *executor.charge.values())
+        }.values():
+            end = record.rejoined_at if record.rejoined_at is not None else None
+
+            during = [
+                d
+                for d in executor.result.dispatches
                 if d.robot_id == record.robot_id
-                and d.sim_time >= record.requested_at
+                and d.sim_time >= float(record.requested_at)
+                and (end is None or d.sim_time < float(end))
             ]
-            assert later == []
+
+            assert during == []
 
 
 def test_behaviour_is_deterministic(config, warehouse, late):
@@ -581,27 +647,98 @@ def test_behaviour_is_deterministic(config, warehouse, late):
 
 
 # ----------------------------------------------------------------------
-# No charging exists yet.
+# SOC rises only while charging (B4). Before B4 it never rose at all;
+# the invariant is now narrower, not gone.
 # ----------------------------------------------------------------------
 
 
-def test_no_soc_increase_exists_yet(scenarios):
+def test_soc_rises_only_while_charging(scenarios):
+    """Outside a charge session SOC still only ever falls."""
+
     for executor, monitor, _ in scenarios.values():
+        # When each robot was charging, by sampled instant.
+        windows = {}
+
+        for record in (
+            *executor.charge_history,
+            *executor.charge.values(),
+        ):
+            if record.charge_started_at is None:
+                continue
+
+            windows.setdefault(record.robot_id, []).append(
+                (
+                    float(record.charge_started_at),
+                    float(
+                        record.charge_completed_at
+                        if record.charge_completed_at is not None
+                        else executor.engine.time
+                    ),
+                )
+            )
 
         last = {}
+        last_at = {}
 
-        for _, robots, _ in monitor.samples:
+        for sim_time, robots, _ in monitor.samples:
             for robot_id, (_, _, _, soc) in robots.items():
-                assert soc <= last.get(robot_id, soc)
+                previous = last.get(robot_id)
+
+                if previous is not None and soc > previous:
+                    # A rise is legal only across a charge session.
+                    since = last_at[robot_id]
+
+                    assert any(
+                        start < sim_time and end > since
+                        for start, end in windows.get(robot_id, ())
+                    ), (
+                        f"{robot_id} SOC rose from {float(previous)} to "
+                        f"{float(soc)} between t={since} and "
+                        f"t={sim_time} without charging"
+                    )
+
                 last[robot_id] = soc
+                last_at[robot_id] = sim_time
 
-        # On a charger the robot only idles: exactly 1 % per 300 s.
-        now = executor.engine.time
-        config = executor.battery.config
 
-        for record in executor.charge.values():
-            if record.kind == "charger":
-                assert executor.battery.soc(record.robot_id, now) == (
-                    record.arrival_soc
-                    - stationary_energy(config, now - record.arrived_at)
-                )
+def test_a_charged_robot_reaches_exactly_full(scenarios):
+    """Every completed session ends at exactly 100%, never above."""
+
+    full = Fraction(100)
+
+    for executor, _, _ in scenarios.values():
+        for record in (
+            *executor.charge_history,
+            *executor.charge.values(),
+        ):
+            if record.charge_completed_at is None:
+                continue
+
+            assert (
+                record.charge_duration_s
+                == (full - record.arrival_soc)
+                / executor.battery.config.charging_percent_per_second
+            )
+
+            reached = record.arrival_soc + record.charge_gained
+
+            assert reached == full
+
+
+def test_holding_robots_are_not_promoted_in_b4(scenarios):
+    """A freed charger does not pull a robot out of a holding cell.
+
+    Queue promotion is B5. This is a scope guard: B4 must not quietly
+    implement it.
+    """
+
+    for executor, _, _ in scenarios.values():
+        for record in (
+            *executor.charge_history,
+            *executor.charge.values(),
+        ):
+            if record.kind != "holding":
+                continue
+
+            assert record.state is ChargeState.HOLDING
+            assert record.charge_started_at is None
