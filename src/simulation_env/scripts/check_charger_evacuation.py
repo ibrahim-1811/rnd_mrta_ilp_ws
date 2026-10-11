@@ -16,8 +16,9 @@ Headless demonstration on the V2 map with controlled initial SOCs:
 
 For every scenario it checks: every requester reaches its reserved
 terminal; a charger robot charges to exactly 100%, reverses off and
-rejoins, and its slot is FREE again; a holding robot stays put (B5);
-a charger is only ever entered or left by the robot holding it at the
+rejoins, and its slot is FREE again; a holding robot either stays put
+or is promoted onto a freed charger (B5) and leaves only then; a
+terminal is only ever entered or left by the robot holding it at the
 time; no robot moves terminal -> terminal; no yield; no reservation
 violation; SOC rises only inside a charge session. Exits non-zero on
 any failure.
@@ -222,8 +223,24 @@ def check(ex, moves, soc_rose):
             if ex.engine.robots[robot_id].cell == record.target_cell:
                 problems.append(f"{robot_id} never left its charger")
 
+        elif record.state is ChargeState.PROMOTED:
+            # B5: a waiting robot given a freed charger. It may only
+            # have left its holding cell because it was promoted, and
+            # the cell must be released rather than left occupied.
+            if record.kind != "holding":
+                problems.append(f"{robot_id} was promoted out of {record.kind}")
+
+            if record.promoted_at is None or record.left_holding_at is None:
+                problems.append(f"{robot_id} left holding without a promotion")
+
+            if ex.holding.slots[record.zone_id].robot_id == robot_id:
+                problems.append(f"{record.zone_id} was not released")
+
+            if record.charge_started_at is not None:
+                problems.append(f"{robot_id} charged in a {record.kind} cell")
+
         else:
-            # Holding and Stage Zone fallbacks stay put: promotion is B5.
+            # Still waiting, or on a Stage Zone fallback: stays put.
             if record.state not in SETTLED_STATES:
                 problems.append(f"{robot_id} ended in {record.state.value}")
 
@@ -233,7 +250,14 @@ def check(ex, moves, soc_rose):
             if record.charge_started_at is not None:
                 problems.append(f"{robot_id} charged in a {record.kind} cell")
 
-        if record.departed_at != record.requested_at:
+            # Nothing waits next to an empty charger (B5).
+            if record.state is ChargeState.HOLDING and ex.chargers.free():
+                problems.append(f"{robot_id} waits while a charger is free")
+
+        if record.departed_at != record.requested_at and record.promoted_from is None:
+            # A promoted robot departs when its holding cell is clear,
+            # not when it first requested; every other trip leaves at
+            # the instant it asks.
             problems.append(f"{robot_id} waited before leaving")
 
         if set(record.path[1:-1]) & terminals:

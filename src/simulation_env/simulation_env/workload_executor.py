@@ -42,8 +42,10 @@ from mrta_core.warehouse_map import ZoneType
 
 from simulation_env.charging import (
     DESTINATION,
+    LEAVING_CHARGER_STATES,
     LEAVING_STATES,
     MOVING_STATES,
+    PREEMPT_RECORD_SOC,
     SETTLED_STATES,
     TRAVEL_STATES,
     ChargeRecord,
@@ -277,6 +279,14 @@ class WorkloadResult:
     # Charging (B4). Reporting only.
     charge_sessions: int = 0
     rejoins: int = 0
+
+    # Queue promotion and preemption (B5). Reporting only.
+    promotions: int = 0
+    preemptions: int = 0
+    # Preempted robots that were energy-eligible and went straight back
+    # to work, and those that had to wait in a holding cell instead.
+    preempt_rejoins: int = 0
+    preempt_to_holding: int = 0
 
 
 class WorkloadExecutor:
@@ -582,7 +592,7 @@ class WorkloadExecutor:
             request_soc=event.soc_percent,
         )
 
-    def _evacuate(self) -> int:
+    def _evacuate(self, only=None, banks=None, *, preempt=True) -> int:
         """Send every robot in REQUEST to a reserved non-transit terminal.
 
         1. a FREE charger, cheapest by directed A*
@@ -591,14 +601,20 @@ class WorkloadExecutor:
 
         Every reservation is made before the robot moves. Robots asking
         at the same instant are paired as one batch, so they reserve
-        distinct cells. There is no queue promotion, preemption or
-        charging here. Returns how many robots set off.
+        distinct cells. A CHARGE_DUE robot that got no charger may then
+        preempt one (B5). Returns how many robots set off.
+
+        ``only`` and ``banks`` restrict the pass to named robots and a
+        shorter list of banks; with ``preempt=False`` that is the
+        preempted-robot path, which must take a holding cell and must
+        not itself preempt anybody.
         """
 
         waiting = sorted(
             robot_id
             for robot_id, record in self.charge.items()
             if record.state is ChargeState.REQUEST
+            and (only is None or robot_id in only)
         )
 
         if not waiting:
@@ -617,7 +633,7 @@ class WorkloadExecutor:
 
         claims = {}
 
-        for bank in (self.chargers, self.holding):
+        for bank in banks or (self.chargers, self.holding):
             left = {r: c for r, c in cells.items() if r not in claims}
 
             if not left:
@@ -705,6 +721,9 @@ class WorkloadExecutor:
             # work in traffic and never count as mission completion.
             self.engine.assign_missions_batch(missions, parking=set(missions))
 
+        if preempt:
+            self._preempt(claims)
+
         return len(missions)
 
     def _settle(self, robot_id) -> None:
@@ -787,7 +806,6 @@ class WorkloadExecutor:
 
         record = self.charge[robot_id]
         now = self.engine.time
-        robot = self.engine.robots[robot_id]
 
         record.charge_completed_at = now
         record.charge_gained = self.battery.soc(robot_id, now) - record.arrival_soc
@@ -803,6 +821,26 @@ class WorkloadExecutor:
             f"{float(record.charge_duration_s):.4f} s; vacating",
         )
 
+        record.state = ChargeState.LEAVING_CHARGER
+        record.left_charger_at = now
+
+        self._reverse_off_terminal(robot_id, record)
+
+    def _reverse_off_terminal(self, robot_id, record) -> None:
+        """Drive one cell, off the terminal, back into the aisle it came from.
+
+        Built here rather than planned: the destination is a bare aisle
+        cell, not a zone, and the move is the exact reverse of the entry
+        the topology gate already proves legal. The segment carries no
+        exit_cell, so the engine drives it as a plain move and never
+        treats the terminal as a service station.
+
+        Shared by every exit from a terminal -- a full robot leaving its
+        charger (B4), a preempted one, and a promoted one leaving its
+        holding cell (B5) -- so the three cannot drift apart.
+        """
+
+        robot = self.engine.robots[robot_id]
         target = record.access_cell
 
         if target is None:
@@ -811,15 +849,6 @@ class WorkloadExecutor:
                 f"{record.zone_id}; the arrival path was not recorded"
             )
 
-        record.state = ChargeState.LEAVING_CHARGER
-        record.left_charger_at = now
-
-        # One cell, off the terminal, back into the aisle it came from.
-        # Built here rather than planned: the destination is a bare
-        # aisle cell, not a zone, and the move is the exact reverse of
-        # the entry the topology gate already proves legal. The segment
-        # carries no exit_cell, so the engine drives it as a plain move
-        # and never treats the charger as a service station.
         resolution = self.warehouse.grid.resolution
 
         segment = MissionSegment(
@@ -845,20 +874,13 @@ class WorkloadExecutor:
         # and this never counts as an order completion.
         self.engine.assign_missions_batch({robot_id: plan}, parking={robot_id})
 
-    def _rejoin(self, robot_id) -> None:
-        """The robot has cleared the access edge: free the slot, rejoin.
-
-        From here it is an ordinary robot again. The unchanged B2 gate
-        re-tests it at its new SOC on the next dispatch, so it can take
-        work, and nothing about its order history changed.
-        """
-
-        record = self.charge[robot_id]
-        now = self.engine.time
+    def _assert_terminal_cleared(self, robot_id, record, states) -> None:
+        """Refuse to release a slot before the robot has really left it."""
 
         robot = self.engine.robots[robot_id]
+
         if (
-            record.state is not ChargeState.LEAVING_CHARGER
+            record.state not in states
             or record.access_cell is None
             or robot.cell != record.access_cell
             or robot.status is not GridRobotStatus.IDLE
@@ -868,6 +890,21 @@ class WorkloadExecutor:
                 f"{robot_id} cannot rejoin before physically clearing "
                 f"{record.zone_id} into {record.access_cell}; at {robot.cell}"
             )
+
+    def _rejoin(self, robot_id) -> None:
+        """The robot has cleared the access edge: free the slot, rejoin.
+
+        From here it is an ordinary robot again. The unchanged B2 gate
+        re-tests it at its new SOC on the next dispatch, so it can take
+        work, and nothing about its order history changed. Reached by a
+        robot that charged to 100% (B4) and by a preempted robot that is
+        still energy-eligible (B5).
+        """
+
+        record = self.charge[robot_id]
+        now = self.engine.time
+
+        self._assert_terminal_cleared(robot_id, record, LEAVING_CHARGER_STATES)
 
         self.chargers.cleared(record.zone_id, robot_id)
 
@@ -887,6 +924,430 @@ class WorkloadExecutor:
             record.reason,
             f"off {record.zone_id}, access edge clear; available again",
         )
+
+    # -- queue promotion and preemption (B5) ----------------
+
+    def _queue_order(self, robot_ids) -> list:
+        """Waiting robots in the frozen queue-discipline order.
+
+        docs/DECISIONS.md, "Charger Queue Discipline": lowest SOC, then
+        earliest charge request, then ``robot_id`` purely as the final
+        deterministic engineering tie-break. It carries no scientific
+        priority meaning.
+        """
+
+        now = self.engine.time
+
+        return sorted(
+            robot_ids,
+            key=lambda robot_id: (
+                self.battery.soc(robot_id, now),
+                self.charge[robot_id].requested_at,
+                robot_id,
+            ),
+        )
+
+    def _promote(self) -> int:
+        """Give every FREE charger to the robot that has waited best for it.
+
+        One idempotent pass per dispatch, so it fires both when a
+        charger is released and when a waiting robot arrives in holding.
+        The pair (FREE charger, HOLDING robot) therefore never survives
+        a tick, which is what stops a robot sitting in a holding cell
+        while a charger stands empty.
+
+        Robot priority is the frozen queue discipline. The cell each
+        promoted robot gets is its cheapest FREE charger by directed A*
+        from the aisle cell it will really set off from -- never
+        Manhattan. Returns how many robots were promoted.
+        """
+
+        self._expire_promises()
+
+        waiting = [
+            robot_id
+            for robot_id, record in self.charge.items()
+            if record.state is ChargeState.HOLDING
+        ]
+
+        if not waiting:
+            return 0
+
+        # Bank cells a robot is standing on are not free to give away.
+        # A waiting robot stands on its holding cell, never on a
+        # charger, so no candidate excludes itself here.
+        blocked = frozenset(robot.cell for robot in self.engine.robots.values())
+
+        promoted = 0
+
+        for robot_id in self._queue_order(waiting):
+            candidates = self.chargers.free(blocked)
+
+            # A slot promised to this robot by a preemption is not on
+            # general offer, but it is exactly what this robot is here
+            # for -- once its previous holder has physically left it.
+            promise = self.chargers.promised(robot_id)
+
+            if promise is not None:
+                if self.chargers.slots[promise].state is ResourceState.FREE:
+                    candidates = [promise, *candidates]
+
+                elif not candidates:
+                    # Still being vacated. Waiting one tick is correct:
+                    # nobody else can take it.
+                    continue
+
+            if not candidates:
+                break
+
+            record = self.charge[robot_id]
+
+            # A holding cell is non-transit, so no route starts on one:
+            # the robot leaves by reversing into its access cell, and
+            # that is where its charger route begins.
+            costs = {}
+
+            for zone_id in candidates:
+                cost = self.chargers.route_cost(
+                    record.access_cell, zone_id, self.routes
+                )
+
+                if cost is not None:
+                    costs[zone_id] = cost
+
+            if not costs:
+                continue
+
+            zone_id = min(costs, key=lambda candidate: (costs[candidate], candidate))
+
+            if promise is not None and promise != zone_id:
+                # It found something nearer that nobody is leaving.
+                self.chargers.cancel_promise(promise)
+
+            self._grant_charger(robot_id, record, zone_id, costs[zone_id])
+
+            promoted += 1
+
+        return promoted
+
+    def _expire_promises(self) -> None:
+        """Drop a preemption promise its robot can no longer collect.
+
+        A promise is owed to a robot on its way to, or already in, a
+        holding cell. If it ended up somewhere else -- a Stage Zone
+        under saturation, or back in the fleet -- the charger goes back
+        on general offer rather than standing empty for nobody.
+        """
+
+        owed = frozenset({ChargeState.TO_HOLDING, ChargeState.HOLDING})
+
+        for zone_id, slot in self.chargers.slots.items():
+            if slot.promised_to is None:
+                continue
+
+            record = self.charge.get(slot.promised_to)
+
+            if record is None or record.state not in owed:
+                self.chargers.cancel_promise(zone_id)
+
+    def _grant_charger(self, robot_id, record, zone_id, cost) -> None:
+        """Reserve a FREE charger for a waiting robot and start it leaving.
+
+        The holding slot goes OCCUPIED -> VACATING before the robot
+        moves and is released only once it physically stands on its
+        access cell, exactly as a charger is. So an entering and a
+        leaving robot can never meet on a terminal access edge, and no
+        second robot can be promoted into the cell being vacated.
+        """
+
+        now = self.engine.time
+
+        # Raises rather than double-booking if either side is already
+        # held: one robot, one charger, one holding cell.
+        self.chargers.reserve(zone_id, robot_id, now, cost)
+        self.holding.vacate(record.zone_id, robot_id)
+
+        record.state = ChargeState.LEAVING_HOLDING
+        record.promoted_at = now
+
+        self.result.promotions += 1
+
+        self._battery_event(
+            robot_id,
+            "PROMOTE",
+            record.reason,
+            f"holding {record.zone_id} -> charger {zone_id}, "
+            f"directed A* {cost:.1f} m",
+        )
+
+        self._reverse_off_terminal(robot_id, record)
+
+    def _leave_holding(self, robot_id) -> None:
+        """A promoted robot is clear of holding: drive to its charger.
+
+        The holding trip ends here and the charger trip is a new
+        record, so every record still describes exactly one terminal.
+        The original charge request is carried over rather than
+        restarted, which is what keeps the queue discipline and the
+        reporting honest about how long the robot really waited.
+        """
+
+        record = self.charge[robot_id]
+        now = self.engine.time
+
+        self._assert_terminal_cleared(
+            robot_id,
+            record,
+            frozenset({ChargeState.LEAVING_HOLDING}),
+        )
+
+        zone_id = self.chargers.held_by(robot_id)
+
+        if zone_id is None:
+            raise RuntimeError(
+                f"{robot_id} left holding {record.zone_id} without a "
+                f"reserved charger"
+            )
+
+        self.holding.cleared(record.zone_id, robot_id)
+
+        record.state = ChargeState.PROMOTED
+        record.left_holding_at = now
+
+        self.charge_history.append(record)
+
+        slot = self.chargers.slots[zone_id]
+
+        trip = ChargeRecord(
+            robot_id=robot_id,
+            reason=record.reason,
+            requested_at=record.requested_at,
+            request_cell=record.request_cell,
+            request_soc=record.request_soc,
+            state=ChargeState.TO_CHARGER,
+            kind="charger",
+            zone_id=zone_id,
+            target_cell=slot.cell,
+            route_cost_m=slot.route_cost_m,
+            departed_at=now,
+            promoted_from=record.zone_id,
+        )
+
+        # The same production router and non-transit view the promotion
+        # cost came from, so this is the route that was costed.
+        plan = plan_from_cell(
+            self.warehouse,
+            self.engine.robots[robot_id].cell,
+            [zone_id],
+            start_label=robot_id,
+            cache=self.routes,
+        )
+
+        trip.path = plan.path
+
+        self.charge[robot_id] = trip
+
+        self._battery_event(
+            robot_id,
+            "RESERVE",
+            trip.reason,
+            f"charger {zone_id} at {slot.cell}, directed A* "
+            f"{slot.route_cost_m:.1f} m, promoted from {record.zone_id}",
+        )
+
+        self.engine.assign_missions_batch({robot_id: plan}, parking={robot_id})
+
+    def _preempt(self, claims) -> int:
+        """Let a CHARGE_DUE robot take a charger from a higher-SOC robot.
+
+        docs/DECISIONS.md, "Charger Saturation and Preemption": only a
+        CHARGE_DUE robot may preempt, the victim is the charging robot
+        with the highest SOC, and only if that SOC is strictly above the
+        requester's -- a lower-SOC charging robot is never replaced by a
+        higher-SOC requester. ``victim_soc_ge_80`` is recorded, never
+        branched on: the rule always selects the maximum.
+
+        Preemption frees a charger; it does not hand it over. The slot
+        stays unavailable until the victim has physically cleared the
+        access edge, and the frozen queue discipline then decides who
+        takes it. The requester is already on its way to a holding cell,
+        so it never waits in an aisle, and it preempts once -- at the
+        instant it requests -- never again from the queue.
+
+        Returns how many charge sessions were cut short.
+        """
+
+        now = self.engine.time
+
+        requesters = [
+            robot_id
+            for robot_id, (kind, *_) in claims.items()
+            if kind != "charger" and self.charge[robot_id].reason == "CHARGE_DUE"
+        ]
+
+        if not requesters:
+            return 0
+
+        cut = 0
+
+        for robot_id in self._queue_order(requesters):
+            requester_soc = self.battery.soc(robot_id, now)
+
+            # Recomputed per requester: a robot cut short above is no
+            # longer CHARGING, so it cannot be preempted twice.
+            found = self._select_victim(requester_soc)
+
+            if found is None:
+                continue
+
+            victim_soc, victim = found
+
+            self._cut_charge(victim, robot_id, victim_soc, requester_soc)
+
+            cut += 1
+
+        return cut
+
+    def _select_victim(self, requester_soc):
+        """The charging robot a requester at this SOC may displace, or None.
+
+        The frozen rule, as one expression: the maximum-SOC charging
+        robot, and only if its SOC is strictly above the requester's.
+        ``robot_id`` breaks an exact SOC tie and nothing else.
+        """
+
+        now = self.engine.time
+
+        victims = sorted(
+            (
+                (self.battery.soc(victim, now), victim)
+                for victim, record in self.charge.items()
+                if record.state is ChargeState.CHARGING
+            ),
+            key=lambda pair: (-pair[0], pair[1]),
+        )
+
+        if not victims or victims[0][0] <= requester_soc:
+            return None
+
+        return victims[0]
+
+    def _cut_charge(self, robot_id, requester_id, victim_soc, requester_soc) -> None:
+        """End one charge session early and send the robot off the charger."""
+
+        record = self.charge[robot_id]
+        now = self.engine.time
+
+        elapsed = self.engine.end_charge_early(robot_id)
+
+        record.preempted_at = now
+        record.preempted_by = requester_id
+        record.charge_elapsed_s = elapsed
+        record.charge_gained = self.battery.soc(robot_id, now) - record.arrival_soc
+        record.victim_soc_ge_80 = victim_soc >= PREEMPT_RECORD_SOC
+        record.state = ChargeState.PREEMPTED_LEAVING_CHARGER
+        record.left_charger_at = now
+
+        self.chargers.vacate(record.zone_id, robot_id)
+
+        # The charger is assigned to the requester from this instant,
+        # though it may not enter until the victim has cleared the
+        # access edge. Otherwise the victim -- standing one cell away
+        # with the lowest SOC in the bank -- would simply take it back
+        # and the preemption would achieve nothing.
+        self.chargers.promise(record.zone_id, requester_id, now)
+
+        self.result.preemptions += 1
+
+        self._battery_event(
+            robot_id,
+            "PREEMPTED",
+            record.reason,
+            f"{record.zone_id} given up for {requester_id} at "
+            f"{float(requester_soc):.4f}%; gained "
+            f"{float(record.charge_gained):.4f}% in {float(elapsed):.4f} s; "
+            f"victim_soc_ge_{int(PREEMPT_RECORD_SOC)}="
+            f"{str(record.victim_soc_ge_80).lower()}; vacating",
+        )
+
+        self._reverse_off_terminal(robot_id, record)
+
+    def _after_preempt(self, robot_id) -> None:
+        """A preempted robot is clear of the charger: rejoin, or wait.
+
+        docs/DECISIONS.md, "Preempted Robot": it rejoins the available
+        fleet if it is energy-eligible for work, and otherwise waits in
+        a dedicated holding cell. "Energy-eligible for work" is the
+        unchanged CHARGE_NEEDED test, and with no pending work a robot
+        is never CHARGE_NEEDED (B2), so it rejoins and parks as usual --
+        end-of-work partial charging is G6, in B6.
+
+        A robot still at or below the CHARGE_DUE threshold is never fit
+        for work, whatever the pending orders look like: the B2 gate
+        would pull it straight back out of the fleet on the same tick.
+        It waits instead.
+        """
+
+        record = self.charge[robot_id]
+
+        self._assert_terminal_cleared(
+            robot_id,
+            record,
+            frozenset({ChargeState.PREEMPTED_LEAVING_CHARGER}),
+        )
+
+        soc = self.battery.soc(robot_id, self.engine.time)
+
+        pending = self.queue.pending()
+
+        eligible = soc > self.battery.config.charge_due_percent and (
+            not pending or self._has_eligible_order(robot_id, pending)
+        )
+
+        record.preempt_rejoined = eligible
+
+        if eligible:
+            self.result.preempt_rejoins += 1
+            self._rejoin(robot_id)
+            return
+
+        self.result.preempt_to_holding += 1
+
+        self._wait_in_holding(robot_id, record)
+
+    def _wait_in_holding(self, robot_id, record) -> None:
+        """A preempted robot with no eligible work waits in a holding cell.
+
+        It takes a holding cell, never the charger it has just given up:
+        that slot is FREE and belongs to the queue discipline now, and
+        the robot that displaced it has a strictly lower SOC. The charge
+        request itself continues, as a fresh holding trip, so saturation
+        falls back exactly as it does for any other requester.
+        """
+
+        now = self.engine.time
+
+        self.chargers.cleared(record.zone_id, robot_id)
+
+        record.state = ChargeState.PREEMPTED
+
+        self.charge_history.append(record)
+
+        self._battery_event(
+            robot_id,
+            "PREEMPT_WAIT",
+            record.reason,
+            f"off {record.zone_id} at {float(self.battery.soc(robot_id, now)):.4f}%, "
+            f"no battery-eligible order; waits in holding",
+        )
+
+        self._enter_request(
+            robot_id,
+            record.reason,
+            f"preempted off {record.zone_id} by {record.preempted_by}",
+        )
+
+        self._evacuate(only={robot_id}, banks=(self.holding,), preempt=False)
 
     def _has_eligible_order(self, robot_id, pending) -> bool:
         """Is any pending order battery-eligible for this robot?
@@ -1167,6 +1628,12 @@ class WorkloadExecutor:
             # it.
             if free and pending:
                 free = self._battery_gate(free, pending)
+
+            # A robot already waiting in holding has first claim on a
+            # free charger, ahead of a robot requesting at this instant:
+            # the queue discipline is lowest SOC first, and a waiter has
+            # by definition been out of the fleet for longer (B5).
+            started += self._promote()
 
             # Every robot in REQUEST -- from the gate, or from finishing
             # a flagged order this tick -- leaves the aisle now, before
@@ -1631,8 +2098,18 @@ class WorkloadExecutor:
                 self._retire(robot_id)
 
             elif record is not None and record.state in LEAVING_STATES:
-                # Standing on the access aisle cell: the edge is clear.
-                self._rejoin(robot_id)
+                # Standing on the access aisle cell: the edge is clear,
+                # the slot can be released, and what happens next
+                # depends on why the robot left the terminal.
+                if record.state is ChargeState.LEAVING_CHARGER:
+                    self._rejoin(robot_id)
+
+                elif record.state is ChargeState.PREEMPTED_LEAVING_CHARGER:
+                    self._after_preempt(robot_id)
+
+                else:
+                    self._leave_holding(robot_id)
+
                 self._retire(robot_id)
 
             if robot_id in self.repositioning:
@@ -1887,8 +2364,11 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
         and executor.engine.robots[record.robot_id].cell not in terminals
     ]
 
+    result = executor.result
+
     lines = [
-        "CHARGING (B4: charge to 100%, leave the charger, rejoin the fleet)",
+        "CHARGING (B4: charge to 100%, leave, rejoin; B5: promotion and "
+        "preemption)",
         *bank_lines(executor.chargers, every_row=True),
         *bank_lines(executor.holding, every_row=False),
         f"  requests : {len(records)} | charging "
@@ -1899,10 +2379,15 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
         f"{count(ChargeState.STAGE_FALLBACK)} | still travelling "
         f"{count(*TRAVEL_STATES)} | still in REQUEST "
         f"{count(ChargeState.REQUEST)}",
-        f"  charge sessions   : {executor.result.charge_sessions} started, "
-        f"{executor.result.rejoins} robot(s) back in the fleet",
-        f"  saturation events : {executor.result.saturation_events}",
-        f"  yield events      : {executor.result.yield_events} (whole run)",
+        f"  charge sessions   : {result.charge_sessions} started, "
+        f"{result.rejoins} robot(s) back in the fleet",
+        f"  promotions        : {result.promotions} out of holding onto a "
+        f"freed charger (lowest SOC first)",
+        f"  preemptions       : {result.preemptions} charge(s) cut short "
+        f"({result.preempt_rejoins} victim(s) rejoined, "
+        f"{result.preempt_to_holding} went to holding)",
+        f"  saturation events : {result.saturation_events}",
+        f"  yield events      : {result.yield_events} (whole run)",
     ]
 
     for record in records:
@@ -1946,11 +2431,18 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
         )
 
         for record in sorted(unique, key=lambda r: (r.charge_started_at, r.robot_id)):
-            done = (
-                "charging"
-                if record.charge_completed_at is None
-                else f"t={float(record.charge_completed_at):.4f}"
-            )
+            if record.preempted_at is not None:
+                done = (
+                    f"PREEMPTED t={float(record.preempted_at):.4f} by "
+                    f"{record.preempted_by} after "
+                    f"{float(record.charge_elapsed_s):.4f} s"
+                )
+
+            elif record.charge_completed_at is None:
+                done = "charging"
+
+            else:
+                done = f"t={float(record.charge_completed_at):.4f}"
 
             back = (
                 "not yet"
@@ -1961,7 +2453,12 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
 
             lines.append(
                 f"    {record.robot_id} {record.zone_id} "
-                f"start t={float(record.charge_started_at):.4f} SOC "
+                + (
+                    ""
+                    if record.promoted_from is None
+                    else f"(promoted from {record.promoted_from}) "
+                )
+                + f"start t={float(record.charge_started_at):.4f} SOC "
                 f"{float(record.arrival_soc):.4f}%  "
                 f"{float(record.charge_duration_s):.4f} s  full {done}"
                 + (
@@ -1972,10 +2469,21 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
                 + f"  rejoined {back}"
             )
 
+    # The B3 invariant: a requester leaves the aisle at the instant it
+    # asks, so this must stay 0. A promoted robot is deliberately not
+    # counted here -- it departs when its holding cell is clear, and it
+    # waited on a terminal, never in an aisle. Its wait is the queue
+    # wait below, which is a B5 outcome rather than an invariant.
     waited = [
         record.departed_at - record.requested_at
         for record in records
-        if record.departed_at is not None
+        if record.departed_at is not None and record.promoted_from is None
+    ]
+
+    queued = [
+        record.departed_at - record.requested_at
+        for record in (*executor.charge_history, *records)
+        if record.departed_at is not None and record.promoted_from is not None
     ]
 
     lines.append(
@@ -1983,5 +2491,12 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
         f"{float(max(waited, default=0)):.4f} s; REQUEST robots standing "
         f"on a transit cell now: {len(stuck)}" + (f" {stuck}" if stuck else "")
     )
+
+    if queued:
+        lines.append(
+            f"  request -> charger   : max "
+            f"{float(max(queued)):.4f} s waited in holding over "
+            f"{len(queued)} promoted trip(s)"
+        )
 
     return lines

@@ -468,6 +468,25 @@ are ordered by:
 3. robot_id, only as the final deterministic engineering tie-break
 ```
 
+Implemented in B5 as one idempotent pass per dispatch, so it is applied
+both when a charger is released and when a waiting robot arrives in
+holding. Without the second trigger a robot that arrives next to an
+already-free charger would wait for the *next* release, which is the
+starvation the rule exists to prevent.
+
+A waiting robot is one standing in a holding cell. The robot priority
+is the rule above; the cell it is given is its cheapest FREE charger by
+directed A* from the aisle cell it will set off from, never Manhattan.
+A robot already in holding has priority over a robot requesting at this
+same instant, because it has by definition been out of the fleet longer
+and the queue is ordered on SOC, not arrival.
+
+Promotion applies to holding cells only. A robot on a *Stage Zone*
+saturation fallback is not promoted in B5: unlike a holding robot it
+may never have driven there, so it has no recorded access cell to
+reverse into. Saturation is already a recorded event and needs both
+banks full to occur.
+
 ## Preempted Robot
 
 After leaving the charger:
@@ -480,6 +499,65 @@ otherwise -> move to dedicated holding cell
 "Energy-eligible for work" is the CHARGE_NEEDED test above: at least
 one pending dispatchable order satisfies the eligibility equation.
 
+Clarified in B5, 2026-10-11, after both cases were observed to be
+reachable:
+
+```text
+a robot still at or below CHARGE_DUE is never fit for work, whatever
+the pending orders look like: the B2 gate would pull it straight back
+out of the fleet on the same tick. It waits in holding instead.
+```
+
+## Preemption Hands the Charger Over
+
+**APPROVED 2026-10-11 as frozen B5 policy**, subject to three
+conditions, all of which the implementation satisfies and the gates
+check:
+
+```text
+1. exclusive reservation ownership
+   a slot carries at most one assignment; promising an already
+   promised slot, or promising a slot to the robot holding it,
+   raises. Reserving a promised slot by any other robot raises.
+2. safe cancellation of stale promises
+   an assignment is released as soon as its robot can no longer
+   collect it, i.e. it is no longer on its way to, or waiting in,
+   a holding cell. No charger is ever held empty for a robot that
+   is not coming, and no run ends with an assignment outstanding.
+3. physical access-edge clearance before charger entry
+   the assignment does not shorten the slot lifecycle. The holder
+   still goes OCCUPIED -> VACATING -> FREE, and the promised robot
+   may not enter until the previous holder physically stands on
+   the access aisle cell.
+```
+
+Two frozen rules already in this document have to be read together:
+
+```text
+"A charger is reserved when assigned to a robot."
+"A slot is offered only while FREE."
+```
+
+So a preemption assigns the charger to its requester at the instant it
+preempts, while the requester still may not enter until the victim has
+physically cleared the access edge. The slot carries that assignment
+through VACATING and through FREE until the requester collects it.
+
+Measured reason, not a preference: without it the victim -- which ends
+its retreat standing one cell from the charger, with the lowest SOC in
+the bank -- simply wins the queue discipline and re-reserves the
+charger it just gave up, while the requester that displaced it waits
+out a whole further charge. Preemption would be a no-op.
+
+The assignment is released if the requester can no longer collect it,
+so a charger is never held empty for a robot that is not coming.
+
+Consequence, accepted: the requester still drives to the holding cell
+it reserved at request time and is promoted from there, so it makes one
+short extra trip. Handing a reservation to a robot already in flight
+would mean retargeting a mission mid-route, which is new machinery and
+not B5.
+
 ## Holding Cells
 
 Holding cells are dedicated non-transit charging support cells.
@@ -488,9 +566,9 @@ They are not ordinary traffic cells.
 
 If all chargers and holding cells are saturated, V1 records the saturation event and uses a safe non-transit fallback, with Stage Zone as the last fallback.
 
-Until queue promotion exists (B5), a holding cell is simply the safe
-overflow destination for a REQUEST robot that found every charger taken
-(B3).
+A holding cell is the safe overflow destination for a REQUEST robot
+that found every charger taken (B3), and since B5 it is a waiting room
+rather than a destination: see Charger Queue Discipline above.
 
 Do not build a complex charger queue optimizer in V1.
 

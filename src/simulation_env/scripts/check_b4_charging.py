@@ -278,12 +278,25 @@ def check(ex, samples, *, name=None):
             for now, _, slots, cells in samples
             if now == record.rejoined_at
         ]
-        if not clearance or clearance[-1] != (
-            (ResourceState.FREE, None),
-            record.access_cell,
-        ):
+
+        # The leaving robot must have given the slot up, and be standing
+        # on its access cell. Since B5 the slot does not stay FREE: a
+        # waiting robot is promoted onto it in this same instant, so
+        # what must hold is that it is no longer this robot's.
+        if not clearance or clearance[-1][1] != record.access_cell:
+            problems.append(f"{robot_id} was not on its access cell at clearance")
+
+        elif clearance[-1][0][1] == robot_id:
             problems.append(
                 f"{robot_id} slot was not freed at its physical access-cell clearance"
+            )
+
+        elif clearance[-1][0][0] not in (
+            ResourceState.FREE,
+            ResourceState.RESERVED,
+        ):
+            problems.append(
+                f"{record.zone_id} is {clearance[-1][0][0].value} at clearance"
             )
 
     # 5. Slot lifecycle, sampled instant by instant.

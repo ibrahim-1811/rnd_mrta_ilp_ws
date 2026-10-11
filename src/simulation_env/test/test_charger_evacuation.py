@@ -7,8 +7,9 @@ On entering REQUEST a robot reserves, before it moves,
     3. (saturation) the nearest free Stage Zone,
 
 and drives there by the production router. B4 charges to full, then
-physically clears the charger and rejoins. Holding robots remain there
-until B5. Controlled SOCs come from ``battery.initial_soc_overrides`` only.
+physically clears the charger and rejoins. B5 promotes a waiting robot
+out of holding the instant a charger frees, lowest SOC first. Controlled
+SOCs come from ``battery.initial_soc_overrides`` only.
 """
 
 from dataclasses import asdict, replace
@@ -213,6 +214,29 @@ def manhattan(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
+def trip_end(record):
+    """When one terminal trip stopped owning its robot, or None.
+
+    A charger trip ends when the robot rejoins the fleet; a holding
+    trip ends when the robot is promoted and clears the cell (B5); a
+    preempted trip that found no eligible work ends when the robot
+    clears the charger and its holding trip takes over. Consecutive
+    trips are contiguous, so the union of these windows is the whole
+    time the robot was out of the fleet.
+    """
+
+    if record.rejoined_at is not None:
+        return record.rejoined_at
+
+    if record.left_holding_at is not None:
+        return record.left_holding_at
+
+    if record.state is ChargeState.PREEMPTED:
+        return record.left_charger_at
+
+    return None
+
+
 # ----------------------------------------------------------------------
 # 1, 2. Selection is by directed A* cost; Manhattan decides nothing.
 # ----------------------------------------------------------------------
@@ -408,11 +432,18 @@ def test_charger_arrival_makes_the_resource_occupied(four):
 def test_all_chargers_occupied_sends_the_robot_to_holding(late, terminals):
     executor, monitor, _ = late
 
-    record = executor.charge["robot_009"]
+    # The holding trip, as it was taken: every charger was OCCUPIED at
+    # the instant of the request. In B5 the trip then ends in promotion,
+    # so the robot's *current* record is the charger trip that followed.
+    (record,) = [
+        r
+        for r in (*executor.charge_history, *executor.charge.values())
+        if r.robot_id == "robot_009" and r.kind == "holding"
+    ]
 
     assert record.reason == "CHARGE_NEEDED"
     assert record.request_cell not in terminals  # asked from an aisle
-    assert (record.kind, record.state) == ("holding", ChargeState.HOLDING)
+    assert record.state in (ChargeState.HOLDING, ChargeState.PROMOTED)
 
     (slots,) = [s for now, _, s in monitor.instants() if now == record.requested_at]
 
@@ -431,19 +462,35 @@ def test_holding_cells_receive_unique_reservations(twelve):
         for record in (*executor.charge_history, *executor.charge.values())
     }.values()
 
+    # Eight chargers, four holding cells. In B5 each of those four
+    # robots is later promoted onto a freed charger, so a robot can hold
+    # more than one charger trip over the run; the holding cells stay
+    # one trip each.
     charged = [r.zone_id for r in trips if r.kind == "charger"]
     holders = [r.zone_id for r in trips if r.kind == "holding"]
 
-    assert len(charged) == 8 == len(set(charged))
+    assert len(charged) == 12
     assert len(holders) == 4 == len(set(holders))
 
     for zone_id in holders:
         slot = executor.holding.slots[zone_id]
-        assert slot.state is ResourceState.OCCUPIED
-        assert executor.charge[slot.robot_id].zone_id == zone_id
 
-    with pytest.raises(ResourceError):
-        executor.holding.reserve(holders[0], "robot_020", Fraction(1))
+        # Promoted out, or still waiting -- never handed to a second
+        # robot while its own holder was on it.
+        assert slot.state in (ResourceState.FREE, ResourceState.OCCUPIED)
+
+        if slot.robot_id is not None:
+            assert executor.charge[slot.robot_id].zone_id == zone_id
+
+    occupied = [
+        zone_id
+        for zone_id in holders
+        if executor.holding.slots[zone_id].state is ResourceState.OCCUPIED
+    ]
+
+    for zone_id in occupied:
+        with pytest.raises(ResourceError):
+            executor.holding.reserve(zone_id, "robot_020", Fraction(1))
 
 
 # ----------------------------------------------------------------------
@@ -468,7 +515,15 @@ def test_no_request_robot_remains_stopped_on_a_transit_cell(scenarios, terminals
                     assert status is not GridRobotStatus.IDLE, (robot_id, now)
 
         for record in executor.charge.values():
-            assert record.departed_at == record.requested_at
+            if record.promoted_from is None:
+                # A requester departs at the instant it requests.
+                assert record.departed_at == record.requested_at
+            else:
+                # A promoted robot was never in an aisle to begin with:
+                # it departs the instant it is clear of its holding cell
+                # (B5), which is later than the original request.
+                assert record.departed_at > record.requested_at
+
             # Settled on a terminal, or back in the fleet having charged
             # and cleared the access edge (B4).
             assert (
@@ -508,10 +563,11 @@ def test_terminal_access_cannot_create_an_opposite_edge_swap(scenarios, warehous
         entries = [(now, r, t) for now, r, _, t in monitor.moves if t in cells]
         exits = [(now, r, src) for now, r, src, _ in monitor.moves if src in cells]
 
-        # Only a charger is ever left, and only by the robot that was
-        # charging on it. Holding cells are still never left in B4.
-        charger_cells = {slot.cell for slot in executor.chargers.slots.values()}
-
+        # A terminal is left only by the robot that held it -- off a
+        # charger when it is full (B4) or preempted (B5), and off a
+        # holding cell when that robot is promoted (B5). Nobody else can
+        # be on the access edge, because the slot is not FREE until the
+        # leaver stands in the aisle.
         history = {
             (record.robot_id, record.target_cell)
             for record in (
@@ -521,7 +577,6 @@ def test_terminal_access_cannot_create_an_opposite_edge_swap(scenarios, warehous
         }
 
         for _, robot_id, cell in exits:
-            assert cell in charger_cells, (robot_id, cell)
             assert (robot_id, cell) in history, (robot_id, cell)
 
         # Each terminal is entered at most once per occupancy, by its
@@ -618,11 +673,14 @@ def test_charging_scheduler_never_modifies_order_ownership(scenarios):
         # A robot in the charging workflow takes no new order while it
         # is in it. After B4 it may be given work again once it has
         # charged and rejoined, so the window that must stay empty ends
-        # at the rejoin, not at the end of the run.
+        # when the robot leaves the workflow -- not at the end of the
+        # run, and in B5 not necessarily on the trip that started it:
+        # a holding trip ends by handing the robot to a charger trip,
+        # which carries the original request time and closes the window.
         for record in {
             id(r): r for r in (*executor.charge_history, *executor.charge.values())
         }.values():
-            end = record.rejoined_at if record.rejoined_at is not None else None
+            end = trip_end(record)
 
             during = [
                 d
@@ -725,20 +783,96 @@ def test_a_charged_robot_reaches_exactly_full(scenarios):
             assert reached == full
 
 
-def test_holding_robots_are_not_promoted_in_b4(scenarios):
-    """A freed charger does not pull a robot out of a holding cell.
+def test_a_holding_robot_is_promoted_onto_a_freed_charger(scenarios):
+    """Queue promotion (B5), across every controlled scenario.
 
-    Queue promotion is B5. This is a scope guard: B4 must not quietly
-    implement it.
+    A holding cell is a waiting room, not a destination: every holding
+    trip either ends in promotion onto a charger, or the robot is still
+    waiting because every charger stayed taken to the end of the run. A
+    holding trip never charges in place.
     """
 
+    promoted = 0
+
     for executor, _, _ in scenarios.values():
-        for record in (
-            *executor.charge_history,
-            *executor.charge.values(),
-        ):
+        trips = {
+            id(record): record
+            for record in (*executor.charge_history, *executor.charge.values())
+        }.values()
+
+        for record in trips:
             if record.kind != "holding":
                 continue
 
-            assert record.state is ChargeState.HOLDING
             assert record.charge_started_at is None
+            assert record.state in (ChargeState.HOLDING, ChargeState.PROMOTED)
+
+            if record.state is ChargeState.PROMOTED:
+                promoted += 1
+
+                assert record.promoted_at is not None
+                assert record.left_holding_at >= record.promoted_at
+
+                # The charger trip that took over carries the original
+                # request, and really charged.
+                (follow,) = [
+                    r
+                    for r in trips
+                    if r.robot_id == record.robot_id
+                    and r.promoted_from == record.zone_id
+                ]
+
+                assert follow.kind == "charger"
+                assert follow.requested_at == record.requested_at
+                assert follow.departed_at == record.left_holding_at
+                assert follow.charge_started_at is not None
+
+        # Nothing is left waiting next to an empty charger.
+        waiting = [
+            r for r in executor.charge.values() if r.state is ChargeState.HOLDING
+        ]
+
+        if waiting:
+            assert executor.chargers.free() == []
+
+    assert promoted, "no scenario exercised promotion"
+
+
+def test_promotion_takes_the_lowest_soc_waiting_robot(twelve):
+    """The frozen queue discipline: lowest SOC, earliest request, id.
+
+    Twelve robots request at t=0; eight take the chargers and four wait
+    in holding. Each promotion must go to the lowest-SOC robot waiting
+    at that instant.
+    """
+
+    executor, monitor, _ = twelve
+
+    promotions = [
+        record
+        for record in (*executor.charge_history, *executor.charge.values())
+        if record.promoted_at is not None
+    ]
+
+    assert len(promotions) == 4
+
+    by_instant = {sample[0]: sample for sample in monitor.samples}
+
+    for record in promotions:
+        # The sampled instant just before the grant, so the comparison
+        # uses the SOCs the executor itself saw.
+        before = max(now for now in by_instant if now < record.promoted_at)
+
+        _, robots, _ = by_instant[before]
+
+        waiting = {
+            robot_id: soc
+            for robot_id, (_, _, state, soc) in robots.items()
+            if state is ChargeState.HOLDING
+        }
+
+        assert record.robot_id in waiting
+
+        best = min(waiting, key=lambda robot_id: (waiting[robot_id], robot_id))
+
+        assert waiting[record.robot_id] == waiting[best]

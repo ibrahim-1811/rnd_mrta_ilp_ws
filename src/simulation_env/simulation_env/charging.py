@@ -1,13 +1,17 @@
 """Charger and holding terminals: who holds each cell, and in what state.
 
-Battery V1, increments B3 and B4. A robot in charge REQUEST is taken
-off the transit network: it reserves a dedicated non-transit terminal
-and drives there by the production directed A* route (B3). On a charger
-it then charges to 100%, reverses into the access aisle cell and rejoins
-the fleet (B4).
+Battery V1, increments B3, B4 and B5. A robot in charge REQUEST is
+taken off the transit network: it reserves a dedicated non-transit
+terminal and drives there by the production directed A* route (B3). On a
+charger it then charges to 100%, reverses into the access aisle cell and
+rejoins the fleet (B4).
 
-A robot that reaches a *holding* cell still stays there: queue promotion
-is B5.
+A robot that reached a *holding* cell is a waiting robot. When a charger
+becomes FREE it is promoted out of holding onto that charger (B5), and a
+CHARGE_DUE robot that finds every charger occupied may preempt the
+highest-SOC charging robot (B5). Both are frozen policy; see
+docs/DECISIONS.md, "Charger Saturation and Preemption", "Charger Queue
+Discipline" and "Preempted Robot".
 
 Resource states
 ---------------
@@ -65,6 +69,14 @@ from fractions import Fraction
 from mrta_core.warehouse_routing import best_path_to_zone, non_transit_cells
 
 
+# Recorded on every preemption, never branched on. The frozen rule
+# always selects the maximum-SOC victim, so "prefer a robot at or above
+# 80%, otherwise the highest-SOC robot" is one rule, not two; the
+# threshold is kept only so the event record can be analysed later
+# (docs/DECISIONS.md, "Charger Saturation and Preemption").
+PREEMPT_RECORD_SOC = Fraction(80)
+
+
 class ResourceState(str, Enum):
     FREE = "FREE"
     RESERVED = "RESERVED"
@@ -82,10 +94,21 @@ class ChargeState(str, Enum):
     CHARGING = "CHARGING"
     # Full: reversing off the charger into the access aisle cell (B4).
     LEAVING_CHARGER = "LEAVING_CHARGER"
+    # Cut short by a CHARGE_DUE requester: reversing off the charger
+    # with less than a full battery (B5).
+    PREEMPTED_LEAVING_CHARGER = "PREEMPTED_LEAVING_CHARGER"
+    # Clear of the charger it gave up, and not energy-eligible for
+    # work, so the charge request continues as a new holding trip (B5).
+    PREEMPTED = "PREEMPTED"
     # Off the charger, access edge cleared, back in the fleet (B4).
     REJOINED = "REJOINED"
     TO_HOLDING = "TO_HOLDING"
     HOLDING = "HOLDING"
+    # Granted a free charger from holding: reversing off the holding
+    # cell into its access aisle cell (B5). The charger trip itself is a
+    # new record, so this state ends the holding trip.
+    LEAVING_HOLDING = "LEAVING_HOLDING"
+    PROMOTED = "PROMOTED"
     # Saturation: every charger and holding cell is taken.
     TO_STAGE_FALLBACK = "TO_STAGE_FALLBACK"
     STAGE_FALLBACK = "STAGE_FALLBACK"
@@ -101,20 +124,36 @@ TRAVEL_STATES = frozenset(
 )
 
 # Driving *off* a terminal. Arrival clears the slot instead (B4), so
-# this is deliberately not part of TRAVEL_STATES.
+# this is deliberately not part of TRAVEL_STATES. What happens once the
+# slot is clear differs per state: a full robot rejoins the fleet, a
+# preempted one rejoins only if it is energy-eligible, and a promoted
+# one sets off for the charger it was granted.
 LEAVING_STATES = frozenset(
     {
         ChargeState.LEAVING_CHARGER,
+        ChargeState.PREEMPTED_LEAVING_CHARGER,
+        ChargeState.LEAVING_HOLDING,
+    }
+)
+
+# Leaving a charger, either full (B4) or preempted (B5).
+LEAVING_CHARGER_STATES = frozenset(
+    {
+        ChargeState.LEAVING_CHARGER,
+        ChargeState.PREEMPTED_LEAVING_CHARGER,
     }
 )
 
 # In flight either way: the robot is not a stationary obstacle.
 MOVING_STATES = TRAVEL_STATES | LEAVING_STATES
 
-# Standing on a reserved non-transit terminal with no way out in V1 so
-# far. A charging robot is NOT settled -- its charge will finish and it
-# will rejoin -- so the run must not be considered over while it
-# charges. Holding promotion is still B5.
+# Standing still on a reserved non-transit terminal, with nothing
+# scheduled to move it. A charging robot is NOT settled -- its charge
+# will finish and it will rejoin -- so the run must not be considered
+# over while it charges. A HOLDING robot is settled only for as long as
+# every charger is taken: since B5 it is promoted in the same instant
+# one becomes FREE, so the pair (FREE charger, HOLDING robot) never
+# survives a tick.
 SETTLED_STATES = frozenset(
     {
         ChargeState.OCCUPIED_CHARGER,
@@ -160,6 +199,18 @@ class TerminalSlot:
     occupied_at: Fraction | None = None
     # Directed A* cost the reservation was chosen on.
     route_cost_m: float | None = None
+    # The robot this slot is already assigned to for its *next*
+    # occupancy, while the current holder is still leaving it (B5).
+    #
+    # "A charger is reserved when assigned to a robot" and "a slot is
+    # offered only while FREE" are both frozen rules: a preemption
+    # assigns the charger to the requester at the instant it preempts,
+    # and the requester may still not enter until the victim has
+    # physically cleared the access edge. Without this the victim, which
+    # is standing right next to the charger it just gave up, simply
+    # re-reserves it and the preemption achieves nothing.
+    promised_to: str | None = None
+    promised_at: Fraction | None = None
 
 
 @dataclass
@@ -193,6 +244,32 @@ class ChargeRecord:
     rejoined_at: Fraction | None = None
     rejoin_soc: Fraction | None = None
 
+    # -- preemption (B5). Only a charger trip cut short fills these. ---
+    #
+    # ``charge_duration_s`` stays the duration that was scheduled when
+    # the session began; ``charge_elapsed_s`` is what really elapsed
+    # before the requester took the slot, and is the interval booked.
+    preempted_at: Fraction | None = None
+    preempted_by: str | None = None
+    charge_elapsed_s: Fraction | None = None
+    # Recorded, never branched on: the frozen rule always selects the
+    # maximum-SOC victim (docs/DECISIONS.md, "Charger Saturation and
+    # Preemption").
+    victim_soc_ge_80: bool | None = None
+    # Set once the preempted robot has cleared the charger: did it have
+    # the energy to rejoin the fleet, or did it go to holding?
+    preempt_rejoined: bool | None = None
+
+    # -- promotion (B5) ------------------------------------------------
+    #
+    # A holding trip ends when its robot is granted a charger. The
+    # charger trip that follows is a separate record, so each record
+    # still describes exactly one terminal.
+    promoted_at: Fraction | None = None
+    left_holding_at: Fraction | None = None
+    # On the charger trip: the holding zone the robot was promoted from.
+    promoted_from: str | None = None
+
 
 class TerminalBank:
     """Slots of one terminal type -- chargers, or holding cells."""
@@ -222,13 +299,24 @@ class TerminalBank:
         return self._by_robot.get(robot_id)
 
     def free(self, blocked_cells=frozenset()) -> list[str]:
-        """FREE slots nobody is standing on, in zone_id order."""
+        """FREE slots nobody is standing on or promised, in zone_id order."""
 
         return [
             zone_id
             for zone_id, slot in self.slots.items()
-            if slot.state is ResourceState.FREE and slot.cell not in blocked_cells
+            if slot.state is ResourceState.FREE
+            and slot.promised_to is None
+            and slot.cell not in blocked_cells
         ]
+
+    def promised(self, robot_id: str) -> str | None:
+        """The slot promised to this robot for its next occupancy, if any."""
+
+        for zone_id, slot in self.slots.items():
+            if slot.promised_to == robot_id:
+                return zone_id
+
+        return None
 
     def count(self, state: ResourceState) -> int:
         return sum(1 for slot in self.slots.values() if slot.state is state)
@@ -253,6 +341,40 @@ class TerminalBank:
 
         return slot
 
+    def promise(self, zone_id, robot_id, now) -> None:
+        """Assign an occupied slot to its next holder, before it is free.
+
+        The slot keeps its current holder and its current state; it is
+        simply no longer on offer to anybody else.
+        """
+
+        slot = self.slots.get(zone_id)
+
+        if slot is None:
+            raise ResourceError(f"{zone_id} is not a {self.kind} slot")
+
+        if slot.promised_to is not None:
+            raise ResourceError(
+                f"{self.kind} {zone_id} is already promised to {slot.promised_to}"
+            )
+
+        if slot.robot_id == robot_id:
+            raise ResourceError(
+                f"{robot_id} cannot be promised {self.kind} {zone_id}, "
+                f"which it is holding now"
+            )
+
+        slot.promised_to = robot_id
+        slot.promised_at = now
+
+    def cancel_promise(self, zone_id) -> None:
+        """Put a promised slot back on offer."""
+
+        slot = self.slots[zone_id]
+
+        slot.promised_to = None
+        slot.promised_at = None
+
     def reserve(self, zone_id, robot_id, now, route_cost_m=None) -> None:
         """FREE -> RESERVED, before the robot starts to move."""
 
@@ -261,7 +383,20 @@ class TerminalBank:
                 f"{robot_id} already holds {self.kind} {self._by_robot[robot_id]}"
             )
 
+        promised = self.slots[zone_id].promised_to if zone_id in self.slots else None
+
+        if promised is not None and promised != robot_id:
+            raise ResourceError(
+                f"{robot_id} cannot reserve {self.kind} {zone_id}: it is "
+                f"promised to {promised}"
+            )
+
         slot = self._slot(zone_id, robot_id, ResourceState.FREE)
+
+        # Honoured, so it is no longer outstanding. A robot that takes a
+        # different slot has its own promise cancelled by the caller.
+        slot.promised_to = None
+        slot.promised_at = None
 
         slot.state = ResourceState.RESERVED
         slot.robot_id = robot_id

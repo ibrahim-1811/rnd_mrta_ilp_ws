@@ -427,7 +427,7 @@ CLI flags above override it for one run only.
 | `battery.travel_percent_per_20m` | `1.0` | 1% per 20 m driven |
 | `battery.service_percent_per_60s` | `1.0` | 1% per 60 s of pick or drop |
 | `battery.waiting_idle_percent_per_300s` | `1.0` | 1% per 300 s standing still; waiting and idle are reported apart |
-| `battery.charging_percent_per_second` | `1.0` | declared; no effect until charging exists (B4) |
+| `battery.charging_percent_per_second` | `1.0` | net SOC gain per simulated second while charging (B4) |
 | `battery.reserve_percent` | `10.0` | declared; no effect until eligibility exists (B2) |
 | `battery.charge_due_percent` | `10.0` | declared; no effect until B2 |
 | `battery.initial_soc_overrides` | *absent* | `robot_id: percent`, **controlled tests only** — never in a scientific config |
@@ -648,7 +648,7 @@ Run all of these before trusting a change. All pass at the freeze.
 # unit tests
 PYTHONPATH=$PP $PY -m pytest \
     src/mrta_core/tests src/simulation_env/test src/task_management/test -q
-# -> 155 passed
+# -> 207 passed
 #
 # or, equivalently, straight from the project environment:
 #   pixi run test
@@ -726,7 +726,7 @@ Reference workload on **V2** (`CSV_To_Gazebo_v2.xlsx`), 22 robots,
 | directed core edges | 485 |
 | RMF nav graph | 461 waypoints, 973 lanes |
 | RMF terminal-chain lanes | 0 |
-| unit tests | 155 passed |
+| unit tests | 207 passed |
 | lowest final SOC (B1, observation only) | 80.7222% (robot_016); fleet mean 84.7322% |
 
 The B0 charging-bank correction (§2.7a) changed the transit core and
@@ -801,29 +801,68 @@ Be precise about the current state:
   FREE charger with the cheapest directed-A* route, else the cheapest
   FREE holding cell, else (saturation) the nearest free Stage Zone, and
   drives there. Slots are FREE / RESERVED / OCCUPIED / VACATING and are
-  offered only while FREE. **There is no charging yet**: the robot stays
-  on its terminal for the rest of the run and its SOC keeps draining at
-  the idle rate. Every run prints a `CHARGER TRAVEL` table
+  offered only while FREE.
+* on a charger it then **charges to exactly 100%, reverses into the
+  aisle cell it came from and rejoins the fleet** (B4). The slot goes
+  VACATING before it moves and FREE only once it is physically clear,
+  so an entering and a leaving robot never meet on the access edge. The
+  configured rate is the net gain: no idle drain over a charge. Every
+  run prints a `CHARGING` table
+* a robot that reached a *holding* cell is a **waiting** robot. The
+  instant a charger becomes FREE the best waiting robot is **promoted**
+  onto it -- lowest SOC, then earliest charge request, then `robot_id`
+  as the final engineering tie-break (B5). It reverses off its holding
+  cell, that cell is released only once it is physically clear, and it
+  then drives to the charger by the production router
+* when **every charger is occupied** and a CHARGE_DUE robot needs one,
+  the charging robot with the **highest SOC** gives it up, and only if
+  that SOC is strictly above the requester's (B5). The cut session
+  books exactly the time it charged. The freed charger is **held for
+  the requester** until it can physically enter, so the victim --
+  standing one cell away with the lowest SOC in the bank -- cannot take
+  it straight back. A CHARGE_NEEDED robot never preempts. A preempted
+  robot rejoins the fleet if it is fit for work, and otherwise waits in
+  a holding cell
 
   ```bash
   PYTHONPATH=$PP $PY src/simulation_env/scripts/check_charger_evacuation.py
   # -> five controlled scenarios (4 and 12 robots at 9%, a late
   #    CHARGE_NEEDED robot, saturation, the B2 deadlock fleet),
-  #    each "checks: OK"; "B3 charger evacuation: 5/5 scenarios OK"
+  #    each "checks: OK"; "B3/B4 charger evacuation and charging:
+  #    5/5 scenarios OK"
+
+  PYTHONPATH=$PP $PY src/simulation_env/scripts/check_b4_charging.py
+  # -> single / four / twelve / recycle / slow / contested, each
+  #    "checks: OK"; "B4 charging and fleet rejoin: 6/6 scenarios OK"
+
+  PYTHONPATH=$PP $PY src/simulation_env/scripts/check_b5_queue.py
+  # -> twelve / late / preempt / preempt_wait / contested, each
+  #    "checks: OK"; "B5 promotion and preemption: 5/5 scenarios OK"
   ```
 
-  To watch it in Gazebo (§5.1 terminal 1 running), terminal 2:
+  To watch it in Gazebo (§5.1 terminal 1 running), terminal 2.
+
+  **Rebuild first.** `simulation_env` installs its Python as *copies*,
+  not symlinks, so `ros2 launch` runs the last build, not the working
+  tree. Editing the executor and launching without this silently
+  replays the previous increment:
 
   ```bash
+  colcon build --packages-select mrta_core task_management simulation_env
+  source install/setup.bash
+
   # robot_001..004 at 9%: four distinct chargers
   ros2 launch simulation_env warehouse_sim.launch.py start_gazebo:=false \
       orders:=true \
       config_file:=$PWD/src/simulation_env/config/warehouse_sim_b3_four_low.yaml
 
-  # robot_001..012 at 9%: 8 chargers, then 4 holding cells
+  # robot_001..012 at 9%: 8 chargers, 4 wait in holding and are then
+  # promoted onto the chargers the first eight leave (B5)
   ros2 launch simulation_env warehouse_sim.launch.py start_gazebo:=false \
       orders:=true \
       config_file:=$PWD/src/simulation_env/config/warehouse_sim_b3_twelve_low.yaml
+  # -> "promotions : 4 out of holding onto a freed charger"; 22/22
+  #    parked; holding bank 14 FREE at the end
   ```
 
   These two configs are `warehouse_sim.yaml` plus

@@ -32,7 +32,7 @@ owner observe; observation never advances the clock.
 from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
-from heapq import heappop, heappush
+from heapq import heapify, heappop, heappush
 
 from mrta_core.battery import BatteryConfig
 from mrta_core.warehouse_map import WarehouseMap, ZoneType
@@ -307,7 +307,7 @@ class FleetSimulationEngine:
         if self.battery is not None:
             self.battery.book_charge(robot.robot_id, duration)
 
-    # -- charging (B4) ------------------------------------
+    # -- charging (B4, cut short by B5 preemption) --------
     #
     # A charge is a timed dwell on the robot's own reserved charger
     # cell, exactly like a pick or a drop is a timed dwell on a station:
@@ -356,6 +356,46 @@ class FleetSimulationEngine:
         )
         self._charging[robot_id] = (duration, event)
         return event
+
+    def end_charge_early(self, robot_id: str) -> Fraction:
+        """Close an open charge session now and return the interval booked.
+
+        Preemption (B5). The *policy* -- who may be preempted, and by
+        whom -- stays in the executor; this only cuts the dwell short,
+        books exactly the time that really elapsed, and hands the robot
+        back IDLE on its charger cell, the same way a completed session
+        does. The scheduled completion is dropped, because a completion
+        without an open session is a bug the handler refuses.
+        """
+
+        session = self._charging.get(robot_id)
+
+        if session is None:
+            raise RuntimeError(f"{robot_id} has no open charge session to end")
+
+        duration, event = session
+
+        elapsed = self.time - (event.time - duration)
+
+        if elapsed < 0:
+            raise RuntimeError(
+                f"{robot_id} charge session began at "
+                f"t={float(event.time - duration):.4f}, after now "
+                f"t={float(self.time):.4f}"
+            )
+
+        del self._charging[robot_id]
+
+        self._queue = [entry for entry in self._queue if entry[2] is not event]
+        heapify(self._queue)
+
+        robot = self.robots[robot_id]
+
+        self._book_charge(robot, elapsed)
+
+        robot.status = GridRobotStatus.IDLE
+
+        return elapsed
 
     def _prepare_mission_start(self, robot_id: str):
         """Prepare the first movement request for one raw mission.

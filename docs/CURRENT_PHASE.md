@@ -22,8 +22,12 @@ Battery scheduler V1         IN PROGRESS
                                 approved, verified in Gazebo
                                 2026-10-06
                              B4 charging + leaving + rejoin COMPLETE,
-                                VERIFIED, APPROVED 2026-10-06
-                             B5..B6 NOT STARTED
+                                VERIFIED, APPROVED 2026-10-06,
+                                committed 5d61c84
+                             B5 holding promotion + preemption
+                                IMPLEMENTED 2026-10-11,
+                                awaiting approval
+                             B6 NOT STARTED
 W20/W30/W50 map family       PLANNED, after Battery V1 (decided 2026-09-13)
 Additional MRTA baselines    NOT IMPLEMENTED
 Outcome logging              NOT IMPLEMENTED
@@ -238,7 +242,9 @@ B1  SOC accounting                       DONE, approved
 B2  eligibility + CHARGE_DUE / NEEDED    DONE, approved
 B3  charger reservation + travel         DONE, approved 2026-10-06
 B4  charging + leaving + fleet rejoin    COMPLETE, VERIFIED, APPROVED 2026-10-06
-B5  preemption + holding                 NOT STARTED
+                                         committed 5d61c84
+B5  preemption + holding promotion       IMPLEMENTED 2026-10-11,
+                                         AWAITING APPROVAL
 B6  decision / outcome battery metrics   NOT STARTED
 ```
 
@@ -516,8 +522,9 @@ no visible collision or opposite-edge swap
 no completed charging robot remained on a charger
 ```
 
-B4 is COMPLETE, VERIFIED, APPROVED. It is not yet committed. B5 and B6
-remain NOT STARTED; no further implementation is authorized here.
+B4 is COMPLETE, VERIFIED, APPROVED, and committed as `5d61c84`
+("feat: complete Battery V1 B4 charging and fleet rejoin", 2026-10-06).
+B5 is implemented below and awaits approval; B6 remains NOT STARTED.
 
 Worked example from the `twelve` run, exactly as reported:
 
@@ -571,6 +578,190 @@ test_charging_scheduler_never_modifies_order_ownership
 test_busy_robot_crossing_ten_percent_finishes_its_order
                                        -> scoped to the charge request;
                                           the robot may work again after
+```
+
+B5 acceptance, measured 2026-10-11. A holding cell is now a waiting
+room, not a destination. Two policies decide who gets a charger, both
+frozen in docs/DECISIONS.md:
+
+```text
+promotion   when a charger is FREE, the best waiting robot is promoted
+            onto it: lowest SOC, then earliest charge request, then
+            robot_id as the final engineering tie-break. One idempotent
+            pass per dispatch, so it fires both when a charger is
+            released and when a waiting robot arrives in holding.
+preemption  when every charger is occupied and a CHARGE_DUE robot needs
+            one, the highest-SOC charging robot gives it up, and only
+            if its SOC is strictly above the requester's. A
+            CHARGE_NEEDED robot never preempts. victim_soc_ge_80 is
+            recorded, never branched on.
+```
+
+A promoted robot leaves holding exactly as a full robot leaves a
+charger: the slot goes OCCUPIED -> VACATING before it moves and is
+released only once the robot physically stands on its access aisle
+cell. It then drives to the charger by the production router, from that
+aisle cell -- a holding cell is non-transit, so no route starts on one.
+The holding trip and the charger trip are separate `ChargeRecord`s
+carrying the same original request, so every record still describes
+exactly one terminal.
+
+```text
+12 requesters, 8 chargers, 14 holding: all 4 waiters promoted  MET
+  12 charge sessions, 12 rejoins, every session exactly 100%
+charger occupancy never above 8; one robot per cell             MET
+no robot ever holds two charger or two holding reservations     MET
+no robot waits in holding beside a free unpromised charger      MET
+promotion goes to the lowest-SOC waiter of that instant         MET
+promotion in the same instant the charger frees, and in the
+  same instant a waiter arrives next to a free one              MET
+CHARGE_NEEDED robot (14%) waits and is promoted, never preempts MET
+preempted session books only the interval it charged            MET  exact
+  gained = elapsed * rate; charge_completed_at stays None
+preempted robot fit for work rejoins the fleet and works again  MET
+preempted robot at or below CHARGE_DUE waits in holding         MET
+the charger freed by a preemption is held for its requester     MET
+no promise outstanding at the end of a run                      MET
+100-order default baseline vs B4                                MET  identical
+  100/100, 22/22 parked, makespan 282.0000 s, 6430.0 m,
+  waiting 264.6667 s, 0 violations
+unit tests                                                      MET  207 passed
+check_charger_evacuation.py                                     MET  5/5
+check_b4_charging.py                                            MET  6/6
+check_b5_queue.py                                               MET  5/5
+lint                                                            MET  clean
+visual inspection in Gazebo                                     MET  (user, 2026-10-11)
+```
+
+Gazebo visual acceptance PASSED 2026-10-11, verified by the user with
+`warehouse_sim_b3_twelve_low.yaml` and `orders:=true`. The ROS run
+reproduces the scientific engine exactly -- same makespan, same
+distance, same promotion instants:
+
+```text
+12 low-SOC robots entered the charging workflow
+8 reached chargers, charged, reversed out and rejoined
+4 waited in holding and were PROMOTED onto the chargers the first
+  eight vacated, each in the instant that charger became FREE:
+    t=114.6000  robot_001  charge_queue_002 -> charging_005
+    t=116.7500  robot_002  charge_queue_001 -> charging_001
+    t=118.1833  robot_003  charge_queue_010 -> charging_006
+    t=120.3333  robot_004  charge_queue_008 -> charging_002
+all 12 charged to exactly 100% and rejoined; 12 sessions, 12 rejoins
+100/100 orders completed; 22/22 parked off spawn (B4 run: 18/22)
+holding bank 14/14 FREE at the end (B4 run: 4 OCCUPIED for good)
+makespan 357.1378 s, 6850.0 m, 0 reservation violations, 0 yields
+0 preemptions: with 8 chargers free at t=0 nothing had to be taken
+```
+
+Measured side effect, in the fleet's favour: the makespan fell from
+375.2633 s to 357.1378 s against the same scenario under B4, because
+four robots that used to sit in the queue bank for the whole run
+rejoined the fleet and took orders. Total distance rose 6732 -> 6850 m
+for the same reason.
+
+The B3 invariant line in the `CHARGING` report is now measured over
+un-promoted trips only. A promoted robot departs when its holding cell
+is clear, not when it first requested, and it waited on a terminal
+rather than in an aisle, so counting it there read as a 121 s aisle
+wait that never happened. Its wait is reported separately as
+`request -> charger`, which is a B5 outcome, not an invariant.
+
+Controlled B5 runs, 22 robots unless stated:
+
+```text
+twelve        12 at 9%, 40 orders   4 promotions, 0 preemptions
+late          8 at 9% + 1 at 14%    1 promotion,  0 preemptions
+preempt       2 robots, 1 charger   1 preemption, victim rejoined
+              robot_002 at 11.5%, reserve 0, charge 1%/s
+preempt_wait  the same at 0.1%/s    1 preemption, victim to holding
+contested     12 at 9%, 100 orders  4 promotions, 0 preemptions
+```
+
+The `preempt` worked example, exactly as reported:
+
+```text
+t=29.3333  robot_001 starts charging on charging_001 at 6.8000%
+t=56.0000  robot_002 requests CHARGE_DUE at 7.7667% after its order;
+           every charger OCCUPIED -> holding charge_queue_006, and it
+           preempts robot_001 at 33.4667% (> 7.7667%)
+           robot_001 gained 26.6667% in 26.6667 s, i.e. exactly 1%/s
+t=56.6667  robot_001 clear of the charger at 33.4167%, fit for work,
+           rejoins the fleet
+t=74.0000  robot_002 reaches holding and is promoted onto charging_001
+           in that same instant
+t=179.0500 robot_002 full; rejoins at t=179.7167
+```
+
+Two defects were found and fixed while measuring B5, both in the
+interaction between preemption and the rules it leans on:
+
+```text
+1. the victim re-took the charger it had just given up
+   It ends its retreat one cell from the charger with the lowest SOC in
+   the bank, so the queue discipline handed it straight back and the
+   requester waited out a whole further charge. Fixed by assigning the
+   charger to its requester at the instant of preemption; see
+   docs/DECISIONS.md, "Preemption Hands the Charger Over".
+2. a victim at or below CHARGE_DUE was declared fit for work
+   It rejoined the fleet and the B2 gate pulled it out again on the
+   same tick. Fixed: the rejoin test now requires SOC above CHARGE_DUE
+   as well as an eligible order.
+```
+
+Deliberately NOT in B5, and verified absent: the `order_makespan` /
+`fleet_recovery_time` split and battery metrics (B6), G6 end-of-work
+partial charging (B6), promotion out of a Stage Zone saturation
+fallback, and retargeting a robot already in flight to a holding cell.
+The eligibility equation, order schema, strategy set, FIFO window,
+routing, traffic and lane policy are untouched, and the default
+100-order baseline is bit-identical.
+
+Known interaction, recorded rather than fixed: a robot requesting in
+the few seconds between a preemption and the requester's arrival in
+holding can still be offered that charger by the B3 rule ("a FREE
+charger exists -> reserve the cheapest") if it is not the promised
+robot. The promise prevents exactly this, so the window is closed for
+the preemption case; for an ordinary release the frozen B3 rule governs
+and a fresh requester may take a charger ahead of a waiting robot only
+when promotion has already run in that same dispatch and declined it.
+
+B5/B4 test supersession, for the record. Six B4 assertions asserted
+that holding robots stay put. They were retargeted, not deleted,
+because B5 makes the asserted behaviour wrong:
+
+```text
+test_holding_robots_are_not_promoted_in_b4
+                                       -> test_a_holding_robot_is_promoted
+                                          _onto_a_freed_charger, plus
+                                          test_promotion_takes_the_lowest
+                                          _soc_waiting_robot
+test_all_chargers_occupied_sends_the_robot_to_holding
+                                       -> asserts the holding trip as it
+                                          was taken, which then ends in
+                                          promotion
+test_holding_cells_receive_unique_reservations
+                                       -> holding cells stay one trip
+                                          each; a charger may serve more
+                                          than one robot per run
+test_no_request_robot_remains_stopped_on_a_transit_cell
+                                       -> a promoted robot departs when
+                                          its holding cell is clear, not
+                                          when it first requested
+test_terminal_access_cannot_create_an_opposite_edge_swap
+                                       -> a holding cell may be left, by
+                                          its own holder only
+test_charging_scheduler_never_modifies_order_ownership
+                                       -> the no-work window closes at
+                                          the end of each trip, since a
+                                          holding trip hands the robot to
+                                          a charger trip
+check_charger_evacuation.py            -> the same three assumptions in
+                                          the validator
+check_b4_charging.py                   -> a freed charger no longer stays
+                                          FREE at the clearance instant;
+                                          it must only stop being the
+                                          leaving robot's
 ```
 
 ## Definition of Done for Phase B
