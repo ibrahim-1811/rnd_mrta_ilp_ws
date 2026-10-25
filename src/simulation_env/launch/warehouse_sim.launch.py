@@ -98,6 +98,11 @@ def generate_launch_description():
             # allocation.dispatch_quantum_s from the config, so 0.0
             # stays a real override meaning continuous dispatch.
             DeclareLaunchArgument("quantum", default_value="-1.0"),
+            # Run only the first N logical orders of the order file,
+            # never splitting one; 0 (the default) runs them all. Only
+            # used with orders:=true, which is what switches the
+            # workload on. The order file itself is never rewritten.
+            DeclareLaunchArgument("order_limit", default_value="0"),
             # Phase 8 dataset directory. Empty = do not record.
             DeclareLaunchArgument("dataset", default_value=""),
             # true prints the full trace to the terminal: every
@@ -146,6 +151,7 @@ def generate_launch_description():
                         "window": LaunchConfiguration("window"),
                         "dispatch_quantum_s": LaunchConfiguration("quantum"),
                         "dataset": LaunchConfiguration("dataset"),
+                        "order_limit": LaunchConfiguration("order_limit"),
                         "verbose": LaunchConfiguration("verbose"),
                         "progress_interval_s": LaunchConfiguration("progress"),
                         "robots": LaunchConfiguration("robots"),

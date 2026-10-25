@@ -535,6 +535,9 @@ colcon build --packages-select \
 source install/setup.bash
 
 ros2 launch simulation_env warehouse_sim.launch.py orders:=true
+
+# only the first 50 logical orders, as headless --orders 50
+ros2 launch simulation_env warehouse_sim.launch.py orders:=true order_limit:=50
 ```
 
 Gazebo is a **mirror**, never a second planner. The scientific engine

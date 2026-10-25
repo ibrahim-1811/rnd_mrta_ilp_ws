@@ -21,7 +21,7 @@ from pathlib import Path
 import time
 
 from mrta_core.order_queue import OrderQueue
-from mrta_core.orders import load_orders_csv
+from mrta_core.orders import describe_order_selection, load_orders_csv, select_orders
 from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
@@ -51,7 +51,8 @@ def main() -> int:
         "--orders",
         type=int,
         default=0,
-        help="how many logical orders (0 = the whole CSV)",
+        help="run the first N logical orders, never splitting one "
+        "(0 = all of them; more than the file holds = all of them)",
     )
     parser.add_argument(
         "--orders-file",
@@ -126,6 +127,9 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    if args.orders < 0:
+        parser.error("--orders must be 0 (all) or a positive number of orders")
+
     config = load_sim_config(args.config)
 
     # Override fleet.robot_count before the fleet is built, so this
@@ -162,10 +166,10 @@ def main() -> int:
     # robot finally parks is decided at return time by directed A*.
     spawn_stations = home_stations(config, warehouse)
 
-    orders = load_orders_csv(config.orders_path, warehouse)
-
-    if args.orders:
-        orders = orders[: args.orders]
+    # The same rule as the ROS node's order_limit:=N: the first N
+    # logical orders, never split, the order file untouched.
+    available = load_orders_csv(config.orders_path, warehouse)
+    orders = select_orders(available, args.orders)
 
     queue = OrderQueue(orders)
 
@@ -196,6 +200,12 @@ def main() -> int:
             strategy=args.strategy,
             window=window,
             window_width=width,
+            seed=seed,
+            speed_mps=speed,
+            dispatch_quantum_s=quantum,
+            orders=orders,
+            order_limit=args.orders,
+            orders_available=len(available),
             repo=Path(__file__).resolve().parents[3],
         )
 
@@ -206,7 +216,10 @@ def main() -> int:
     print("=" * 70)
     print(f"  strategy   : {args.strategy}  (seed {seed})")
     print(f"  robots     : {len(robots)}")
-    print(f"  orders     : {len(queue)} ({queue.line_item_count} line items) from {config.orders_path.name}")
+    print(
+        "  orders     : "
+        + describe_order_selection(args.orders, available, orders, config.orders_path.name)
+    )
     print(f"  speed      : {speed} m/s")
     print(f"  window     : {window} (W = {resolved_window})")
     print(

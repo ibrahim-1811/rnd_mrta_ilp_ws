@@ -202,3 +202,46 @@ def load_orders_csv(
         raise ValueError(f"{path}: no orders found")
 
     return tuple(orders)
+
+
+def select_orders(orders, limit: int = 0) -> tuple[Order, ...]:
+    """The first ``limit`` logical orders of the workload; 0 means all.
+
+    The one rule for a shorter run, shared by the headless runner
+    (``--orders N``) and the ROS node (``order_limit:=N``), so both
+    execute exactly the same orders. An order is the unit: its line
+    items -- one CSV row each -- are never split, so a limit counts
+    orders, not rows. A limit above the number of orders takes them
+    all. The order file itself is never rewritten.
+    """
+
+    if limit < 0:
+        raise ValueError(f"order limit must be 0 (all) or positive, got {limit}")
+
+    orders = tuple(orders)
+
+    return orders if limit == 0 else orders[:limit]
+
+
+def describe_order_selection(limit: int, available, selected, source: str) -> str:
+    """One line saying which orders a run executes, and why.
+
+    Printed identically by the headless runner and the ROS node.
+    """
+
+    items = sum(len(order.items) for order in selected)
+    total = len(tuple(available))
+
+    if limit == 0:
+        return f"all {total} logical orders ({items} line items) from {source}"
+
+    if limit > total:
+        return (
+            f"all {total} logical orders ({items} line items) from {source}: "
+            f"the limit {limit} is more than the file holds"
+        )
+
+    return (
+        f"first {len(selected)} of {total} logical orders ({items} line items) "
+        f"from {source}, limit {limit}"
+    )

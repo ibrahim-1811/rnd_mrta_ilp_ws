@@ -1791,6 +1791,67 @@ metrics cannot tell the strategies apart in this setup. Changing that
 (staggered initial SOC, the same for every strategy) touches the frozen
 "initial SOC 100%" and is the researcher's decision.
 
+### One order limit for headless and Gazebo; honest run provenance
+
+Status: implemented 2026-10-25, awaiting approval. Nothing committed.
+
+```text
+headless   run_workload.py --orders N          (unchanged)
+Gazebo     warehouse_sim.launch.py orders:=true order_limit:=N   (new)
+```
+
+Both go through `mrta_core.orders.select_orders()`: the first N logical
+orders in FIFO sequence, an order's rows never split, 0 (the default)
+= every order, more than the file holds = every order. The order file
+is never rewritten and no temporary file is made. `orders:=true` stays
+the switch that runs the workload. Both print the same line, for
+example `first 50 of 2000 logical orders (92 line items) from
+orders.csv, limit 50`.
+
+Provenance fixed on the way: `run.json` took `seed`, `speed_mps` and
+`dispatch_quantum_s` from the config, not from the run, and did not
+record the order count. In fleet_sweep the three `random` seeds all
+recorded seed 42 and shared one run_id (metrics.json had the right
+seeds). `build_manifest()` now requires the effective seed, speed,
+quantum and executed orders (keyword-only, no config fallback) and
+records `orders`, `line_items`, `orders_available`, `order_limit` and
+`battery.initial_soc_overrides`. The run_id covers all of them except
+`order_limit`, which is recorded but not hashed: a limit above the
+file runs the same orders as no limit. The fleet_sweep datasets from
+before this change keep the old manifests.
+
+Tests: `test_order_limit.py` (10), `test_order_limit_run.py` (8: real
+headless runs of 5 and 3 orders, run.json, metrics.json and outcome
+rows, a limit above the file naming the same run as no limit, and the
+ROS node, launch file and runner using the same rule, read from their
+source), `test_dataset.py` (run_id changes with seed, speed, quantum
+and order count). The ROS node run with `order_limit:=5` against the
+2000-order file executed the first 5 orders (11 line items) and
+recorded them.
+
+#### Decisions, 2026-10-25
+
+```text
+charging waves   keep initial SOC 100% as the frozen reference; later a
+                 seeded heterogeneous initial SOC as a separate
+                 experimental condition, the same distribution for every
+                 strategy at a given seed; charging policy unchanged
+Popper / ILP     not yet: first the remaining MRTA baselines, experiment
+                 validation and B6; then design predicates, bias and
+                 evaluation. Order: Single-Teacher, Multi-Teacher,
+                 Outcome-Aware, explanations
+clean-up         delete nothing for now; keep history, ICAPS material,
+                 V2 fixtures and research artifacts
+strategies       one at a time, in this order: Earliest Finish,
+                 Multi-Criteria Grid-Aware, Auction / Marginal Cost,
+                 Hungarian, MILP; each through the same window, battery
+                 mask, roads, traffic and execution, and through the
+                 distinctness gate
+next             Battery B6 (separate order_makespan from
+                 fleet_recovery_time), experiment reproducibility, then
+                 Earliest Finish
+```
+
 ## Definition of Done for Phase B
 
 The current phase is complete when:

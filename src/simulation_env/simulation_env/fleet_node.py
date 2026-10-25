@@ -42,6 +42,7 @@ from robot_interfaces.msg import FleetStatus, RobotState, RobotStateArray
 from std_msgs.msg import String
 
 from mrta_core.order_queue import OrderQueue
+from mrta_core.orders import describe_order_selection, load_orders_csv, select_orders
 from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
@@ -135,6 +136,10 @@ class FleetNode(Node):
         # through the same recorder as the headless path, because there
         # is one scientific engine and it may not have two datasets.
         self.declare_parameter("dataset", "")
+        # Run only the first N logical orders of the order file, never
+        # splitting one; 0 runs them all. The same rule as the headless
+        # runner's --orders N. The order file is never rewritten.
+        self.declare_parameter("order_limit", 0)
         # Allocation seed for stochastic strategies. Negative keeps the
         # configured simulation.seed.
         self.declare_parameter("allocation_seed", -1)
@@ -161,6 +166,8 @@ class FleetNode(Node):
         )
 
         self.dataset_dir = str(get("dataset")).strip()
+        self.order_limit = int(get("order_limit"))
+        self.orders_available = 0
 
         seed = int(get("allocation_seed"))
         self.allocation_seed = config.seed if seed < 0 else seed
@@ -570,16 +577,21 @@ class FleetNode(Node):
         """
 
         try:
-            queue = OrderQueue.from_csv(self.config.orders_path, self.warehouse)
+            available = load_orders_csv(self.config.orders_path, self.warehouse)
+            queue = OrderQueue(select_orders(available, self.order_limit))
         except (OSError, ValueError) as error:
             self.get_logger().error(f"orders not loaded: {error}")
             return None
 
+        self.orders_available = len(available)
+
+        # Requested and actual, in the same words as the headless runner.
+        selection = describe_order_selection(
+            self.order_limit, available, tuple(queue), self.config.orders_path.name
+        )
+
         if not self.verbose:
-            print(
-                f"orders : {len(queue)} ({queue.line_item_count} line items) "
-                f"from {self.config.orders_path.name}"
-            )
+            print(f"orders : {selection}")
             return queue
 
         print()
@@ -587,6 +599,7 @@ class FleetNode(Node):
         print("ORDERS")
         print("=" * 62)
         print(f"file          : {self.config.orders_path}")
+        print(f"selection     : {selection}")
         print(f"orders        : {len(queue)}")
         print(f"line items    : {queue.line_item_count}")
         print(f"pending       : {len(queue.pending())}")
@@ -682,6 +695,12 @@ class FleetNode(Node):
                 window_width=WorkloadExecutor.resolve_window(
                     self.window, len(self.robots)
                 ),
+                seed=self.allocation_seed,
+                speed_mps=self.speed_mps,
+                dispatch_quantum_s=self.dispatch_quantum_s,
+                orders=tuple(self.orders),
+                order_limit=self.order_limit,
+                orders_available=self.orders_available,
                 repo=Path(__file__).resolve().parents[3],
             )
 

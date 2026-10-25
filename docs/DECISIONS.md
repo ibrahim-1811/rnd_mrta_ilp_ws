@@ -666,6 +666,25 @@ and the queue is ordered on SOC, not arrival.
 B5 first promoted holding robots only. That was superseded on
 2026-10-24 by Stage Zone Promotion below.
 
+## Initial SOC: Reference and Heterogeneous Condition
+
+Decided by the researcher 2026-10-25.
+
+```text
+reference condition   every robot starts at 100% SOC (frozen, as above)
+later condition       seeded heterogeneous initial SOC, the same
+                      per-robot distribution for every strategy at a
+                      given seed, recorded in run.json
+                      (battery.initial_soc_overrides)
+charging policy       unchanged by either
+```
+
+Why: with every robot at 100%, the fleet drains together and charges in
+synchronized waves, so charge sessions and time on chargers come out the
+same for every strategy (fleet_sweep, 2026-10-25). The reference stays
+as it is; the heterogeneous condition is a separate experiment, not a
+replacement.
+
 ## Stage Zone Promotion
 
 **APPROVED 2026-10-24 by the researcher**, replacing the B5 rule that

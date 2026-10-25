@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 from mrta_core.order_queue import OrderQueue
-from mrta_core.orders import load_orders_csv
+from mrta_core.orders import load_orders_csv, select_orders
 from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
@@ -52,6 +52,28 @@ def config():
 @pytest.fixture(scope="module")
 def warehouse(config):
     return load_warehouse_xlsx(config.map_path)
+
+
+def manifest_of(config, *, orders=12, **changes):
+    """A manifest for the first ``orders`` orders; ``changes`` override."""
+
+    available = load_orders_csv(config.orders_path)
+
+    params = dict(
+        strategy="nearest_astar",
+        window=config.allocation_window,
+        window_width=config.window_width(),
+        seed=config.seed,
+        speed_mps=config.speed_mps,
+        dispatch_quantum_s=config.dispatch_quantum_s,
+        orders=select_orders(available, orders),
+        order_limit=orders,
+        orders_available=len(available),
+        repo=REPO,
+    )
+    params.update(changes)
+
+    return build_manifest(config, **params)
 
 
 def build(config, warehouse, *, recorder=None, orders=None, on_dispatch=None):
@@ -381,13 +403,7 @@ def test_exact_handles_none():
 
 
 def test_the_manifest_identifies_the_run(config):
-    manifest = build_manifest(
-        config,
-        strategy="nearest_astar",
-        window=config.allocation_window,
-        window_width=config.window_width(),
-        repo=REPO,
-    )
+    manifest = manifest_of(config)
 
     assert manifest["run_id"]
     assert manifest["strategy"] == "nearest_astar"
@@ -407,19 +423,18 @@ def test_the_manifest_identifies_the_run(config):
 
 def test_the_run_id_changes_when_an_input_changes(config):
     def run_id(**kwargs):
-        return build_manifest(
-            config,
-            strategy=kwargs.get("strategy", "nearest_astar"),
-            window=kwargs.get("window", "fleet_size"),
-            window_width=kwargs.get("window_width", 22),
-            repo=REPO,
-        )["run_id"]
+        return manifest_of(config, **kwargs)["run_id"]
 
     base = run_id()
 
     assert run_id(strategy="random") != base
     assert run_id(window="legacy") != base
     assert run_id(window_width=4) != base
+    # The run's effective conditions, not the config's defaults.
+    assert run_id(seed=config.seed + 1) != base
+    assert run_id(speed_mps=config.speed_mps + 0.5) != base
+    assert run_id(dispatch_quantum_s=config.dispatch_quantum_s + 3.0) != base
+    assert run_id(orders=5) != base
     assert run_id() == base
 
 
@@ -434,13 +449,7 @@ def test_the_dataset_writes_and_reads_back(config, warehouse, tmp_path):
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    manifest = build_manifest(
-        config,
-        strategy="nearest_astar",
-        window=config.allocation_window,
-        window_width=config.window_width(),
-        repo=REPO,
-    )
+    manifest = manifest_of(config)
 
     recorder = RunRecorder(run_id=manifest["run_id"])
 
@@ -482,13 +491,7 @@ def exported(config, warehouse, tmp_path_factory):
 
     pytest.importorskip("pyarrow")
 
-    manifest = build_manifest(
-        config,
-        strategy="nearest_astar",
-        window=config.allocation_window,
-        window_width=config.window_width(),
-        repo=REPO,
-    )
+    manifest = manifest_of(config)
 
     recorder = RunRecorder(run_id=manifest["run_id"])
 
@@ -676,13 +679,7 @@ def test_the_csv_fallback_loses_nothing(config, warehouse, tmp_path, monkeypatch
 
     from simulation_env.dataset_export import read_run
 
-    manifest = build_manifest(
-        config,
-        strategy="nearest_astar",
-        window=config.allocation_window,
-        window_width=config.window_width(),
-        repo=REPO,
-    )
+    manifest = manifest_of(config)
 
     recorder = RunRecorder(run_id=manifest["run_id"])
 

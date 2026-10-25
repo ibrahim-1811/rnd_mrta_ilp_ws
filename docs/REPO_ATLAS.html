@@ -211,7 +211,7 @@ footer { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line)
     <div><dt>Packages</dt><dd>6</dd></div>
     <div><dt>Python modules</dt><dd>33</dd></div>
     <div><dt>Strategies</dt><dd>3 <small>of 11 planned</small></dd></div>
-    <div><dt>Tests</dt><dd>388 <small>passing</small></dd></div>
+    <div><dt>Tests</dt><dd>406 <small>passing</small></dd></div>
     <div><dt>Simulator checks</dt><dd>14/14</dd></div>
     <div><dt>Map · config · world</dt><dd>1 · 1 · 1 <small>W100, ≤ 100 robots</small></dd></div>
   </dl>
@@ -797,7 +797,7 @@ flowchart LR
     </table>
   </div>
   <p class="caption">Tested 2026-10-24 on a private GZ_PARTITION, headless: Gazebo held all 100 robots as soon as the server was up; starting it again stopped the first server in 1 s and left exactly one; a run printed <code>Gazebo already shows these 100 robot(s)</code> and its first robot moved 8.9 s after the run started (18.9 s before); the one-command launch with 50 robots replaced the old server. Full sequence with expected output and fixes: <code>docs/START_HERE.md</code>, step 9.</p>
-  <p class="caption">Launch arguments: <code>robots</code>, <code>orders</code>, <code>strategy</code>, <code>speed</code>, <code>window</code>, <code>quantum</code>, <code>dataset</code>, <code>headless</code>, <code>start_gazebo</code>, <code>config_file</code>, <code>world_file</code>. The config and world are read from the source tree. The live node writes datasets as CSV, since the system Python usually lacks pyarrow. Ctrl+C stops it cleanly.</p>
+  <p class="caption">Launch arguments: <code>robots</code>, <code>orders</code> (switches the workload on), <code>order_limit</code> (the first N logical orders, as headless <code>--orders N</code>), <code>verbose</code>, <code>progress</code>, <code>strategy</code>, <code>speed</code>, <code>window</code>, <code>quantum</code>, <code>dataset</code>, <code>headless</code>, <code>start_gazebo</code>, <code>config_file</code>, <code>world_file</code>. The config and world are read from the source tree. The live node writes datasets as CSV, since the system Python usually lacks pyarrow. Ctrl+C stops it cleanly.</p>
 </section>
 
 <!-- ============================================================ -->
@@ -809,7 +809,7 @@ flowchart LR
       <thead><tr><th>Script</th><th>What for</th></tr></thead>
       <tbody>
         <tr class="group"><td colspan="2">Everyday</td></tr>
-        <tr><td class="file">run_workload.py</td><td>Run a simulation. <code>--robots --orders --orders-file --strategy --seed --quantum --window --speed --dataset --export</code></td></tr>
+        <tr><td class="file">run_workload.py</td><td>Run a simulation. <code>--orders N</code> runs the first N logical orders, never splitting one. <code>--robots --orders --orders-file --strategy --seed --quantum --window --speed --dataset --export</code></td></tr>
         <tr><td class="file">map_tool.py</td><td>Maps: <code>new</code>, <code>example</code>, <code>check</code>, <code>show</code>, <code>export</code></td></tr>
         <tr><td class="file">generate_orders.py</td><td>A seeded order list from the current map (build_scenario runs it)</td></tr>
         <tr><td class="file">check_strategy_distinctness.py</td><td>Proves strategies make different choices on the same decisions</td></tr>
@@ -867,7 +867,7 @@ flowchart LR
 <!-- ============================================================ -->
 <section id="tests">
   <h2>Tests</h2>
-  <p class="prose">388 tests (<code>pixi run test</code>, under a minute) and 14 simulator checks (the scripts above). The checks and most tests use the V2 fixture, so a change to the current map never changes a frozen baseline.</p>
+  <p class="prose">406 tests (<code>pixi run test</code>, under a minute) and 14 simulator checks (the scripts above). The checks and most tests use the V2 fixture, so a change to the current map never changes a frozen baseline.</p>
   <div class="tbl">
     <table>
       <thead><tr><th>Test file</th><th class="num">Tests</th><th>Protects</th></tr></thead>
@@ -878,12 +878,14 @@ flowchart LR
         <tr><td class="file">test_orders.py</td><td class="num">23</td><td>order schema and validation</td></tr>
         <tr><td class="file">test_order_queue.py</td><td class="num">19</td><td>FIFO queue and window</td></tr>
         <tr><td class="file">test_kinematics.py · test_world.py · test_warehouse_routing.py · test_symbolic.py · test_grid.py · test_models.py</td><td class="num">32</td><td>geometry, routing, legacy modules</td></tr>
+        <tr><td class="file">test_order_limit.py</td><td class="num">10</td><td>the first N logical orders, never split; 0 and too many mean all</td></tr>
         <tr><td class="file">test_map_lookups.py</td><td class="num">7</td><td>the map's zone and cell lookups give exactly what a full scan gave</td></tr>
         <tr class="group"><td colspan="3">simulation_env/test</td></tr>
         <tr><td class="file">test_battery_ledger.py</td><td class="num">29</td><td>exact charge bookkeeping</td></tr>
         <tr><td class="file">test_dataset.py</td><td class="num">24</td><td>no future leakage, recording changes nothing, exports</td></tr>
         <tr><td class="file">test_charger_evacuation.py</td><td class="num">19</td><td>robots leave the roads to charge</td></tr>
         <tr><td class="file">test_b5_queue.py</td><td class="num">17</td><td>holding promotion and preemption</td></tr>
+        <tr><td class="file">test_order_limit_run.py</td><td class="num">8</td><td>a limited run executes and records exactly its orders; run.json holds the effective seed, speed, quantum and robots; ROS and headless share the rule</td></tr>
         <tr><td class="file">test_run_metrics.py</td><td class="num">3</td><td>metrics.json reports the run's own numbers; a charge request is counted once</td></tr>
         <tr><td class="file">test_gazebo_world.py</td><td class="num">18</td><td>the robots Gazebo loads stand where the node puts them; only this world's Gazebo, on this partition, is stopped</td></tr>
         <tr><td class="file">test_stage_promotion.py</td><td class="num">12</td><td>Stage Zone robots queue with holding robots, reach a charger they can afford, charge and rejoin</td></tr>
@@ -1051,6 +1053,7 @@ flowchart LR
         <tr><td class="file">2026-10-24 (3)</td><td>Stage Zone promotion (approved scope change to Battery V1): saturated robots queue with holding robots and are promoted onto a reachable free charger. 100 robots: 100/100 charge and rejoin, makespan 2441.29 s &rarr; 2133.49 s. V2 baseline unchanged. Config battery rates back to 1.0. Tests 367.</td></tr>
         <tr><td class="file">2026-10-24 (4)</td><td>Gazebo opens with the robots parked on their start cells and only one Gazebo per world (<code>gazebo.launch.py</code>, also used by the one-command launch). A run finds the robots and makes them move; first move 18.9 s &rarr; 8.9 s after the run starts. Tests 385.</td></tr>
         <tr><td class="file">2026-10-25</td><td>Experiments: <code>run_experiment.py</code>, <code>plot_experiment.py</code>, <code>metrics.json</code> per run. fleet_sweep (30/40/50 robots, 2000 orders, 3 strategies): A* beats Manhattan by 1.5&ndash;2.4% and random by 3.1&ndash;4.4% in makespan. Quiet terminal: one status line per 60 simulated s and a short summary; detail on <code>/mrta/fleet_status</code>, <code>/mrta/events</code>, <code>/mrta/robot_states</code>. Finding: charging comes in synchronized waves. Tests 388.</td></tr>
+        <tr><td class="file">2026-10-25 (2)</td><td>One order limit: <code>order_limit:=N</code> in Gazebo, <code>--orders N</code> headless, the same first N logical orders. <code>run.json</code> now records the run's real seed, speed, dispatch quantum and order count, and the run_id covers them (three <code>random</code> seeds had shared one). Decisions: 100% initial SOC stays the reference; Popper after the baselines and B6; no clean-up yet; strategies next in order, Earliest Finish first. Tests 406.</td></tr>
         <tr><td class="file">2026-10-24</td><td>One map, one config, one world: <code>config/warehouse.yaml</code>, <code>maps/W100.xlsx</code>, <code>worlds/warehouse.world</code>; <code>build_scenario.py --map</code>; robots created and removed at run time (<code>robots:=N</code>); V2 moved to test fixtures; build flag for CMake's Python. Tests 344.</td></tr>
         <tr><td class="file">2026-10-23 (2)</td><td>Gazebo: W100 and W100_20 worlds built and tested; run steps added to ROS and Gazebo; <code>warehouse_W100_20.yaml</code> added to Configs; node prints the real order count and stops cleanly on Ctrl+C.</td></tr>
         <tr><td class="file">2026-10-23</td><td>Page created: repository, packages, modules, run sequence, decision loop, engine, state machines, maps, data, ROS and Gazebo, scripts, files, tests, documents, status, rules, issues.</td></tr>

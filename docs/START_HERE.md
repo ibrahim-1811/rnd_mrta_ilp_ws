@@ -89,7 +89,7 @@ pixi run test
 ```
 
 ```text
-388 passed
+406 passed
 ```
 
 ---
@@ -203,7 +203,7 @@ always gives the same numbers.
 
 ```text
 --robots 30           fleet size, 1 up to the map's parking cells
---orders 300          the first 300 orders of the order list
+--orders 300          the first 300 logical orders (an order is never split; 0 = all)
 --orders-file X.csv   a different order list
 --strategy random     nearest_astar | nearest_manhattan | random
 --seed 7              seed for the random strategy
@@ -422,6 +422,10 @@ cd ~/rnd_mrta_ilp_ws
 source /opt/ros/jazzy/setup.bash && source install/setup.bash
 ros2 launch simulation_env warehouse_sim.launch.py \
     start_gazebo:=false orders:=true robots:=30 strategy:=nearest_astar
+
+# or a short run: only the first 50 orders
+ros2 launch simulation_env warehouse_sim.launch.py \
+    start_gazebo:=false orders:=true robots:=30 order_limit:=50
 ```
 
 **It is working when terminal 2 prints:**
@@ -462,6 +466,7 @@ Add to the `ros2 launch` line:
 | Option | Does |
 |---|---|
 | `robots:=50` | number of robots, 1 up to the map's parking cells |
+| `order_limit:=50` | run only the first 50 logical orders (5, 10, 50, 100, 500 ... ; default all 2000); the same orders as headless `--orders 50`. The terminal prints what was asked and what runs: `orders : first 50 of 2000 logical orders (92 line items) from orders.csv, limit 50` |
 | `strategy:=random` | a different strategy |
 | `speed:=0.4` | slower robots, so the one-way roads are easy to see |
 | `dataset:=runs/live` | record data as in step 7 (written as CSV here), plus `metrics.json` and `report.txt` |

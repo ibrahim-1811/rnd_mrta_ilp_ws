@@ -344,10 +344,38 @@ class RunRecorder:
                 out.writerows([row.get(key) for key in keys] for row in rows)
 
 
-def build_manifest(config, *, strategy: str, window, window_width, repo=None) -> dict:
-    """Everything needed to say what a dataset is a measurement of."""
+# Recorded, but not part of the run_id: a limit above the number of
+# orders runs exactly the same orders as no limit at all. The effective
+# order count is what identifies the run.
+NOT_IN_RUN_ID = ("order_limit",)
+
+
+def build_manifest(
+    config,
+    *,
+    strategy: str,
+    window,
+    window_width,
+    seed: int,
+    speed_mps: float,
+    dispatch_quantum_s: float,
+    orders,
+    order_limit: int,
+    orders_available: int,
+    repo=None,
+) -> dict:
+    """Everything needed to say what a dataset is a measurement of.
+
+    The run's effective conditions are passed in, never read back from
+    the config: a command-line seed, speed, dispatch quantum or order
+    limit overrides the YAML, and the manifest must record what was
+    actually run. They are keyword-only and required, so a caller
+    cannot silently fall back to the config's value. ``orders`` is the
+    executed order sequence.
+    """
 
     battery = config.battery
+    orders = tuple(orders)
 
     manifest = {
         "git": git_state(repo),
@@ -357,16 +385,21 @@ def build_manifest(config, *, strategy: str, window, window_width, repo=None) ->
         "map_sha256": sha256_of(config.map_path),
         "orders_path": str(config.orders_path),
         "orders_sha256": sha256_of(config.orders_path),
+        # The first `orders` logical orders of that file, never split.
+        "orders": len(orders),
+        "line_items": sum(len(order.items) for order in orders),
+        "orders_available": orders_available,
+        "order_limit": order_limit,
         "robot_count": config.robot_count,
-        "speed_mps": config.speed_mps,
+        "speed_mps": float(speed_mps),
         "resolution_m": config.resolution_m,
         "shelf_pick_s": config.shelf_pick_s,
         "dropoff_s": config.dropoff_s,
         "strategy": strategy,
-        "seed": config.seed,
+        "seed": seed,
         "allocation_window": str(window),
         "window_width": window_width,
-        "dispatch_quantum_s": config.dispatch_quantum_s,
+        "dispatch_quantum_s": float(dispatch_quantum_s),
         "battery": {
             "enabled": getattr(battery, "enabled", True),
             "initial_soc_percent": _float(battery.initial_soc_percent),
@@ -380,13 +413,22 @@ def build_manifest(config, *, strategy: str, window, window_width, repo=None) ->
             ),
             "reserve_percent": _float(battery.reserve_percent),
             "charge_due_percent": _float(battery.charge_due_percent),
+            # Per-robot starting SOC, for a heterogeneous-SOC condition.
+            "initial_soc_overrides": {
+                robot_id: _float(soc)
+                for robot_id, soc in sorted(
+                    getattr(battery, "initial_soc_overrides", {}).items()
+                )
+            },
         },
     }
 
     # The run_id is a hash of the manifest itself, so two runs collide
     # exactly when every input that could change a result is identical.
+    identity = {k: v for k, v in manifest.items() if k not in NOT_IN_RUN_ID}
+
     manifest["run_id"] = sha256(
-        dumps(manifest, sort_keys=True, default=str).encode()
+        dumps(identity, sort_keys=True, default=str).encode()
     ).hexdigest()[:16]
 
     return manifest

@@ -143,7 +143,7 @@ Re-running with fewer robots removes the extras from the same world.
 | the map | `build_scenario.py --map X.xlsx` |
 | an edit to the current map | `build_scenario.py --map` with the same file |
 | robot count | nothing: `--robots N` headless, `robots:=N` in Gazebo |
-| order count | nothing: `--orders N` takes the first N |
+| order count | nothing: `--orders N` headless, `order_limit:=N` in Gazebo; both take the first N logical orders |
 | `battery.*`, `fleet.speed_mps`, `service.*` | nothing; read at run time |
 | the lane policy code | `build_scenario.py` again (the nav graph derives from it) |
 
@@ -351,7 +351,7 @@ PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py [options]
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--orders N` | `0` = whole CSV | how many logical orders |
+| `--orders N` | `0` = every order | the first N logical orders (an order's rows are never split); more than the file holds = every order |
 | `--robots N` | `0` = config value | fleet size |
 | `--speed M` | `0` = config value | m/s |
 | `--strategy NAME` | `nearest_astar` | allocation policy |
@@ -375,14 +375,19 @@ for r in 6 12 18; do for o in 18 50 100; do
 done; done
 ```
 
-### One silent cap to know about
+### Asking for more orders than exist
 
-`--orders` is applied as a plain **list slice**, so asking for more
-than exists is not an error and prints no warning:
+`--orders N` (and `order_limit:=N` in Gazebo) takes the first N logical
+orders and never fails for a large N; the run says so:
 
-* `--orders 300` against the 100-order CSV silently runs **100**.
-  To really run 300, generate a bigger CSV (§2.4) and point the config
-  at it (§4.1).
+```text
+  orders     : all 2000 logical orders (3954 line items) from orders.csv: the limit 5000 is more than the file holds
+```
+
+`run.json` records both the limit asked for (`order_limit`) and the
+orders run (`orders`, `line_items`, `orders_available`). To really run
+more orders, generate a bigger CSV (§2.4) and point the config at it
+(§4.1).
 * `--robots N` overrides `fleet.robot_count` for one run, up **or**
   down. It used to only ever shrink the configured fleet, so asking
   for more than `robot_count` silently did nothing; it now rebuilds
@@ -994,6 +999,9 @@ prints `[OK] Gazebo already shows these 30 robot(s)`, then
 | `start_gazebo` | `true` | include `gazebo.launch.py`; set false to attach to a Gazebo started in terminal 1 |
 | `config_file` | the source tree's `config/warehouse.yaml` | drives map, fleet size, order file, world name |
 | `robots` | `0` = config | number of robots; Gazebo is given exactly this many |
+| `order_limit` | `0` = every order | with `orders:=true`, run only the first N logical orders (the same rule as headless `--orders N`) |
+| `verbose` | `false` | print the full trace to the terminal |
+| `progress` | `60.0` | simulated seconds between terminal status lines |
 | `world_file` | *derived from the config* | override only to force a specific `.world` |
 
 ### ⚠️ Exactly one server
