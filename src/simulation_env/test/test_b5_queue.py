@@ -237,6 +237,19 @@ def preempting(config, warehouse, *, rate=None):
 
     events = []
 
+    # FAR is what drains robot_002 past 10%, and SHORT is what keeps the
+    # queue non-empty so that it enters REQUEST at the end of its order
+    # instead of parking on CHARGE_DUE_AT_END. The scenario therefore
+    # needs robot_002 paired with FAR specifically.
+    #
+    # Pinned to the pre-S0 window this scenario was approved under, so
+    # that pairing is guaranteed. S0 widened the default window to the
+    # fleet size, and with both orders on the table the allocator
+    # correctly prefers the cheaper SHORT -- whereupon robot_002 crosses
+    # 10% early, requests before robot_001 has even reached its charger,
+    # and finds a RESERVED charger rather than a charging robot to
+    # preempt. That is sound allocation and sound battery behaviour; it
+    # is simply not this scenario.
     orders = [FAR, SHORT]
 
     executor = executor_for(
@@ -244,6 +257,7 @@ def preempting(config, warehouse, *, rate=None):
         warehouse,
         [o for o in _orders(config, warehouse, orders)],
         events=events,
+        window="legacy",
     )
 
     # Controlled saturation: one charger, so the second requester cannot

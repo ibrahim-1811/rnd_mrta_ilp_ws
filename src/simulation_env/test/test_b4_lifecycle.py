@@ -71,11 +71,21 @@ def test_slow_charge_completes_and_rejoins(config, warehouse):
 
 
 def test_charger_is_reused_by_a_later_request(config, warehouse):
+    # Pinned to the pre-S0 window this B4 scenario was approved under.
+    # The test is about the *direct* reuse path, where the later
+    # requester finds the charger already FREE and so departs in the
+    # instant it requests. Under the wider S0 default the allocation
+    # differs, robot_002 requests at t=98 while robot_001 is still
+    # charging, and it is correctly routed through a holding cell and
+    # promoted -- three charge records, and requested_at != departed_at
+    # for the promoted trip. That is the B5 queued path, covered by
+    # test_b5_queue.py, not this one.
     ex, monitor, _ = build(
         replace(config, robot_count=4),
         warehouse,
         {"robot_001": Fraction(9), "robot_002": Fraction(18)},
         orders=12,
+        window="legacy",
     )
     ex.chargers.slots = dict(list(ex.chargers.slots.items())[:1])
     ex.run()

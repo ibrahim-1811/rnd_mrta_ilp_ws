@@ -203,17 +203,30 @@ NON_TRANSIT_TYPES: tuple[ZoneType, ...] = non_transit_types()
 #                              pair, all westbound
 # ---------------------------------------------------------------------
 
-EASTBOUND_ROWS = frozenset({
-    2, 4,
-    15, 17, 19,
-    29, 31, 33,
-})
+EASTBOUND_ROWS = frozenset(
+    {
+        2,
+        4,
+        15,
+        17,
+        19,
+        29,
+        31,
+        33,
+    }
+)
 
-WESTBOUND_ROWS = frozenset({
-    1, 3, 5,
-    16, 18,
-    30, 32,
-})
+WESTBOUND_ROWS = frozenset(
+    {
+        1,
+        3,
+        5,
+        16,
+        18,
+        30,
+        32,
+    }
+)
 
 
 # Rows inside a shelf block.
@@ -226,21 +239,28 @@ WESTBOUND_ROWS = frozenset({
 # All rungs run west, so an aisle pair can never form a two-cell
 # rotary and a robot can always cross from the up-aisle to the
 # down-aisle without meeting anyone head-on.
-SHELF_BLOCK_ROWS = (
-    frozenset(range(6, 15))
-    | frozenset(range(20, 29))
-)
+SHELF_BLOCK_ROWS = frozenset(range(6, 15)) | frozenset(range(20, 29))
 
 SHELF_BLOCK_RUNG_DX = -1
 
 
-NORTHBOUND_COLS = frozenset({
-    3, 6, 9, 12,
-})
+NORTHBOUND_COLS = frozenset(
+    {
+        3,
+        6,
+        9,
+        12,
+    }
+)
 
-SOUTHBOUND_COLS = frozenset({
-    5, 8, 11, 14,
-})
+SOUTHBOUND_COLS = frozenset(
+    {
+        5,
+        8,
+        11,
+        14,
+    }
+)
 
 
 # Shelf columns.
@@ -255,9 +275,14 @@ SOUTHBOUND_COLS = frozenset({
 # from the aisle above. That is why the bottom band's rows run
 # opposite to the top band's, and why these columns lift traffic back
 # out of the bottom band instead of pushing more into it.
-SHELF_COLS = frozenset({
-    4, 7, 10, 13,
-})
+SHELF_COLS = frozenset(
+    {
+        4,
+        7,
+        10,
+        13,
+    }
+)
 
 # (y_min, y_max) of each open band, in ascending order.
 OPEN_BANDS = (
@@ -390,10 +415,7 @@ def _directional_edge_allowed(
     if source_terminal or target_terminal:
         return True
 
-    if (
-        frozenset({source, target})
-        in BIDIRECTIONAL_CONNECTORS
-    ):
+    if frozenset({source, target}) in BIDIRECTIONAL_CONNECTORS:
         return True
 
     dx = tx - sx
@@ -402,7 +424,6 @@ def _directional_edge_allowed(
     frontage_y_min, frontage_y_max = frontage
 
     if dy == 0:
-
         # -----------------------------------------------------
         # Staging frontage circulation.
         #
@@ -428,14 +449,9 @@ def _directional_edge_allowed(
         # preserving a complete one-way circulation loop.
         # -----------------------------------------------------
 
-        in_staging_band = (
-            frontage_y_min
-            <= sy
-            <= frontage_y_max
-        )
+        in_staging_band = frontage_y_min <= sy <= frontage_y_max
 
         if in_staging_band:
-
             # ---------------------------------------------
             # LEFT INTERNAL FRONTAGE
             # x1 <-> x2
@@ -445,25 +461,16 @@ def _directional_edge_allowed(
                 LEFT_FRONTAGE_NORTH_X,
                 LEFT_FRONTAGE_SOUTH_X,
             }:
-
                 # Top crossover for outbound traffic:
                 #
                 # x1 -> x2
                 if sy == frontage_y_max:
-                    return (
-                        sx == LEFT_FRONTAGE_NORTH_X
-                        and
-                        tx == LEFT_FRONTAGE_SOUTH_X
-                    )
+                    return sx == LEFT_FRONTAGE_NORTH_X and tx == LEFT_FRONTAGE_SOUTH_X
 
                 # Everywhere else returning traffic moves:
                 #
                 # x2 -> x1
-                return (
-                    sx == LEFT_FRONTAGE_SOUTH_X
-                    and
-                    tx == LEFT_FRONTAGE_NORTH_X
-                )
+                return sx == LEFT_FRONTAGE_SOUTH_X and tx == LEFT_FRONTAGE_NORTH_X
 
             # ---------------------------------------------
             # LEFT EXTERNAL FRONTAGE
@@ -474,15 +481,12 @@ def _directional_edge_allowed(
                 LEFT_FRONTAGE_SOUTH_X,
                 LEFT_FRONTAGE_SOUTH_X + 1,
             }:
-
                 # Top ingress:
                 #
                 # warehouse x3 -> staging lane x2
                 if sy == frontage_y_max:
                     return (
-                        sx == LEFT_FRONTAGE_SOUTH_X + 1
-                        and
-                        tx == LEFT_FRONTAGE_SOUTH_X
+                        sx == LEFT_FRONTAGE_SOUTH_X + 1 and tx == LEFT_FRONTAGE_SOUTH_X
                     )
 
                 # Bottom egress:
@@ -490,9 +494,7 @@ def _directional_edge_allowed(
                 # staging lane x2 -> warehouse x3
                 if sy == frontage_y_min:
                     return (
-                        sx == LEFT_FRONTAGE_SOUTH_X
-                        and
-                        tx == LEFT_FRONTAGE_SOUTH_X + 1
+                        sx == LEFT_FRONTAGE_SOUTH_X and tx == LEFT_FRONTAGE_SOUTH_X + 1
                     )
 
                 # No warehouse/frontage crossing in the middle.
@@ -515,25 +517,18 @@ def _directional_edge_allowed(
                 RIGHT_FRONTAGE_FEEDER_X,
                 RIGHT_FRONTAGE_NORTH_X,
             }:
-
                 # Top crossover back onto the trunk:
                 #
                 # x15 -> x14
                 if sy == frontage_y_max:
                     return (
-                        sx == RIGHT_FRONTAGE_NORTH_X
-                        and
-                        tx == RIGHT_FRONTAGE_FEEDER_X
+                        sx == RIGHT_FRONTAGE_NORTH_X and tx == RIGHT_FRONTAGE_FEEDER_X
                     )
 
                 # Turn-in from the trunk:
                 #
                 # x14 -> x15
-                return (
-                    sx == RIGHT_FRONTAGE_FEEDER_X
-                    and
-                    tx == RIGHT_FRONTAGE_NORTH_X
-                )
+                return sx == RIGHT_FRONTAGE_FEEDER_X and tx == RIGHT_FRONTAGE_NORTH_X
 
         # Rungs inside a shelf block.
         if sy in SHELF_BLOCK_ROWS:
@@ -548,7 +543,6 @@ def _directional_edge_allowed(
         return False
 
     if dx == 0:
-
         # -----------------------------------------------------
         # Staging frontage lanes.
         #
@@ -562,12 +556,10 @@ def _directional_edge_allowed(
 
         in_frontage = (
             frontage_y_min <= sy <= frontage_y_max
-            and
-            frontage_y_min <= ty <= frontage_y_max
+            and frontage_y_min <= ty <= frontage_y_max
         )
 
         if in_frontage:
-
             if sx == LEFT_FRONTAGE_NORTH_X:
                 return dy == 1
 
@@ -579,7 +571,6 @@ def _directional_edge_allowed(
 
         # Shelf columns: northbound, and never across a shelf block.
         if sx in SHELF_COLS:
-
             band = _open_band(sy)
 
             if band is None or band != _open_band(ty):
@@ -613,7 +604,6 @@ def _cached_directional_blocked_edges(
 
     for y in range(height):
         for x in range(width):
-
             source = (x, y)
 
             if source in obstacles:
@@ -625,13 +615,9 @@ def _cached_directional_blocked_edges(
                 (x, y + 1),
                 (x, y - 1),
             ):
-
                 tx, ty = target
 
-                if not (
-                    0 <= tx < width
-                    and 0 <= ty < height
-                ):
+                if not (0 <= tx < width and 0 <= ty < height):
                     continue
 
                 if target in obstacles:
@@ -643,9 +629,83 @@ def _cached_directional_blocked_edges(
                     terminal_cells,
                     frontage,
                 ):
-                    blocked_edges.add(
-                        (source, target)
-                    )
+                    blocked_edges.add((source, target))
+
+    return frozenset(blocked_edges)
+
+
+def _drawn_edge_allowed(
+    source: Cell,
+    target: Cell,
+    terminal_cells: frozenset[Cell],
+    lane_edges: frozenset[tuple[Cell, Cell]],
+) -> bool:
+    """Whether one grid edge is legal on a map that draws its own lanes.
+
+    The terminal rules are the same, word for word, as in
+    ``_directional_edge_allowed``: they are what makes a terminal a
+    terminal, and they must not depend on who drew the map. Only the
+    floor-to-floor answer changes -- it comes from the map's arrows
+    instead of the built-in V2 rows and columns.
+    """
+
+    if abs(target[0] - source[0]) + abs(target[1] - source[1]) != 1:
+        return False
+
+    source_terminal = source in terminal_cells
+    target_terminal = target in terminal_cells
+
+    # Never hop from one station straight into another.
+    if source_terminal and target_terminal:
+        return False
+
+    # Drive in to be served, and retreat back out, in either direction.
+    if source_terminal or target_terminal:
+        return True
+
+    return (source, target) in lane_edges
+
+
+@lru_cache(maxsize=16)
+def _cached_drawn_blocked_edges(
+    width: int,
+    height: int,
+    obstacles: frozenset[Cell],
+    terminal_cells: frozenset[Cell],
+    lane_edges: frozenset[tuple[Cell, Cell]],
+):
+    """The blocked-edge set for a map that draws its own lanes."""
+
+    blocked_edges = set()
+
+    for y in range(height):
+        for x in range(width):
+            source = (x, y)
+
+            if source in obstacles:
+                continue
+
+            for target in (
+                (x + 1, y),
+                (x - 1, y),
+                (x, y + 1),
+                (x, y - 1),
+            ):
+                tx, ty = target
+
+                if not (0 <= tx < width and 0 <= ty < height):
+                    continue
+
+                if target in obstacles:
+                    continue
+
+                if not _drawn_edge_allowed(
+                    source,
+                    target,
+                    terminal_cells,
+                    lane_edges,
+                ):
+                    blocked_edges.add((source, target))
 
     return frozenset(blocked_edges)
 
@@ -654,7 +714,16 @@ def directional_blocked_edges(
     warehouse: WarehouseMap,
     terminal_cells: frozenset[Cell] | None = None,
 ) -> frozenset[tuple[Cell, Cell]]:
-    """Directed edges forbidden by the fixed warehouse lane policy.
+    """Directed edges forbidden by the warehouse lane policy.
+
+    Every consumer of the lane policy -- A*, the RMF nav graph, the
+    traffic controller, the topology gate -- reads it through this one
+    function, so the two sources below can never disagree about which
+    way a road runs:
+
+        the map draws lanes    its own arrows are the policy, so any
+                               layout routes without a code change
+        the map draws none     the built-in V2 policy below, unchanged
 
     ``terminal_cells`` defaults to the live non-transit policy. The
     topology validator passes an explicit set so it can score a
@@ -663,8 +732,18 @@ def directional_blocked_edges(
     """
 
     if terminal_cells is None:
-        terminal_cells = non_transit_cells(
-            warehouse
+        terminal_cells = non_transit_cells(warehouse)
+
+    if warehouse.lane_edges is not None:
+        # frontage_band() is a V2 rule about one specific home bank. A
+        # drawn map carries its own frontage in its arrows, and may
+        # place its banks anywhere, so the V2 rule is never consulted.
+        return _cached_drawn_blocked_edges(
+            warehouse.grid.width,
+            warehouse.grid.height,
+            warehouse.grid.obstacles,
+            terminal_cells,
+            warehouse.lane_edges,
         )
 
     return _cached_directional_blocked_edges(
@@ -682,13 +761,7 @@ def service_cells(
 ) -> frozenset[Cell]:
     """Every cell occupied by racking or a drop chute."""
 
-    cells: set[Cell] = set()
-
-    for zone_type in types:
-        for zone in warehouse.zones_of_type(zone_type):
-            cells |= zone.cells
-
-    return frozenset(cells)
+    return warehouse.cells_of_types(types)
 
 
 def non_transit_cells(
@@ -705,13 +778,7 @@ def non_transit_cells(
     if types is None:
         types = NON_TRANSIT_TYPES
 
-    cells: set[Cell] = set()
-
-    for zone_type in types:
-        for zone in warehouse.zones_of_type(zone_type):
-            cells |= zone.cells
-
-    return frozenset(cells)
+    return warehouse.cells_of_types(types)
 
 
 def traversable_lane_edges(
@@ -758,16 +825,13 @@ def traversable_lane_edges(
     def free(cell: Cell) -> bool:
         x, y = cell
         return (
-            0 <= x < grid.width
-            and 0 <= y < grid.height
-            and cell not in grid.obstacles
+            0 <= x < grid.width and 0 <= y < grid.height and cell not in grid.obstacles
         )
 
     edges: set[tuple[Cell, Cell]] = set()
 
     for y in range(grid.height):
         for x in range(grid.width):
-
             source = (x, y)
 
             if not free(source):
@@ -779,7 +843,6 @@ def traversable_lane_edges(
                 (x, y + 1),
                 (x, y - 1),
             ):
-
                 if not free(target):
                     continue
 
@@ -789,15 +852,10 @@ def traversable_lane_edges(
                 # The terminal chain. One end being a terminal is
                 # service access; both ends being terminals is a
                 # through route across stations.
-                if (
-                    source in terminal_cells
-                    and target in terminal_cells
-                ):
+                if source in terminal_cells and target in terminal_cells:
                     continue
 
-                edges.add(
-                    (source, target)
-                )
+                edges.add((source, target))
 
     return frozenset(edges)
 
@@ -808,10 +866,7 @@ def is_service_zone(
     types: tuple[ZoneType, ...] = SERVICE_TYPES,
 ) -> bool:
 
-    return (
-        warehouse.zone_by_id(zone_id).zone_type
-        in types
-    )
+    return warehouse.zone_by_id(zone_id).zone_type in types
 
 
 def navigation_grid(
@@ -830,9 +885,7 @@ def navigation_grid(
     policy using this same function.
     """
 
-    blocked = set(
-        warehouse.grid.obstacles
-    )
+    blocked = set(warehouse.grid.obstacles)
 
     blocked |= set(occupied)
 
@@ -859,14 +912,11 @@ def best_path_to_zone(
 ):
     """Find cheapest path from one cell to any cell in a zone."""
 
-    goal_zone = warehouse.zone_by_id(
-        goal_zone_id
-    )
+    goal_zone = warehouse.zone_by_id(goal_zone_id)
 
     best = None
 
     for goal in sorted(goal_zone.cells):
-
         grid = navigation_grid(
             warehouse,
             occupied=occupied,
@@ -883,17 +933,11 @@ def best_path_to_zone(
         if not result.found:
             continue
 
-        if (
-            best is None
-            or result.total_cost < best.total_cost
-        ):
+        if best is None or result.total_cost < best.total_cost:
             best = result
 
     if best is None:
-        raise RuntimeError(
-            f"No path from {start} "
-            f"to zone {goal_zone_id}"
-        )
+        raise RuntimeError(f"No path from {start} to zone {goal_zone_id}")
 
     return best
 
@@ -915,7 +959,6 @@ def nearest_reachable_zone(
     best = None
 
     for zone_id in sorted(zone_ids):
-
         try:
             result = (
                 cache.leg(start_cell, zone_id)
@@ -970,11 +1013,7 @@ class RouteCache:
 
         self.warehouse = warehouse
 
-        self.occupied = (
-            non_transit_cells(warehouse)
-            if occupied is None
-            else occupied
-        )
+        self.occupied = non_transit_cells(warehouse) if occupied is None else occupied
 
         # (start_cell, goal_zone_id) -> PathResult, or None for
         # 'no route exists', which is worth remembering too.
@@ -994,9 +1033,7 @@ class RouteCache:
             found = self._legs[key]
 
             if found is None:
-                raise RuntimeError(
-                    f"No path from {start} to zone {goal_zone_id}"
-                )
+                raise RuntimeError(f"No path from {start} to zone {goal_zone_id}")
 
             return found
 
@@ -1046,10 +1083,7 @@ def plan_return_to_zone(
         occupied,
     )
 
-    distance_m = (
-        result.distance
-        * warehouse.grid.resolution
-    )
+    distance_m = result.distance * warehouse.grid.resolution
 
     segment = MissionSegment(
         from_zone=from_label,
@@ -1113,25 +1147,17 @@ def plan_from_cell(
     """
 
     if not zone_ids:
-        raise ValueError(
-            "mission requires at least one destination zone"
-        )
+        raise ValueError("mission requires at least one destination zone")
 
     # Validate all IDs first.
     for zone_id in zone_ids:
         warehouse.zone_by_id(zone_id)
 
-    occupied = (
-        non_transit_cells(warehouse)
-        if services_block
-        else frozenset()
-    )
+    occupied = non_transit_cells(warehouse) if services_block else frozenset()
 
     if extra_blocked:
         # The robot's own cell is never an obstacle to itself.
-        occupied = frozenset(occupied) | (
-            frozenset(extra_blocked) - {start_cell}
-        )
+        occupied = frozenset(occupied) | (frozenset(extra_blocked) - {start_cell})
 
     # A cache is only valid for the occupancy view it was built for.
     if cache is not None and cache.occupied != occupied:
@@ -1150,7 +1176,6 @@ def plan_from_cell(
     from_zone = start_label
 
     for to_zone in zone_ids:
-
         result = (
             cache.leg(current_cell, to_zone)
             if cache is not None
@@ -1162,21 +1187,16 @@ def plan_from_cell(
             )
         )
 
-        distance_m = (
-            result.distance
-            * warehouse.grid.resolution
-        )
+        distance_m = result.distance * warehouse.grid.resolution
 
         # Service cell reached: the robot backs out one step into
         # the aisle it came from, and the next leg departs there.
         exit_cell = None
 
         if occupied and is_service_zone(warehouse, to_zone):
-
             if len(result.path) < 2:
                 raise RuntimeError(
-                    f"cannot retreat from {to_zone}: "
-                    f"leg has no approach cell"
+                    f"cannot retreat from {to_zone}: leg has no approach cell"
                 )
 
             exit_cell = result.path[-2]
@@ -1235,9 +1255,7 @@ def plan_zone_mission(
     """
 
     if len(zone_ids) < 2:
-        raise ValueError(
-            "mission requires at least two zones"
-        )
+        raise ValueError("mission requires at least two zones")
 
     first_zone = warehouse.zone_by_id(zone_ids[0])
 

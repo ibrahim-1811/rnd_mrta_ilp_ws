@@ -14,8 +14,9 @@ Coloured tiles:
     semantic stations, one model per station ID, named after
     the ID so a pose can be read straight off the entity tree
 
-Black cylinder:
-    lightweight grid robot
+No robots. The world is the warehouse only, so one world serves every
+fleet size on its map. The fleet node creates exactly the robots a run
+needs when it starts (simulation_env.gazebo_bridge.create_robots).
 
 Station tiles are visual only. They carry no collision and never
 affect A*; the occupancy layer is still just the red cells.
@@ -26,11 +27,10 @@ from pathlib import Path
 
 from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
-from simulation_env.fleet import build_fleet
 from simulation_env.gazebo_view import grid_to_gazebo
 
 
-DEFAULT_CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+DEFAULT_CONFIG = "src/simulation_env/config/warehouse.yaml"
 
 WORLDS_DIR = Path("src/simulation_env/worlds")
 
@@ -40,25 +40,24 @@ _parser.add_argument(
     "--config",
     default=DEFAULT_CONFIG,
     type=Path,
-    help="simulation config; map, fleet size, cell size and world "
-         "name all come from it",
+    help="simulation config; the map, cell size and world name come from it",
 )
 
 _parser.add_argument(
     "--output",
     default=None,
     type=Path,
-    help="output .world path "
-         "(default: worlds/<gazebo.world_name>.world)",
+    help="output .world path (default: worlds/<gazebo.world_name>.world)",
 )
 
 _args = _parser.parse_args()
 
 CONFIG_PATH = _args.config
 
-# Map, fleet size, resolution and world name all come from the central
-# config, so the world and the executor can never disagree about any of
-# them. Regenerate this world whenever any of those change.
+# Map, resolution and world name come from the central config, so the
+# world and the executor can never disagree about the warehouse.
+# Regenerate this world whenever the map changes; the fleet size never
+# requires it.
 CONFIG = load_sim_config(CONFIG_PATH)
 
 MAP_PATH = CONFIG.map_path
@@ -66,9 +65,7 @@ MAP_PATH = CONFIG.map_path
 WORLD_NAME = CONFIG.gazebo_world_name
 
 OUTPUT_PATH = (
-    _args.output
-    if _args.output is not None
-    else WORLDS_DIR / f"{WORLD_NAME}.world"
+    _args.output if _args.output is not None else WORLDS_DIR / f"{WORLD_NAME}.world"
 )
 
 CELL_SIZE = CONFIG.resolution_m
@@ -76,9 +73,6 @@ CELL_SIZE = CONFIG.resolution_m
 FLOOR_Z = 0.0
 
 BLOCK_HEIGHT = 0.05
-
-ROBOT_RADIUS = 0.30
-ROBOT_HEIGHT = 0.15
 
 STATION_HEIGHT = 0.02
 STATION_INSET = 0.8
@@ -104,34 +98,20 @@ warehouse = load_warehouse_xlsx(
 )
 
 
-width_m = (
-    warehouse.grid.width
-    * CELL_SIZE
-)
+width_m = warehouse.grid.width * CELL_SIZE
 
-height_m = (
-    warehouse.grid.height
-    * CELL_SIZE
-)
+height_m = warehouse.grid.height * CELL_SIZE
 
 
 # Cell centres sit on integers, so the tiles span
 # -0.5 .. width-0.5 rather than 0 .. width. The floor has to be
 # centred on that extent or it shows half a cell of white beyond the
 # racking on two sides.
-floor_center_x = (
-    warehouse.grid.origin_x
-    + (warehouse.grid.width - 1) * CELL_SIZE / 2.0
-)
+floor_center_x = warehouse.grid.origin_x + (warehouse.grid.width - 1) * CELL_SIZE / 2.0
 
-floor_center_y = (
-    warehouse.grid.origin_y
-    + (warehouse.grid.height - 1) * CELL_SIZE / 2.0
-)
+floor_center_y = warehouse.grid.origin_y + (warehouse.grid.height - 1) * CELL_SIZE / 2.0
 
 
-# The fleet is built from the same config the executor uses, so the
-# world and the running robots always agree on where each one starts.
 def grid_to_world(x: int, y: int) -> tuple[float, float]:
 
     # Cell centres. Shared with the live mission runner and the RMF
@@ -145,22 +125,13 @@ def grid_to_world(x: int, y: int) -> tuple[float, float]:
     )
 
 
-fleet = build_fleet(CONFIG, warehouse)
-
-
 lines = []
 
-lines.append(
-    '<?xml version="1.0"?>'
-)
+lines.append('<?xml version="1.0"?>')
 
-lines.append(
-    '<sdf version="1.10">'
-)
+lines.append('<sdf version="1.10">')
 
-lines.append(
-    f'  <world name="{WORLD_NAME}">'
-)
+lines.append(f'  <world name="{WORLD_NAME}">')
 
 
 # --------------------------------------------------
@@ -168,7 +139,7 @@ lines.append(
 # --------------------------------------------------
 
 lines.append(
-    '''
+    """
     <plugin
       filename="gz-sim-physics-system"
       name="gz::sim::systems::Physics">
@@ -183,7 +154,7 @@ lines.append(
       filename="gz-sim-scene-broadcaster-system"
       name="gz::sim::systems::SceneBroadcaster">
     </plugin>
-'''
+"""
 )
 
 
@@ -192,13 +163,13 @@ lines.append(
 # --------------------------------------------------
 
 lines.append(
-    '''
+    """
     <scene>
       <ambient>0.8 0.8 0.8 1</ambient>
       <background>0.6 0.6 0.6 1</background>
       <shadows>false</shadows>
     </scene>
-'''
+"""
 )
 
 
@@ -207,7 +178,7 @@ lines.append(
 # --------------------------------------------------
 
 lines.append(
-    '''
+    """
     <light type="directional" name="sun">
       <pose>0 0 20 0 0 0</pose>
       <direction>0 0 -1</direction>
@@ -215,7 +186,7 @@ lines.append(
       <specular>0.2 0.2 0.2 1</specular>
       <cast_shadows>false</cast_shadows>
     </light>
-'''
+"""
 )
 
 
@@ -224,7 +195,7 @@ lines.append(
 # --------------------------------------------------
 
 lines.append(
-    f'''
+    f"""
     <model name="warehouse_floor">
       <static>true</static>
 
@@ -256,7 +227,7 @@ lines.append(
 
       </link>
     </model>
-'''
+"""
 )
 
 
@@ -264,12 +235,7 @@ lines.append(
 # Red blocked cells
 # --------------------------------------------------
 
-for index, cell in enumerate(
-    sorted(
-        warehouse.grid.obstacles
-    )
-):
-
+for index, cell in enumerate(sorted(warehouse.grid.obstacles)):
     x, y = cell
 
     wx, wy = grid_to_world(
@@ -278,7 +244,7 @@ for index, cell in enumerate(
     )
 
     lines.append(
-        f'''
+        f"""
     <model name="blocked_{index:04d}">
       <static>true</static>
 
@@ -310,7 +276,7 @@ for index, cell in enumerate(
 
       </link>
     </model>
-'''
+"""
     )
 
 
@@ -324,17 +290,13 @@ for index, cell in enumerate(
 station_count = 0
 
 for zone in warehouse.zones:
-
     color = STATION_COLORS.get(
         zone.zone_type.value,
         "0.5 0.5 0.5",
     )
 
     for cell in sorted(zone.cells):
-
-        wx, wy = grid_to_world(
-            *cell
-        )
+        wx, wy = grid_to_world(*cell)
 
         station_count += 1
 
@@ -375,64 +337,12 @@ for zone in warehouse.zones:
         )
 
 
-# --------------------------------------------------
-# Lightweight black-dot robots, one model per robot
-# --------------------------------------------------
+lines.append("  </world>")
 
-for robot in fleet:
-
-    wx, wy = grid_to_world(*robot.cell)
-
-    lines.append(
-        f'''
-    <model name="{robot.robot_id}">
-
-      <static>true</static>
-
-      <pose>
-        {wx}
-        {wy}
-        {ROBOT_HEIGHT / 2.0 + 0.08}
-        0 0 0
-      </pose>
-
-      <link name="robot_link">
-
-        <visual name="robot_visual">
-
-          <geometry>
-            <cylinder>
-              <radius>{ROBOT_RADIUS}</radius>
-              <length>{ROBOT_HEIGHT}</length>
-            </cylinder>
-          </geometry>
-
-          <material>
-            <ambient>0.02 0.02 0.02 1</ambient>
-            <diffuse>0.02 0.02 0.02 1</diffuse>
-          </material>
-
-        </visual>
-
-      </link>
-
-    </model>
-'''
-    )
+lines.append("</sdf>")
 
 
-lines.append(
-    '  </world>'
-)
-
-lines.append(
-    '</sdf>'
-)
-
-
-OUTPUT_PATH.write_text(
-    "\n".join(lines)
-)
+OUTPUT_PATH.write_text("\n".join(lines))
 
 
 print()
@@ -440,46 +350,18 @@ print("=" * 80)
 print("GAZEBO WORLD GENERATED")
 print("=" * 80)
 
-print(
-    f"Map          : {MAP_PATH}"
-)
+print(f"Map          : {MAP_PATH}")
 
-print(
-    f"Output       : {OUTPUT_PATH}"
-)
+print(f"Output       : {OUTPUT_PATH}")
 
-print(
-    f"Grid         : "
-    f"{warehouse.grid.width} x "
-    f"{warehouse.grid.height}"
-)
+print(f"Grid         : {warehouse.grid.width} x {warehouse.grid.height}")
 
-print(
-    f"World size   : "
-    f"{width_m:.1f} m x "
-    f"{height_m:.1f} m"
-)
+print(f"World size   : {width_m:.1f} m x {height_m:.1f} m")
 
-print(
-    f"Blocked cells: "
-    f"{len(warehouse.grid.obstacles)}"
-)
+print(f"Blocked cells: {len(warehouse.grid.obstacles)}")
 
-print(
-    f"Stations     : "
-    f"{station_count}"
-)
+print(f"Stations     : {station_count}")
 
-print(
-    f"Robots       : "
-    f"{len(fleet)}"
-)
-
-for robot in fleet:
-    wx, wy = grid_to_world(*robot.cell)
-    print(
-        f"  {robot.robot_id} cell={robot.cell} "
-        f"gazebo=({wx:.1f}, {wy:.1f})"
-    )
+print("Robots       : none in the world; the fleet node creates them at run time")
 
 print()

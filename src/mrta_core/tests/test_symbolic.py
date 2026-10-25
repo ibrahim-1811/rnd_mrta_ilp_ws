@@ -2,7 +2,11 @@ from math import inf
 
 from mrta_core.grid import PathFeatures
 from mrta_core.models import RobotState, RobotStatus, TaskState
-from mrta_core.symbolic import PredicateThresholds, as_prolog_facts, robot_task_predicates
+from mrta_core.symbolic import (
+    PredicateThresholds,
+    as_prolog_facts,
+    robot_task_predicates,
+)
 
 
 def test_robot_task_predicates_for_good_candidate():

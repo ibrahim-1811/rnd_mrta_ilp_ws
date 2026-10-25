@@ -9,6 +9,7 @@
 
   <depend>rclpy</depend>
   <depend>robot_interfaces</depend>
+  <depend>std_msgs</depend>
   <depend>mrta_core</depend>
   <depend>task_management</depend>
 

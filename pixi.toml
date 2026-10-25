@@ -20,6 +20,9 @@ ruff = "*"
 mypy = "*"
 swi-prolog = "*"
 openpyxl = ">=3.1.5,<4"
+# Phase 8 decision/outcome dataset: Parquet is the format of record
+# (docs/DECISIONS.md, "Decision and Outcome Dataset").
+pyarrow = "*"
 
 [tasks]
 test = "PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management python -m pytest src/mrta_core/tests src/simulation_env/test src/task_management/test -q"

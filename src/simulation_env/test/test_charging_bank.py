@@ -25,11 +25,7 @@ from mrta_core.warehouse_routing import (
 )
 
 
-CONFIG = (
-    Path(__file__).resolve().parents[1]
-    / "config"
-    / "warehouse_sim.yaml"
-)
+CONFIG = Path(__file__).resolve().parent / "fixtures" / "v2_reference.yaml"
 
 BANK_ROWS = (2, 32)
 
@@ -54,10 +50,7 @@ def terminals(warehouse):
 
 
 def cells_of(warehouse, zone_type):
-    return {
-        min(zone.cells)
-        for zone in warehouse.zones_of_type(zone_type)
-    }
+    return {min(zone.cells) for zone in warehouse.zones_of_type(zone_type)}
 
 
 def zone_at(warehouse, cell):
@@ -97,17 +90,17 @@ def test_bank_is_one_cell_deep(warehouse):
             )
 
 
-@pytest.mark.parametrize("zone_type", [
-    ZoneType.CHARGING,
-    ZoneType.CHARGE_QUEUE,
-])
-def test_every_bank_cell_can_be_entered_and_left(
-    warehouse, terminals, zone_type
-):
+@pytest.mark.parametrize(
+    "zone_type",
+    [
+        ZoneType.CHARGING,
+        ZoneType.CHARGE_QUEUE,
+    ],
+)
+def test_every_bank_cell_can_be_entered_and_left(warehouse, terminals, zone_type):
     """From the core in, and from the cell back out, via its aisle."""
 
     for cell in sorted(cells_of(warehouse, zone_type)):
-
         aisle = (cell[0], AISLE_ROW[cell[1]])
 
         inbound = leg(warehouse, terminals, CORE_CELL, cell)
@@ -158,30 +151,20 @@ def test_no_route_crosses_the_charging_bank(warehouse, terminals):
         )
         stations += [min(zones[0].cells), min(zones[-1].cells)]
 
-    pairs = [
-        (a, b)
-        for a in bank
-        for b in bank + stations
-        if a != b
-    ] + [
-        (a, b)
-        for a in stations
-        for b in bank
+    pairs = [(a, b) for a in bank for b in bank + stations if a != b] + [
+        (a, b) for a in stations for b in bank
     ]
 
     for start, goal in pairs:
-
         result = leg(warehouse, terminals, start, goal)
 
         assert result.found, f"{start} -> {goal} unreachable"
 
         path = result.path
 
-        assert not any(
-            cell in terminals for cell in path[1:-1]
-        ), f"{start} -> {goal} crosses a terminal: {path}"
+        assert not any(cell in terminals for cell in path[1:-1]), (
+            f"{start} -> {goal} crosses a terminal: {path}"
+        )
 
         for move in zip(path, path[1:]):
-            assert move in lanes, (
-                f"{start} -> {goal}: {move} is not a nav graph lane"
-            )
+            assert move in lanes, f"{start} -> {goal}: {move} is not a nav graph lane"

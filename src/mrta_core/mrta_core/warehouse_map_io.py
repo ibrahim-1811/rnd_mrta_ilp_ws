@@ -15,11 +15,9 @@ ZONE_ALIASES = {
     # Shelf
     "SHELF": ZoneType.SHELF,
     "SHELVES": ZoneType.SHELF,
-
     # Charging
     "CHARGING": ZoneType.CHARGING,
     "CHARGING ZONE": ZoneType.CHARGING,
-
     # Charging holding bank, not a generic task queue
     "CHARGE QUEUE": ZoneType.CHARGE_QUEUE,
     "CHARGING QUEUE": ZoneType.CHARGE_QUEUE,
@@ -29,27 +27,22 @@ ZONE_ALIASES = {
     "CHARGING QUEUE ZONE": ZoneType.CHARGE_QUEUE,
     "CHARGE HOLDING ZONE": ZoneType.CHARGE_QUEUE,
     "CHARGING HOLDING ZONE": ZoneType.CHARGE_QUEUE,
-
     # Dropoff
     "DROPOFF": ZoneType.DROPOFF,
     "DROP OFF": ZoneType.DROPOFF,
     "DROP ZONE": ZoneType.DROPOFF,
-
     # Collection
     "COLLECTION": ZoneType.COLLECTION,
     "COLLECTION ZONE": ZoneType.COLLECTION,
-
     # Pickup
     "PICKUP": ZoneType.PICKUP,
     "PICK UP": ZoneType.PICKUP,
     "PICKUP ZONE": ZoneType.PICKUP,
-
     # Staging
     "STAGE": ZoneType.STAGING,
     "STAGE ZONE": ZoneType.STAGING,
     "STAGING": ZoneType.STAGING,
     "STAGING ZONE": ZoneType.STAGING,
-
     # Waiting
     "WAITING": ZoneType.WAITING,
     "WAITING ZONE": ZoneType.WAITING,
@@ -58,13 +51,7 @@ ZONE_ALIASES = {
 
 def _normalise(text: str) -> str:
     """Normalize spreadsheet labels."""
-    return " ".join(
-        text.strip()
-        .replace("_", " ")
-        .replace("-", " ")
-        .upper()
-        .split()
-    )
+    return " ".join(text.strip().replace("_", " ").replace("-", " ").upper().split())
 
 
 def load_warehouse_csv(
@@ -78,24 +65,16 @@ def load_warehouse_csv(
     path = Path(path)
 
     with path.open("r", newline="") as f:
-        rows = [
-            [cell.strip() for cell in row]
-            for row in csv.reader(f)
-            if row
-        ]
+        rows = [[cell.strip() for cell in row] for row in csv.reader(f) if row]
 
     if not rows:
-        raise ValueError(
-            f"warehouse CSV is empty: {path}"
-        )
+        raise ValueError(f"warehouse CSV is empty: {path}")
 
     width = len(rows[0])
     height = len(rows)
 
     if any(len(row) != width for row in rows):
-        raise ValueError(
-            "warehouse CSV must be rectangular"
-        )
+        raise ValueError("warehouse CSV must be rectangular")
 
     obstacles: set[tuple[int, int]] = set()
 
@@ -107,12 +86,10 @@ def load_warehouse_csv(
     counters: dict[ZoneType, int] = {}
 
     for csv_row, row in enumerate(rows):
-
         # Spreadsheet top row corresponds to highest grid Y.
         grid_y = height - 1 - csv_row
 
         for x, raw_value in enumerate(row):
-
             value = raw_value.strip()
 
             # Blank = normal traversable floor.
@@ -145,7 +122,6 @@ def load_warehouse_csv(
             #   Charging:C01
             # ---------------------------------------------
             if ":" in value:
-
                 type_text, zone_id = value.split(":", 1)
 
                 type_key = _normalise(type_text)
@@ -160,8 +136,7 @@ def load_warehouse_csv(
 
                 if not zone_id:
                     raise ValueError(
-                        f"empty zone ID at CSV row "
-                        f"{csv_row + 1}, column {x + 1}"
+                        f"empty zone ID at CSV row {csv_row + 1}, column {x + 1}"
                     )
 
                 zone_type = ZONE_ALIASES[type_key]
@@ -176,8 +151,7 @@ def load_warehouse_csv(
 
                 if existing_type != zone_type:
                     raise ValueError(
-                        f"zone ID {zone_id!r} is used "
-                        "with multiple zone types"
+                        f"zone ID {zone_id!r} is used with multiple zone types"
                     )
 
                 cells.add((x, grid_y))
@@ -193,17 +167,11 @@ def load_warehouse_csv(
             #   COLLECTION ZONE
             # ---------------------------------------------
             if normalised in ZONE_ALIASES:
-
                 zone_type = ZONE_ALIASES[normalised]
 
-                counters[zone_type] = (
-                    counters.get(zone_type, 0) + 1
-                )
+                counters[zone_type] = counters.get(zone_type, 0) + 1
 
-                zone_id = (
-                    f"{zone_type.value}_"
-                    f"{counters[zone_type]:03d}"
-                )
+                zone_id = f"{zone_type.value}_{counters[zone_type]:03d}"
 
                 zone_data[zone_id] = (
                     zone_type,
@@ -213,9 +181,7 @@ def load_warehouse_csv(
                 continue
 
             raise ValueError(
-                f"invalid cell {value!r} at "
-                f"CSV row {csv_row + 1}, "
-                f"column {x + 1}"
+                f"invalid cell {value!r} at CSV row {csv_row + 1}, column {x + 1}"
             )
 
     grid = WorldGrid(

@@ -20,3 +20,9 @@ ilp_ws.zip
 
 # Generated experiment output
 Mrta_experiments/
+runs/
+
+# Recorded Phase 8 datasets. Runs are reproducible from the manifest,
+# so the tables themselves are output, not source. docs/figures/ is
+# tracked: those figures are referenced by the README.
+runs/

@@ -25,10 +25,12 @@ Battery scheduler V1         IN PROGRESS
                                 VERIFIED, APPROVED 2026-10-06,
                                 committed 5d61c84
                              B5 holding promotion + preemption
-                                IMPLEMENTED 2026-10-11,
-                                awaiting approval
+                                DONE, APPROVED 2026-10-11,
+                                committed d6d67c1
                              B6 NOT STARTED
 W20/W30/W50 map family       PLANNED, after Battery V1 (decided 2026-09-13)
+Candidate window S0          S0a + S0b IMPLEMENTED 2026-10-22,
+                             awaiting approval
 Additional MRTA baselines    NOT IMPLEMENTED
 Outcome logging              NOT IMPLEMENTED
 Experiment runner            NOT IMPLEMENTED
@@ -151,7 +153,7 @@ lane policy is hard-coded to V2 coordinates
 docs/images/ holds 19 MB of generated PNGs referenced by nothing.
     Keep them out of the research code commit.
 
-docs/16_CURRENT_STATUS.md still carries its 2026-08-29 component
+docs/archive/16_CURRENT_STATUS.md still carries its 2026-08-29 component
     table, which lists "Battery / charging COMPLETE". That describes
     the pre-freeze simulator deleted in 7a07208; battery is not
     implemented. The file is marked superseded but the row misleads.
@@ -243,10 +245,266 @@ B2  eligibility + CHARGE_DUE / NEEDED    DONE, approved
 B3  charger reservation + travel         DONE, approved 2026-10-06
 B4  charging + leaving + fleet rejoin    COMPLETE, VERIFIED, APPROVED 2026-10-06
                                          committed 5d61c84
-B5  preemption + holding promotion       IMPLEMENTED 2026-10-11,
-                                         AWAITING APPROVAL
+B5  preemption + holding promotion       DONE, APPROVED 2026-10-11,
+                                         committed d6d67c1
 B6  decision / outcome battery metrics   NOT STARTED
 ```
+
+### Phase S0: Candidate window and dispatch
+
+Status: S0a and S0b IMPLEMENTED 2026-10-22, awaiting approval.
+
+S0a is the candidate window, the FIFO liveness rule and the
+decision-shape instrumentation. S0b is the dispatch quantum; it
+followed S0a because the frozen decision sets its T from the free-robot
+distribution S0a measures.
+
+S0 exists because Phase 7 cannot start without it: 62 of 71 allocator
+calls on the 100-order run are 1 robot x 1 order, and on a 1x1 decision
+every strategy returns the same assignment. See docs/ARCHITECTURE.md
+section 12, P0-1.
+
+Settled, recorded in docs/DECISIONS.md:
+
+```text
+candidate window        W = fleet_size, configurable, replaces
+                        min(available_robots, pending)
+dispatch batching       hybrid: continuous by default
+                        (dispatch_quantum = 0); one controlled scenario
+                        with a quantum so Hungarian / MILP face real
+                        m x n decisions. T set from the measured
+                        free-robot arrival distribution, not guessed.
+FIFO liveness           if the prefix holds zero assignable pairs,
+                        extend down the FIFO sequence until one exists
+baseline                re-freeze 100 / 500; keep a window=legacy
+                        regression test asserting 282.0000 s, 6430.0 m
+distinctness gate       pairwise decision divergence over
+                        choice-bearing decisions (robots x orders > 1),
+                        threshold 5%, plus outcome delta
+Hungarian vs MILP       separated by objective: min-sum vs min-max
+                        completion with battery / congestion
+                        constraints. scipy 1.17.1 supplies both.
+strategy order          slice 1 = Random, Nearest Manhattan,
+                        Nearest Directed A*; stop for approval
+```
+
+S0a acceptance, measured 2026-10-22:
+
+```text
+1. stall reproduced as a regression test first              MET
+2. W configurable and recorded; default W = fleet_size      MET
+3. decision shape measured and reported, not assumed        MET
+4. window=legacy reproduces the pre-S0 baselines            MET  exact
+5. new 100 / 500 baselines measured                         MET
+6. full regression gate                                     MET
+7. Gazebo run reproduces the headless numbers               PENDING user
+8. no change to routing, traffic, battery, eligibility,
+   order schema                                             MET
+```
+
+The stall, reproduced before the dispatch path was touched. One robot
+at 14% SOC, which can afford `O0053` (42 m, requires 12.4667%) but not
+`O0099` (108 m, requires 16.8833%), and `O0099` at the head of the
+queue:
+
+```text
+queue [O0099, O0053]   RuntimeError: workload stalled at t=0.0000:
+                       2 pending, 0 deferred, 0 in flight, 1/1 parked
+queue [O0053, O0099]   100% complete, makespan 186.4667 s, 0 deferrals
+```
+
+Same robot, same SOC, same orders; only the CSV sequence differs. The
+fleet can finish both -- take the cheap order, charge, take the dear one
+-- so this was a liveness defect, not an infeasible workload. The
+control case is what proves that. Both are kept in
+`test_s0_window.py`, together with a `window=legacy` case that still
+stalls, so the defect stays reproducible.
+
+Decision shape, the measurement S0 exists for:
+
+```text
+                        100 orders            500 orders
+                        legacy  fleet_size    legacy  fleet_size
+decisions                 71        64          411      409
+choice-bearing (m*n>1)     9        63           68      408
+forced 1x1                62         1          343        1
+forced share           87.3%      1.6%        83.5%     0.2%
+```
+
+The 62 of 71 figure in `docs/ARCHITECTURE.md` section 12 is confirmed
+exactly. Note that legacy is not forced everywhere: at t=0 the whole
+fleet is free, so the opening dispatch is a genuine 22x22 batch. It is
+every decision after it that collapses, because robots then come free
+one at a time.
+
+Baselines. `window=legacy` reproduces the pre-S0 frozen numbers
+bit-identically, which is the anchor proving S0 changed the window and
+nothing else:
+
+```text
+                  legacy (= pre-S0 frozen)   fleet_size (new default)
+100 orders        100/100, 22/22 parked      100/100, 22/22 parked
+  makespan            282.0000 s                 268.6667 s
+  distance              6430.0 m                   5798.0 m
+  waiting             264.6667 s                 305.3333 s
+  violations                   0                          0
+500 orders        500/500, 22/22 parked      500/500, 22/22 parked
+  makespan           1123.3333 s                1057.3333 s
+  distance             29338.0 m                  26992.0 m
+  waiting            1242.6667 s                1436.6667 s
+  violations                   0                          0
+```
+
+Measured side effect, in the fleet's favour and explainable: a greedy
+allocator with 22 orders to choose from instead of 1 finds cheaper
+pairings, so makespan and distance both fall (-4.7% and -9.8% on 100
+orders). Waiting rises, because the better pairings concentrate robots
+on the shared aisles. No reservation violation in either mode.
+
+Regression gate, measured 2026-10-22:
+
+```text
+unit tests                         MET  216 passed (207 + 9 new)
+lint                               MET  clean
+traffic behaviour suite            MET  7/7 scripts OK
+check_map_topology.py              MET  OK, 0 unreachable legs
+check_battery_eligibility.py       MET  OK
+check_batch_reservations.py        MET  OK
+check_charger_evacuation.py        MET  5/5
+check_b4_charging.py               MET  6/6
+check_b5_queue.py                  MET  5/5
+determinism, two runs              MET  identical simulated output
+```
+
+Two controlled battery scenarios are pinned to `window="legacy"`,
+in both the unit test and the matching validator so the two cannot
+drift:
+
+```text
+B4 recycle / test_charger_is_reused_by_a_later_request
+    Tests the *direct* charger reuse path, where the later requester
+    finds the charger FREE and departs in the instant it requests.
+    Under the wider window the allocation differs, robot_002 requests
+    while robot_001 is still charging, and it is correctly routed
+    through holding and promoted -- three charge records, and
+    requested_at != departed_at. That is the B5 queued path, covered
+    by check_b5_queue.py.
+
+B5 preempting / the preemption scenario pair
+    robot_002 must run the dear FAR order to cross 10% late enough for
+    robot_001 to be mid-charge. With a wide window the allocator
+    correctly prefers the cheaper SHORT, robot_002 crosses early and
+    finds a RESERVED rather than a charging charger, so there is
+    nothing to preempt. Sound allocation and sound battery behaviour;
+    simply not this scenario.
+```
+
+One B2 test was retargeted rather than deleted, because S0 makes its
+assertion wrong by design:
+
+```text
+test_charge_needed_scans_all_pending_orders
+    asserted dispatches == [] -- the robot stays available but gets
+    nothing, because its batch was the unaffordable FIFO head alone.
+    That standstill is the stall the liveness rule removes. It now
+    asserts the opposite: the window extends past the head and the
+    robot is given the order it can run. The B2 behaviour under test,
+    that the CHARGE_NEEDED scan covers all pending orders rather than
+    the batch, is unchanged and still asserted.
+
+_MaskBlindAllocator
+    now takes the dearest reachable pair rather than the cheapest.
+    With a wide window the cheapest pair is usually affordable anyway,
+    so a cheapest-first blind allocator would accidentally behave
+    itself and never exercise the executor's refusal. The guard is
+    therefore still tested under the production window, not pinned.
+```
+
+S0b acceptance, measured 2026-10-22. The candidate window fixes the
+*order* side of a decision. The robot side is the free pool, and under
+continuous dispatch robots come free one at a time, so almost every
+decision offers a single robot and the batch-assignment strategies
+(Hungarian, MILP) reduce to argmin and collapse onto greedy nearest.
+
+The free-robot arrival distribution, measured before choosing T:
+
+```text
+inter-decision gap    min 0.667  p25 0.667  median 2.000  p75 3.333  max 18.000 s
+                      (500 orders: p25 1.333, median 2.000, p75 3.333)
+```
+
+T swept against it, 100 orders:
+
+```text
+T        decisions   m>1   mean m   makespan     distance   waiting
+0.0 s           64    13     1.56   268.6667 s   5798.0 m   305.3333 s
+1.0 s           54    21     1.85   260.3333 s   5726.0 m   325.3333 s
+2.0 s           41    23     2.44   272.6667 s   5770.0 m   332.6667 s
+3.0 s           33    25     3.03   264.6667 s   5716.0 m   376.3333 s
+5.0 s           24    21     4.17   274.0000 s   5714.0 m   398.6667 s
+10.0 s          15    14     6.67   292.6667 s   5672.0 m   533.3333 s
+```
+
+All six complete 100/100 with 0 reservation violations. **T = 3.0 s**
+is frozen: it triples the robots per decision at no makespan cost,
+while 10.0 s costs 9% makespan and 75% more waiting. The quantum is
+therefore not a free parameter to maximise.
+
+```text
+zero quantum is exactly continuous dispatch       MET  268.6667 s,
+                                                       5798.0 m, 0 holds
+quantum batches robots: mean m 1.56 -> 3.03       MET
+batched scenario is 100% choice-bearing           MET  33/33, 0 forced
+no robot held longer than one quantum             MET  window opens on
+                                                       the oldest waiter
+nothing held when holding cannot pay              MET  3 refusals
+no order dropped or duplicated at any T           MET  0.0/1.0/3.0/10.0
+determinism at T=3.0                              MET  identical
+negative quantum refused                          MET
+```
+
+The batched scenario is the reference config with `--quantum 3.0` --
+`warehouse_sim.yaml` with `dispatch_quantum_s: 3.0` and nothing else
+changed:
+
+```text
+100/100, 22/22 parked, makespan 264.6667 s, 5716.0 m,
+waiting 376.3333 s, 0 violations
+33 decisions, 33 choice-bearing (100.0 %), 0 forced,
+309 dispatch attempts held to batch robots
+```
+
+Continuous dispatch remains the default and the headline configuration;
+the batched scenario exists only to make the batch strategies
+separable.
+
+Implementation note. `EventType.DISPATCH_WINDOW` is a neutral timer: it
+advances the clock, produces a tick and touches no robot. It is
+deliberately **not** a `WAIT`, because a robot held for allocation
+batching is idle, not blocked by traffic, and must not book waiting
+time. Idle drain over the held interval is booked exactly as any other
+idle interval, so the battery model is untouched.
+
+Regression gate after S0b, measured 2026-10-22:
+
+```text
+unit tests                         MET  223 passed (216 + 7 new)
+lint                               MET  clean
+traffic behaviour suite            MET  7/7 scripts OK
+check_map_topology.py              MET  OK
+check_battery_eligibility.py       MET  OK
+check_batch_reservations.py        MET  OK
+check_charger_evacuation.py        MET  5/5
+check_b4_charging.py               MET  6/6
+check_b5_queue.py                  MET  5/5
+100 / 500 baselines, both windows  MET  unchanged from S0a
+```
+
+Deliberately NOT in S0: any new strategy, decision/outcome logging,
+the `order_makespan` / `fleet_recovery_time` split, and W30/W50.
+Routing, traffic, lane policy, the battery model, the eligibility
+equation and the order schema are untouched.
+
 
 B0 acceptance, measured 2026-09-13:
 
@@ -524,7 +782,8 @@ no completed charging robot remained on a charger
 
 B4 is COMPLETE, VERIFIED, APPROVED, and committed as `5d61c84`
 ("feat: complete Battery V1 B4 charging and fleet rejoin", 2026-10-06).
-B5 is implemented below and awaits approval; B6 remains NOT STARTED.
+B5 is reported below, approved 2026-10-11 and committed as d6d67c1;
+B6 remains NOT STARTED.
 
 Worked example from the `twelve` run, exactly as reported:
 
@@ -763,6 +1022,774 @@ check_b4_charging.py                   -> a freed charger no longer stays
                                           it must only stop being the
                                           leaving robot's
 ```
+
+### Phase 8: Decision and outcome dataset
+
+Status: implemented, awaiting approval. Nothing committed.
+
+The first phase whose purpose is not simulator behaviour but evidence.
+Without it there is nothing for an ILP learner to read, and no way to
+compare what a strategy predicted against what the warehouse actually
+did.
+
+#### What was added
+
+```text
+src/simulation_env/simulation_env/dataset.py         new
+src/simulation_env/simulation_env/dataset_export.py  new
+src/simulation_env/test/test_dataset.py              new, 22 tests
+src/simulation_env/simulation_env/workload_executor.py
+                                                     recorder hooks
+src/simulation_env/scripts/run_workload.py           --dataset, --export
+pixi.toml                                            pyarrow
+```
+
+Two tables and a manifest per run:
+
+```text
+decisions.parquet   one row per scored (robot, order) candidate pair
+outcomes.parquet    one row per order
+run.json            provenance, including a content hash of the map,
+                    the order CSV and the config, plus git HEAD and
+                    whether the tree was dirty
+```
+
+The `run_id` is a hash of the manifest itself, so two runs collide
+exactly when every input that could change a result is identical.
+
+#### Measured
+
+Shipped 22-robot / 100-order workload, `nearest_astar`,
+`window=fleet_size`, `quantum=0`:
+
+```text
+decision rows            1973 over 39 columns
+outcome rows              100 over 22 columns
+positive examples         100
+negative examples        1873
+makespan, recording on    268.6667 s
+total distance            5798.0 m
+```
+
+Recording changes nothing: the instrumented run and the bare run agree
+on makespan, distance, waiting, service, the decision log and the
+dispatch sequence. That is asserted directly, not assumed.
+
+#### No leakage, proven rather than documented
+
+A decision row is built before any mission is planned and never
+revisited. The truncation test aborts a run immediately after a
+decision and again 40 dispatches in, and asserts the decision rows are
+identical to the same run carried through to completion. If any field
+were populated from post-decision state, the two would disagree.
+
+The decision schema is also asserted not to name any outcome column.
+
+#### Both execution paths record the same dataset
+
+`fleet_node.py` takes `dataset` and `dispatch_quantum_s` parameters and
+records through the same `RunRecorder`. For the shipped workload the
+live ROS node and the headless runner produce **byte-identical**
+decision and outcome tables and the same `run_id`, verified with `cmp`.
+One scientific engine, one dataset; there is no Gazebo-side recording
+path.
+
+#### Three bugs found and fixed during implementation
+
+```text
+1 m attribution bias   C_static includes the post-drop-off retreat,
+                       but the outcome row was written at the drop-off
+                       service, before the retreat was driven. Every
+                       order read exactly one cell short of its
+                       prediction. Fixed by writing the outcome at
+                       retirement and adding retreat_finished_at;
+                       completed_at still means the drop-off, which is
+                       when the order is fulfilled. Predicted and
+                       realized distance now agree exactly, which is
+                       also an independent check that the router's
+                       prediction and the executor's realization agree
+                       cell for cell.
+
+soc repeated per pair  SOC is a property of the robot at t, not of the
+                       pair, so the Prolog export stated it once per
+                       order in the window. Now once per robot per
+                       decision.
+
+live run lost entirely The first live ROS run simulated all 100 orders,
+                       printed its full report, then died in
+                       recorder.write with ModuleNotFoundError: No
+                       module named 'pyarrow'. The node runs on the
+                       system interpreter under /opt/ros/jazzy, not in
+                       the pixi environment where pyarrow is declared.
+                       RunRecorder now falls back to CSV and the
+                       manifest records which format was used. The
+                       fallback is lossless -- the exact columns are
+                       already strings -- and a Parquet run and a CSV
+                       run read back equal row for row.
+```
+
+#### An S0b gap closed on the way
+
+`fleet_node.py` never forwarded `dispatch_quantum_s` to the executor,
+so a live run of `warehouse_sim_batched.yaml` would have silently used
+continuous dispatch while the headless runner used the configured
+quantum. Found while wiring the dataset into the node. The node and the
+launch file now both carry it, with a negative value meaning "keep the
+configured value" so that `0.0` remains a real override meaning
+continuous dispatch.
+
+#### Fields not recorded, and why
+
+`est_travel_time_s` (the executor accepts `speed_mps` but does not use
+it), `predicted_wait_s` (`Dispatch.planned_wait_s` is always 0.0), a
+route-congestion feature (`OrderCandidate` has none, and adding one
+would be a strategy-visible change to fixed infrastructure), and a
+per-order minimum SOC (the ledger exposes launch and completion SOC
+only). Recorded in docs/DECISIONS.md, "Phase 8 Schema Gaps To Close",
+rather than fabricated.
+
+#### Commands
+
+```bash
+# record a run, headless
+python3 src/simulation_env/scripts/run_workload.py \
+    --quiet --progress 0 --dataset runs/astar --export
+
+# record a live run through the ROS node
+ros2 launch simulation_env warehouse_sim.launch.py \
+    orders:=true dataset:=runs/live
+
+# the dataset tests, including the truncation proof
+PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management \
+    python3 -m pytest src/simulation_env/test/test_dataset.py -q
+```
+
+### Phase 7 slice 1: Random and Nearest Manhattan
+
+Status: implemented, awaiting approval. Nothing committed.
+
+The first real strategy comparison. Until now `nearest_astar` was the
+only registered strategy, so no claim about allocation policy could be
+supported by anything.
+
+#### What was added
+
+```text
+src/task_management/task_management/features.py       manhattan_order_cost
+src/task_management/task_management/allocation_strategy.py
+                                                      greedy_pairing,
+                                                      NearestManhattanAllocator,
+                                                      RandomAllocator
+src/task_management/test/test_strategies.py           new, 24 tests
+src/simulation_env/scripts/check_strategy_distinctness.py   new gate
+src/simulation_env/scripts/run_workload.py            --seed
+src/simulation_env/simulation_env/fleet_node.py       allocation_seed param
+```
+
+#### One sweep, three rankings
+
+All three strategies are the same `greedy_pairing` sweep over a
+different ordering. That is deliberate and it is what makes the
+comparison controlled: two strategies now differ by their ranking and
+by nothing else -- not by how they resolve a conflict, not by how many
+pairs they emit, not by what they do when one side runs out.
+
+`nearest_astar` was refactored onto the shared sweep and its baseline
+is **bit-identical**: 268.6667 s / 5798.0 m / 305.3333 s / 64 decisions
+/ 1 forced.
+
+#### Measured, 22 robots / 100 orders / seed 42
+
+| Strategy | Makespan | Distance | Waiting | Forced 1x1 |
+|---|---|---|---|---|
+| `nearest_astar` | 268.6667 s | **5798.0 m** | 305.3333 s | 1/64 |
+| `nearest_manhattan` | 265.3333 s | 5974.0 m | 325.3333 s | 0/68 |
+| `random` | 266.6667 s | 6488.0 m | 258.0000 s | 1/65 |
+
+All three complete 100/100.
+
+Distance orders as theory predicts: grid-aware < naive < none, by +3.0%
+and +11.9%.
+
+**Makespan does not order the same way.** `nearest_manhattan` finishes
+*earlier* than `nearest_astar` despite driving 176 m further. This is
+reported rather than explained away: the printed makespan is the
+engine's end time including end-of-work recovery (P0-4), and it is set
+by whichever robot finishes last after traffic, so it is a noisy
+signal for allocation quality on a single seed. Distance is the clean
+one. The `order_makespan` / `fleet_recovery_time` split (B6) is what
+would make makespan interpretable here, and it is not implemented.
+
+Do not read the single-seed makespan column as a ranking.
+
+#### Distinctness gate
+
+Comparing two independent runs cannot measure distinctness: after the
+first decision where they differ the fleets are in different states, so
+their decision N is not the same decision. The gate measures a
+**counterfactual** instead -- one strategy drives, and at every decision
+each rival is asked the same question with the same free robots,
+window, positions, SOC and route cache. Probing is read-only; only the
+driving strategy's answer reaches the executor.
+
+```text
+driving with nearest_astar      vs nearest_manhattan   48/63   76.2 %
+                                vs random              57/63   90.5 %
+driving with nearest_manhattan  vs nearest_astar       41/68   60.3 %
+                                vs random              66/68   97.1 %
+driving with random             vs nearest_astar       60/64   93.8 %
+                                vs nearest_manhattan   61/64   95.3 %
+
+threshold 5.0 %                 status: OK
+```
+
+#### Manhattan decides the pairing, never the route
+
+The split is the whole point of the naive baseline:
+
+```text
+Manhattan      decides WHICH robot takes which order
+directed A*    decides HOW the robot gets there
+```
+
+So the strategy changes allocation and nothing else; route, traffic,
+battery drain, service and speed are identical to `nearest_astar`'s.
+`OrderAssignment.cost` carries C_static forward, not the Manhattan key,
+or every predicted-vs-realized comparison for this strategy would be
+wrong. Asserted by `test_manhattan_reports_the_astar_cost_not_its_own_ranking`.
+
+Eligibility is untouched: reachability and the battery mask are decided
+by directed A*, and Manhattan is never consulted for them.
+
+#### Random is stochastic, not unreproducible
+
+Seeded from `simulation.seed` (42), overridable with `--seed`.
+Candidates are sorted into a canonical order *before* they are
+shuffled, because shuffling a list built from dict iteration is not
+seeded however it looks. Verified: two runs at seed 42 produce
+byte-identical datasets; seed 7 gives 288.6667 s / 6508.0 m.
+
+#### Long-run soak, 2000 orders — and a traffic gap it exposed
+
+22 robots, 2000 orders, seed 42. This is the first run that actually
+exercises the battery: at 100 orders the fleet never drops near the
+charge-due threshold and **zero** charge sessions occur.
+
+```text
+                     nearest_astar    nearest_manhattan   random
+completed            2000/2000        2000/2000           STALLED
+makespan             4296.2591 s      4294.6516 s         -
+total distance       107306.0 m       107406.0 m          -
+wall clock           39.6 s           -                   -
+```
+
+`nearest_astar` battery report:
+
+```text
+charge sessions      44 started, 44 robot(s) back in the fleet
+holding promotions   18 out of holding onto a freed charger
+preemptions          0
+saturation events    0
+reservation viol.    0
+plan deferrals       0
+final SOC            min 16.6448  mean 26.9711  max 37.6824
+lowest minimum SOC   7.9263
+below 0 % SOC        none
+SOC identity         exact (rational arithmetic)
+battery-ineligible   4452 of 47052 pairs (9.5 %)
+```
+
+Two things to read carefully:
+
+- **Lowest minimum SOC 7.9263% is below the 10% reserve, and that is
+  correct.** The reserve is a *decision-time* guarantee: a robot is
+  only given a new order if it can finish it and still reach a charger
+  on 10%. It may legitimately dip below while finishing a committed
+  order and driving to the charger. The invariant that matters is
+  `below 0 % SOC: none`, and it holds.
+- **Preemption (B5) is still not exercised**, even at 2000 orders.
+  8 chargers served 44 sessions without ever saturating. Exercising
+  preemption needs more robots or fewer chargers, not more orders.
+
+**`random` deadlocks.** All 22 robots end in a cyclic wait:
+
+```text
+STALLED at t=1160.6667 (2000 orders) / t=1138.6667 (500 orders)
+CYCLES  robot_007 -> robot_019 -> robot_005 -> robot_016 -> robot_007
+```
+
+This is **not** the structural head-on deadlock the one-way policy
+removes; every robot is moving in a legal direction. It is a circular
+wait around the circulation loop. It is load- and policy-dependent, not
+systematic: at 500 orders `random` completes on seeds 1, 7 and 99 and
+stalls on 42, while both nearest policies complete at 500 and at 2000.
+
+**It is pre-existing and not caused by slice 1.** The traffic
+controller, lane policy and engine are untouched, and `nearest_astar`
+is bit-identical. A strategy only chooses which robot takes which
+order; keeping any legal assignment set live is the traffic layer's
+job. `random` is simply the first strategy that scatters work across
+the hall, so it is the first to raise loop occupancy enough to close a
+cycle.
+
+**It blocks high-load strategy comparison, and it is biased.** The
+deadlock is likelier under policies that scatter, so a throughput table
+built without resolving it would flatter the grid-aware strategy for a
+traffic reason rather than an allocation reason. It also bounds the
+W30/W50 scalability study, where density is higher by design.
+
+Tracked in `.scratch/traffic-liveness/issues/01-cyclic-deadlock-under-scattered-allocation.md`.
+Out of phase for slice 1: it belongs to the traffic controller and must
+be solved identically for every strategy.
+
+#### Commands
+
+```bash
+# the three strategies
+for s in nearest_astar nearest_manhattan random; do
+    PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+        --quiet --progress 0 --strategy $s
+done
+
+# the distinctness gate
+PYTHONPATH=$PP $PY src/simulation_env/scripts/check_strategy_distinctness.py
+
+# the unit tests
+PYTHONPATH=$PP $PY -m pytest src/task_management/test/test_strategies.py -q
+```
+
+### Any map: lanes drawn in Excel (unblocks Phase 5)
+
+Status: implemented, awaiting approval. Nothing committed.
+
+Requested 2026-10-23: anyone should be able to create a map in Excel,
+by following an SOP, and run the system on it. The researcher plans one
+new map with capacity for 10 to 100 robots.
+
+#### Why it was impossible before
+
+The lane policy was hard-coded to V2's 17 x 35 coordinates. Measured on
+a 25 x 35 test map: 52.3% of road cells strongly connected, and shelves
+in columns the policy did not know were 0/6 reachable.
+
+#### What was added
+
+```text
+mrta_core/warehouse_map.py        WarehouseMap.lane_edges (optional)
+mrta_core/warehouse_map_xlsx.py   arrows in road cells; S D C H P codes;
+                                  errors name the Excel cell
+mrta_core/warehouse_routing.py    drawn maps routed by their own arrows
+mrta_core/map_builder.py          new: blank / example / export, writer
+mrta_core/map_check.py            new: the drawing checker
+mrta_core/sim_config.py           resolve_map_path()
+mrta_core/tests/test_map_lanes.py new, 46 tests
+scripts/map_tool.py               new: new, example, check, show, export
+scripts/generate_orders.py        --config: stations read from the map
+scripts/build_scenario.py         one nav graph per scenario
+scripts/check_strategy_distinctness.py   --robots
+maps/templates/                   blank_30x40, example_20, example_100
+docs/START_HERE.md                new: step 0 to running, simple words
+docs/MAKE_A_MAP.md                new: the map SOP
+```
+
+#### Measured
+
+```text
+V2 exported as arrows, loaded back    775 = 775 blocked moves, identical
+V2 baseline, nearest_astar            268.6667 s / 5798.0 m, unchanged
+V2 orders regenerated via --config    byte-identical to orders.csv
+
+generated 100-robot map (40 x 54, 100 P, 552 S, 36 D, 24 C, 12 H)
+  map_tool.py check                   OK, no warnings
+  check_map_topology.py               OK; 523,452 station legs, 0 unreachable
+                                      (1 min 34 s)
+  build_scenario.py                   world with 100 robots; nav graph verified
+
+on that map                           completed   makespan     distance
+  10 robots, 200 orders  astar        200/200     1849.0267 s  23652.0 m
+                         manhattan    200/200     1863.2922 s  24246.0 m
+                         random       200/200     1919.3211 s  24850.0 m
+  50 robots, 200 orders  astar        200/200      429.3333 s  23642.0 m
+                         manhattan    200/200      442.0000 s  24600.0 m
+                         random       200/200      450.6667 s  25802.0 m
+ 100 robots, 500 orders  astar        500/500      628.6667 s  60658.0 m
+                         manhattan    500/500      637.3333 s  63130.0 m
+                         random       500/500      684.6667 s  66488.0 m
+ 100 robots, 1000 orders astar       1000/1000    1122.0000 s 120288.0 m
+
+distinctness gate, 50 robots          72.1 % to 97.5 %, status OK
+```
+
+On the drawn map the ordering is clean on both makespan and distance at
+every fleet size: grid-aware < naive < random.
+
+#### Found on the way: the deadlock has a geometric cause
+
+The first 100-robot run **deadlocked** at t=268 s. The cause was the
+generated layout: every cross-band met each pair of neighbouring aisles
+in a **rotary**, a 2 x 2 square of roads whose arrows chase each other
+round it, where four robots each wait for the next forever. Flipping
+each band removed all of them, and the same 100 robots then completed
+1000/1000.
+
+The same check found **33 rotaries on V2**, in its open bands, and the
+V2 deadlock under `random` (500 orders, seed 42) is four robots on one
+of them: (13,3) (14,3) (14,4) (13,4). That issue now has its root cause
+(.scratch/traffic-liveness/issues/01-...). `map_tool.py check` warns on
+every rotary; generated maps have none. V2 itself is unchanged, so every
+frozen baseline holds.
+
+#### Scalability decision, resolved 2026-10-23
+
+The researcher chose one main map, **W100**, swept from 10 to 100
+robots, plus a held-out map for rule transfer. DECISIONS.md, "Warehouse
+Scalability", now says so. See the W100 section below.
+
+### W100: the research map, and one config
+
+Status: implemented, awaiting approval. Nothing committed.
+
+The researcher chose one main map for the R&D, with a fleet-size sweep
+from 10 to 100 robots (DECISIONS.md, "Warehouse Scalability").
+
+#### What was added
+
+```text
+maps/W100.xlsx                  40 x 54; 100 P, 552 S, 36 D, 24 C, 12 H
+config/warehouse_W100.yaml      the research scenario; every setting
+                                explained and marked FREE or FIXED
+config/orders_W100.csv          2000 orders, seed 42; --orders N = first N
+fleet.initial_position_mode: spread   new start rule, see below
+run_workload.py --orders-file   use another order list without a config
+test/test_spawn_spread.py       new, 13 tests
+```
+
+#### Start positions: `spread`
+
+With the old rule robot k started on parking cell k, so 10 robots on
+W100 all started in the top five rows. `spread` shares robots across
+every parking bank in proportion to its size and spaces them evenly
+along it: 10 robots start 5 per wall at rows 6, 16, 26, 36, 46. A full
+fleet uses every cell under either rule, V2's default is unchanged, and
+parking at the end is still the nearest free cell.
+
+#### Measured
+
+```text
+map_tool.py check             OK, no warnings
+check_map_topology.py         OK; 523,452 station legs, 0 unreachable
+
+fleet sweep, nearest_astar, 300 orders
+  robots   completed   makespan      total waiting   violations
+    10     300/300     2860.7969 s     105.9056 s    0
+    20     300/300     1463.3844 s     219.7089 s    0
+    30     300/300      931.3333 s     380.6667 s    0
+    50     300/300      616.6667 s     687.3333 s    0
+    70     300/300      483.3333 s    1910.6667 s    0
+   100     300/300      416.6667 s    3399.3333 s    0
+
+three strategies, 300 orders       makespan      distance
+   10  nearest_astar               2860.7969 s   36368.0 m
+       nearest_manhattan           2885.3609 s   36962.0 m
+       random                      2930.8578 s   37612.0 m
+  100  nearest_astar                416.6667 s   37416.0 m
+       nearest_manhattan            460.6667 s   39106.0 m
+       random                       483.3333 s   41404.0 m
+```
+
+The ordering is grid-aware < naive < random at both ends, and the gap
+widens with congestion: random takes 2.4% longer than A* at 10 robots
+and 16.0% longer at 100.
+
+#### One config
+
+`warehouse_W100.yaml` is the config to use. Configs that existed only
+to change one setting were removed after each was shown to give
+identical results through a command-line option:
+
+```text
+warehouse_sim_500.yaml       --orders-file orders_500.csv   1057.3333 s, as before
+warehouse_sim_batched.yaml   --quantum 3.0                  264.6667 s / 5716.0 m, as before
+warehouse_sim_10.yaml        --robots 10 (and its world, warehouse_10.world)
+warehouse_sim_2000.yaml, orders_2000.csv   generated soak files
+```
+
+`warehouse_sim.yaml` stays: the V2 reference the test suite and every
+frozen baseline use. The two `warehouse_sim_b3_*` files stay: battery
+test fixtures used by `check_charger_evacuation.py`.
+
+### One map, one config, one world
+
+Status: implemented, awaiting approval. Nothing committed. Supersedes
+the per-fleet-size worlds and the `warehouse_W100*.yaml` configs of the
+W100 section above.
+
+The researcher's design (2026-10-23): "I'll create a map, that map will
+be converted into a Gazebo world, and that will take robots and orders
+and everything from the config file. That would be just one."
+
+#### Layout
+
+```text
+config/warehouse.yaml    the one config (default everywhere)
+config/orders.csv        the current map's orders, 2000, seed 42
+maps/W100.xlsx           the current map
+worlds/warehouse.world   the one world: the warehouse only
+test/fixtures/           V2 map, v2_reference.yaml, its orders, b3 configs
+```
+
+#### What changed
+
+```text
+build_scenario.py --map X     check map -> rewrite config map/robot_count
+                              -> regenerate orders -> world -> nav graph
+generate_gazebo_grid_world    writes no robots any more
+gazebo_bridge                 robot_models / create_robots / remove_robot
+fleet_node                    robots param; sets Gazebo's fleet at start
+launch                        robots:=N; config and world from source tree
+generate_orders               default: the current map, into config/
+sim_config.rewrite_scenario   changes only the map and fleet lines
+test/test_one_config.py       new, 15 tests
+```
+
+#### Measured
+
+```text
+build_scenario --map W100 (unchanged map)     config, orders, world byte-identical
+new 30-robot map built, run, switched back    config, orders, world byte-identical
+Gazebo, one command, robots:=10               10 created, 27 orders in 70 s
+Gazebo, same window: robots:=30 then :=10     0 -> 30 -> 10 robots (20 removed)
+tests                                         344 passed
+simulator checks (V2 fixture)                 14/14
+V2 baseline via the fixture                   268.6667 s / 5798.0 m, unchanged
+W100, 10 robots, 300 orders                   2860.7969 s, unchanged
+```
+
+#### Found on the way
+
+A fresh `colcon build` fails in `rmf_grid_traffic` with
+`No module named 'catkin_pkg'`: CMake finds `~/.local/bin/python3.10`
+before the ROS Python. It had only worked because an old build cache
+remembered the right one, which is a likely reason the Gazebo steps
+failed for the researcher. Every build command now passes
+`--cmake-args -DPython3_EXECUTABLE=/usr/bin/python3`.
+
+`docs/00_RUNBOOK.md` §2.6 would have regenerated the single nav graph
+from the V2 config, overwriting the current map's graph. Fixed to the
+one config.
+
+### Gazebo pauses and the silent end of a long run
+
+Status: fixed 2026-10-24, awaiting approval. Nothing committed.
+Performance only: every decision, outcome and metric is unchanged.
+
+Reported with 100 robots in Gazebo: every robot stopped together for a
+moment, again and again; and once all 2000 orders were done the node
+printed nothing more.
+
+#### Causes
+
+```text
+pauses   the fleet node sends Gazebo frames only between allocation
+         decisions. Each decision scores robots x orders with directed
+         A*, and every A* call rebuilt the non-transit cell set by
+         scanning all 724 zones (29 million steps per frozen window).
+         At 100 robots a decision took up to 0.47 s: a visible stop.
+silence  the final report calls ReservationTable.audit(), which
+         compared every logged move with every other move:
+         242,140 moves, ~2.9e10 pairs, about 28 minutes.
+```
+
+#### Fix
+
+```text
+warehouse_map.py      zone_by_id / zones_of_type are dict lookups;
+                      cells_of_types() builds each cell set once.
+                      The map is frozen, so nothing can go stale.
+warehouse_routing.py  service_cells / non_transit_cells use it
+reservations.py       audit compares only holds of the same cell
+                      (start-time sweep) and moves over the same cell
+                      pair in opposite directions; same problems,
+                      same order, as the all-pairs scan
+test_map_lookups.py        new, 7 tests (red on the old code)
+test_reservation_audit.py  new, 4 tests, incl. the all-pairs scan as
+                           reference on 300 seeded logs (red on old)
+```
+
+#### Measured
+
+```text
+frame gaps, 100 robots, 300 orders      21 >= 0.25 s (worst 0.47 s) -> 0 (worst 0.17 s)
+full run, 100 robots, 2000 orders       6 min 7 s -> 72.9 s; slow dispatches 5,
+                                        worst 0.60 s at t=0 (first assignment,
+                                        before anything moves), others <= 0.125 s
+allocator CPU, 100 robots, 300 orders   12.339 s -> 1.820 s
+decisions + outcomes, 300 orders        identical tables (25,090 + 300 rows)
+full run makespan                       2441.2910 s before and after
+audit after the full run                ~28 min -> 0.33 s, 0 violations both
+tests                                   355 passed (344 + 11 new)
+simulator checks (V2 fixture)           14/14
+V2 baseline via the fixture             268.6667 s / 5798.0 m, unchanged
+```
+
+#### Found on the way: decided, see "Stage Zone promotion" below
+
+At 100 robots, 36 of the fleet leave work for good. All 100 robots
+start at 100% and drain alike, so they all ask for a charger around
+t=1270-1600 s. With 24 chargers and 12 holding cells full, 36 requests
+are saturation events, and those robots wait on a Stage Zone. By the
+approved B5 rule ("Charger Queue Discipline" in DECISIONS.md) a Stage
+Zone fallback robot is never promoted, so all 36 stay parked to the end
+of the run, at 7.7% SOC and above, while every charger is FREE again
+by then. After the charging wave the 100-robot run works with 64
+robots. Not changed: battery behaviour is frozen infrastructure.
+
+### Stage Zone promotion
+
+Status: implemented 2026-10-24, approved by the researcher as a scope
+change to Battery V1 (DECISIONS.md, "Stage Zone Promotion"). Nothing
+committed.
+
+A robot waiting on a Stage Zone after saturation is now in the same
+queue as the holding robots: lowest SOC, earliest request, robot_id as
+the final tie-break. When a charger frees, the first robot in the queue
+that can reach it on its SOC gets it, drives there by directed A*,
+charges to 100% and rejoins.
+
+Changed: `charging.py` (WAITING_STATES, record fields),
+`workload_executor.py` (`_promote`, `_promotion_start`,
+`_grant_charger`, `_drive_to_charger`, promises, report),
+`check_charger_evacuation.py`, and the saturation test in
+`test_charger_evacuation.py`, which encoded the old rule. New:
+`test_stage_promotion.py`, 12 tests; 8 of them fail when Stage Zone
+robots are left out of the queue again.
+
+Measured, W100, 100 robots, 2000 orders, nearest_astar:
+
+```text
+                              before     after
+charge sessions               64         100   (all 100 rejoined)
+promotions                    35         76    (12 holding, 64 Stage Zone)
+left on a Stage Zone at end   36         0
+saturation events             36         64
+makespan                      2441.29 s  2133.49 s
+total distance                242140 m   245130 m
+reservation violations        0          0
+robots below 0% SOC           none       none
+out of reach                  -          0
+longest wait for a charger    -          461.98 s
+```
+
+Unchanged: V2 baseline 268.6667 s / 5798.0 m; every controlled B4/B5
+scenario without saturation gives identical events; in the saturated
+scenario robot_011 now charges and rejoins (makespan 328.67 ->
+320.90 s). 367 tests pass, 14/14 validators, lint clean.
+
+The battery rates in `config/warehouse.yaml` had been halved to 0.5
+for a demo; they are back at the frozen 1.0.
+
+### Gazebo opens with the robots parked; one Gazebo at a time
+
+Status: implemented 2026-10-24, awaiting approval. Visualization only;
+nothing in the simulation changed. Nothing committed.
+
+The researcher saw no robots in Gazebo with the one-command launch, and
+robots that appeared late with two terminals. Robots were created by
+the fleet node after Gazebo was up, and each run spent about 10 s on a
+`gz model -p` query that only read back the robots' fixed height.
+
+Now:
+
+```text
+gazebo.launch.py          stops any gz sim of this world on this
+                          GZ_PARTITION, writes the world plus the
+                          run's robots parked on their start cells to
+                          /tmp/mrta_gazebo_<uid>/warehouse.world, and
+                          starts Gazebo on it
+warehouse_sim.launch.py   includes gazebo.launch.py unless
+                          start_gazebo:=false; the fleet node finds the
+                          robots ("Gazebo already shows these N
+                          robot(s)") and makes them move
+```
+
+The repo still has one world file, warehouse only. New:
+`simulation_env/gazebo_world.py`, `launch/gazebo.launch.py`,
+`test/test_gazebo_world.py` (18 tests). Changed: `gazebo_bridge.py`
+(one robot model, with an optional pose), `fleet_node.py` (no height
+query; a line when Gazebo already shows the fleet),
+`warehouse_sim.launch.py`.
+
+Checked end to end on a private GZ_PARTITION, headless: 100 robots
+exist as soon as the server is up; a second start stopped the first
+server in 1 s and left exactly one; a run found the 100 robots and
+created none; first robot move 18.9 s -> 8.9 s after the run started;
+the one-command launch with 50 robots stopped the old server and
+started a new one with 50. Not checked by me: the Gazebo window itself
+(that needs the researcher's display).
+
+### Experiment tooling, and a quiet terminal with ROS topics
+
+Status: implemented 2026-10-25, awaiting approval. Reporting only:
+nothing in the simulation changed. Nothing committed.
+
+Experiments:
+
+```text
+run_metrics.py        the protocol's run-level metrics (MRTA, traffic,
+                      battery) from a finished run -> metrics.json in
+                      the dataset directory (run_workload --dataset and
+                      the ROS node dataset:=)
+run_experiment.py     strategies x fleet sizes x seeds, in parallel;
+                      each run keeps run.log, run.json, metrics.json,
+                      decisions/outcomes; one summary.csv
+plot_experiment.py    figures for every metric + summary.md
+```
+
+The first version of "time out of the fleet" counted a holding or Stage
+Zone trip to the end of the run, because such a trip never rejoins; the
+new test (test_run_metrics.py) caught it before the numbers were used.
+
+Terminal and topics (fleet_node): by default a short header, one status
+line every `progress` simulated seconds (60), warnings, and a short
+summary; the full report goes to `$ROS_HOME/mrta/<stamp>_<strategy>_<N>robots.txt`
+or `<dataset>/report.txt`. New: `/mrta/fleet_status`
+(robot_interfaces/FleetStatus: order and robot counts, chargers, SOC,
+who charges and who waits), `/mrta/events` (std_msgs/String, one line
+per assignment, completion and battery event), and `charge_state` and
+`current_order` filled in on `/mrta/robot_states`. `verbose:=true`
+restores the full trace. Tested on a private ROS domain with 300 orders.
+
+#### Experiment fleet_sweep, W100, 2000 orders
+
+`random` over seeds 1-3; makespan in simulated s:
+
+```text
+robots   nearest_astar   nearest_manhattan   random
+  30        6157.08          6251.47         6345.98
+  40        4646.21          4743.84         4844.08
+  50        3733.35          3821.41         3899.17
+```
+
+A* beats Manhattan by 1.5-2.4% and random by 3.1-4.4%, every fleet
+size; distance 243-245 km vs 250 km vs 254-256 km. 0 reservation
+violations and 0 robots below 0% in all 15 runs. The 50-robot A* run
+matches the researcher's Gazebo run to the last digit (3733.3501 s,
+243477.0 m, 2878.3070 s waiting).
+
+#### Found on the way: charging comes in synchronized waves
+
+Charge sessions are 120 / 120 / 100 for every strategy at 30 / 40 / 50
+robots, and time on chargers is the same too. Not a bug: every robot
+starts at 100%, drains by the same rules and is kept equally busy, so
+all of them reach "no eligible order" (SOC 12.6-15.0%) within about two
+minutes of each other and charge 88-93 s to 100%. At 30 robots the
+charge starts fall in four waves (t = 1200-1300, 2500-2600, 3800-4000,
+5100-5300 s), visible as flat steps in the completion curves. Energy
+per robot differs by strategy (412 / 421 / 429% at 30 robots) but not
+by enough to change the whole number of refills, so the charging
+metrics cannot tell the strategies apart in this setup. Changing that
+(staggered initial SOC, the same for every strategy) touches the frozen
+"initial SOC 100%" and is the researcher's decision.
 
 ## Definition of Done for Phase B
 

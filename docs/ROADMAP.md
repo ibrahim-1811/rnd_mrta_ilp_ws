@@ -64,7 +64,9 @@ headless and Gazebo execution consistency
 
 ## Phase 4: V2 Baseline Freeze
 
-Status: CURRENT
+Status: DONE. Baseline committed 578c668; superseded as the frozen
+reference by the S0 re-freeze (docs/DECISIONS.md, "Baseline Re-Freeze
+Policy"). window=legacy still reproduces these numbers exactly.
 
 Goals:
 
@@ -90,7 +92,22 @@ repository docs synchronized
 
 ## Phase 5: Warehouse Scalability Family
 
-Status: NEXT
+Status: UNBLOCKED 2026-10-23 (awaiting approval). The blocker was that
+the lane policy was hard-coded to the 17 x 35 V2 indices, so no other
+map shape could be legal (ARCHITECTURE.md section 12, P0-5). A map can
+now carry its own lanes as arrows drawn in Excel (DECISIONS.md, "Drawn
+Lane Maps"; docs/MAKE_A_MAP.md), checked by `map_tool.py check` and
+`check_map_topology.py`.
+
+Measured on a generated 40 x 54 map with 100 parking cells and no
+rotaries: 100 robots complete 1000/1000 orders with 0 reservation
+violations, and 10 and 50 robots complete under all three strategies.
+
+**Decided 2026-10-23 by the researcher**, superseding the family below:
+one main map, **W100** (100 parking cells), swept from 10 to 100 robots,
+plus one held-out map of a different layout for testing whether learned
+rules transfer (planned). See DECISIONS.md, "Warehouse Scalability". The
+W20 / W30 / W50 plan below is kept for the record only.
 
 Create:
 
@@ -137,7 +154,9 @@ traffic stress test
 
 ## Phase 6: Battery Scheduler V1
 
-Status: PLANNED
+Status: B0-B5 DONE, approved and committed (578c668, 5d61c84, d6d67c1).
+B6 (decision/outcome battery metrics, the order_makespan /
+fleet_recovery_time split, G6 end-of-work partial charging) NOT STARTED.
 
 Implement:
 
@@ -178,16 +197,62 @@ no transit through charging or holding cells
 
 Run at least one long workload where charging actually occurs.
 
-## Phase 7: MRTA Baselines
+## Phase 6b: Candidate Window and Dispatch (S0)
 
-Status: PLANNED
+Status: IMPLEMENTED 2026-10-22, awaiting approval. Decisions in
+docs/DECISIONS.md, acceptance in docs/CURRENT_PHASE.md.
 
-Implement:
+A prerequisite for Phase 7, not an optimisation. The FIFO window sizes
+the allocator's candidate set at `min(available_robots, pending)`, which
+collapses 62 of 71 decisions on the 100-order run to 1 robot x 1 order.
+Every strategy agrees on a 1x1 decision, so no strategy comparison is
+defensible until this is fixed.
+
+Deliver:
 
 ```text
-Random
-Nearest Manhattan
-Nearest Directed A*
+candidate window W = fleet_size, configurable and recorded       DONE
+dispatch_quantum, default 0, T = 3.0 s controlled scenario       DONE
+FIFO liveness extension when the prefix holds no assignable pair DONE
+decision-shape instrumentation: robots x orders per decision     DONE
+re-frozen 100 / 500 baselines, plus a window=legacy test         DONE
+```
+
+Measured: forced 1x1 decisions fell from 62 of 71 to 1 of 64 on the
+100-order workload, and the batched scenario has 0 forced of 33.
+
+Acceptance: the stall case reproduced as a test first, the decision
+shape measured rather than assumed, `window=legacy` bit-identical to
+the pre-S0 baselines, the full regression gate green, and a Gazebo run
+matching the headless numbers.
+
+Nothing in routing, traffic, battery, eligibility or the order schema
+changes.
+
+## Phase 7: MRTA Baselines
+
+Status: SLICE 1 DONE (awaiting approval), slice 2 not started
+
+Implemented in two slices, so the window, the dataset and the
+distinctness gate are exercised end to end before any effort goes into
+the optimising strategies.
+
+### Slice 1 — done
+
+```text
+random              uniformly random among eligible pairs; the lower bound
+nearest_manhattan   the deliberately naive baseline
+nearest_astar       the grid-aware baseline (already implemented)
+```
+
+All three are the same greedy sweep (`greedy_pairing`) over a different
+ordering, so two strategies differ by their ranking and by nothing
+else -- not by how they resolve a conflict, not by how many pairs they
+emit, not by what they do when one side runs out.
+
+### Slice 2 — not started
+
+```text
 Earliest Finish
 Multi-Criteria Grid-Aware
 Auction / Marginal Cost
@@ -195,58 +260,179 @@ Hungarian
 MILP
 ```
 
-For every strategy:
+### Measured, 22 robots / 100 orders / seed 42
+
+| Strategy | Makespan | Distance | Waiting |
+|---|---|---|---|
+| `nearest_astar` | 268.6667 s | **5798.0 m** | 305.3333 s |
+| `nearest_manhattan` | 265.3333 s | 5974.0 m | 325.3333 s |
+| `random` | 266.6667 s | 6488.0 m | 258.0000 s |
+
+Distance orders exactly as theory predicts: grid-aware beats naive
+beats none, +3.0% and +11.9% against the A* baseline.
+
+**Makespan does not order the same way**, and that is a finding rather
+than a defect. Makespan here is the engine's end time, which includes
+end-of-run recovery (P0-4), and it is dominated by whichever robot
+finishes last after traffic. Distance is where the allocation policy
+shows up cleanly; makespan is confounded. This is exactly why the
+distinctness gate states that outcome delta alone is not sufficient
+evidence.
+
+### Distinctness gate
+
+`scripts/check_strategy_distinctness.py`. Comparing two independent
+runs would not measure distinctness: after the first decision where
+they differ the two fleets are in different states, so their decision N
+is not the same decision. The gate therefore measures a
+**counterfactual** -- one strategy drives the run and every rival is
+asked the same question at every decision, with the same free robots,
+window, positions, SOC and route cache.
+
+Measured, 100 orders, seed 42, against a 5% threshold:
 
 ```text
-same input contract
-same simulator
-same battery scheduler
-same traffic
-same order workload
+driving with nearest_astar      vs nearest_manhattan   76.2 %
+                                vs random              90.5 %
+driving with nearest_manhattan  vs nearest_astar       60.3 %
+                                vs random              97.1 %
+driving with random             vs nearest_astar       93.8 %
+                                vs nearest_manhattan   95.3 %
 ```
 
-Verify that strategies are behaviorally distinct where expected.
+Every pair is distinct in both directions, by an order of magnitude
+over the threshold.
+
+### Contract every strategy obeys
+
+```text
+same candidate window        sized by infrastructure, not by the strategy
+same routing                 one score(); C_static is never recomputed
+same battery mask            an ineligible pair is not a candidate
+same traffic and execution   the strategy never touches the engine
+same order workload and seed
+deterministic                ties break on (cost, fifo_position, robot_id)
+```
+
+The executor re-checks every returned pair independently and raises
+rather than execute an ineligible one, so the mask is enforced and not
+merely requested.
+
+Stochastic strategies take the seed from `simulation.seed`, overridable
+with `--seed`. Candidates are sorted into a canonical order before they
+are shuffled, so a seeded run never depends on dict iteration order.
 
 ## Phase 8: Decision and Outcome Logging
 
-Status: PLANNED
+Status: DONE (awaiting approval)
 
-At every allocation decision, log all candidate pairs.
-
-Decision-time record should include:
-
-```text
-decision_id
-sim_time
-robot identifier
-order identifier
-position
-SOC
-directed A* cost
-estimated travel time
-route information
-predicted congestion features
-predicted completion features
-strategy
-selected flag
-```
-
-Outcome record should include:
+Two Parquet tables and a manifest per run, written by
+`simulation_env/dataset.py`:
 
 ```text
-actual distance
-actual travel time
-waiting
-service time
-completion time
-energy
-minimum SOC
-charging events
-traffic events
-success
+decisions.parquet   one row per scored (robot, order) candidate pair
+outcomes.parquet    one row per order
+run.json            provenance; without it the tables are not evidence
 ```
 
-Maintain strict no-leakage separation.
+Enabled per run, off by default, because recording is observation only:
+
+```bash
+python3 src/simulation_env/scripts/run_workload.py \
+    --dataset runs/nearest_astar --export
+```
+
+Measured on the shipped 22-robot / 100-order workload: 1973 decision
+rows over 39 columns, 100 outcome rows over 22 columns, makespan
+unchanged at 268.6667 s / 5798.0 m with recording on.
+
+### No-leakage separation
+
+Enforced structurally, not by convention. A decision row is built
+before any mission is planned and is never revisited, and the
+truncation test proves it: a run aborted immediately after a decision
+produces byte-identical decision rows to the same run carried through
+to completion (`test/test_dataset.py`).
+
+### Deliberately raw
+
+Every feature is a number in its natural unit. No discretized
+predicate (`battery_high` and the like) is stored: where a threshold
+goes is a learner-side choice that will be tuned repeatedly, and
+freezing one into the dataset would mean re-running every experiment
+whenever it moved.
+
+The clock and the SOC ledger are exact rationals and Parquet has no
+rational type, so where exactness matters the value is stored twice: a
+`float64` column for analysis and an exact `"numerator/denominator"`
+string beside it. That is what makes a run reproducible rather than
+merely plottable.
+
+### Attribution boundary
+
+`C_static` includes the post-drop-off retreat because the energy
+equation requires it, so the outcome row is written at retirement,
+after the retreat is driven -- not at the drop-off service. Written at
+the drop-off, every order read exactly one cell short of its
+prediction and every predicted-vs-realized comparison carried a
+constant bias. `completed_at` remains the drop-off instant, which is
+when the order is fulfilled; `retreat_finished_at` records the rest.
+
+Per-order realized distance sums to less than the fleet total (5269.0 m
+of 5798.0 m). The difference is end-of-run travel to a Stage Zone,
+which belongs to no order and is correctly excluded.
+
+### Storage format
+
+Parquet where pyarrow is available, CSV where it is not, with the
+manifest recording which. The live ROS node runs on the system
+interpreter where pyarrow cannot be assumed, and a finished run must not
+be lost to a missing optional dependency. The fallback is lossless: the
+exact columns are already strings, and a Parquet run and a CSV run of
+the same workload read back equal row for row.
+
+### Both execution paths record the same dataset
+
+The headless runner and the live ROS node produce byte-identical
+decision and outcome tables for the same workload, verified with `cmp`.
+One scientific engine, one dataset: there is no Gazebo-side recording
+path.
+
+### Export
+
+`simulation_env/dataset_export.py` reads a run back out: CSV for
+grepping and diffing, and ground Prolog facts (`bk.pl`, `exs.pl`) as
+ILP input. It derives nothing -- every exported value is a recorded
+value -- and it writes no mode or bias declarations, because the
+hypothesis space is the experiment, not the data.
+
+Examples are the selected pair against the *eligible* pairs it was
+chosen over. A pair the infrastructure refused is not a negative
+example: a learner asked to explain it would be learning to reproduce
+the feasibility mask, which is fixed infrastructure.
+
+### Fields in the original plan that are not recorded
+
+Not dropped silently; each is absent for a reason:
+
+```text
+estimated travel time        the executor accepts speed_mps but does
+                             not use it; derivable downstream from the
+                             speed in the manifest
+predicted congestion         OrderCandidate carries no congestion
+                             feature, and inventing one would be a
+                             strategy-visible change to fixed
+                             infrastructure
+predicted waiting            Dispatch.planned_wait_s is always 0.0; a
+                             structurally-zero column only invites
+                             someone to read meaning into it
+minimum SOC during order     the ledger exposes SOC at launch and at
+                             completion, not a per-order minimum
+```
+
+See docs/DECISIONS.md, "Decision and Outcome Dataset" through "Run
+Identity", for the frozen schema decisions and "Phase 8 Schema Gaps To
+Close" for the above.
 
 ## Phase 9: Experiment Runner
 

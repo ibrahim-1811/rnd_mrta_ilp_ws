@@ -1,3 +1,7 @@
+# CONTROLLED TEST CONFIG -- Battery V1 B3 visual acceptance: robot_001..012 start at 9%; 8 take the chargers, 4 go to holding cells.
+# Identical to v2_reference.yaml except battery.initial_soc_overrides.
+# Never use for scientific runs.
+#
 # Central warehouse simulation configuration.
 #
 # Authoritative for map, fleet, battery, service durations, orders and
@@ -45,6 +49,19 @@ battery:
   charging_percent_per_second: 1.0
   reserve_percent: 10.0
   charge_due_percent: 10.0
+  initial_soc_overrides:
+    robot_001: 9.0
+    robot_002: 9.0
+    robot_003: 9.0
+    robot_004: 9.0
+    robot_005: 9.0
+    robot_006: 9.0
+    robot_007: 9.0
+    robot_008: 9.0
+    robot_009: 9.0
+    robot_010: 9.0
+    robot_011: 9.0
+    robot_012: 9.0
 
 # Scientific service durations, used exactly as written. Nothing in
 # the visualization layer may modify these.

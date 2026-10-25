@@ -1,0 +1,1099 @@
+<meta charset="utf-8">
+<title>MRTA Workspace Atlas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<!--
+  MRTA Workspace Atlas: the living reference for this repository.
+
+  Source of truth : docs/REPO_ATLAS.html (this file)
+  Published copy  : https://claude.ai/artifact/GyoUEbzA7pxzMv4Q8RvqNP
+                    Republish to THIS url when the file changes; a publish
+                    without it creates a second, separate page.
+
+  Works two ways from one file:
+    * opened directly in a browser (file://): mermaid is loaded from
+      jsDelivr by the script at the bottom
+    * published as a claude.ai artifact: the viewer renders mermaid
+      itself, and the script does nothing
+
+  Every number on this page was measured; update it with the code.
+-->
+<style>
+/* Layout: a contents rail on the left (sticky on wide screens, a wrapped list on phones),
+   one reading column on the right; diagrams, tables and trees scroll inside their own boxes.
+   Look: warehouse floor. Concrete neutrals, asphalt ink, safety amber for the one thing that
+   varies (the strategy), teal for recorded data. */
+:root {
+  --bg: #f2f3f1;
+  --surface: #ffffff;
+  --ink: #1c2227;
+  --muted: #59626a;
+  --line: #d5d9d7;
+  --accent: #b0740a;
+  --accent-soft: #faf0da;
+  --data: #1f6f6b;
+  --data-soft: #e0f0ee;
+  --ok: #2a7a3d; --ok-soft: #e2f1e5;
+  --wip: #946600; --wip-soft: #faf0da;
+  --todo: #69707a; --todo-soft: #eaeceb;
+  --bad: #a3342b; --bad-soft: #f8e4e1;
+  --code-bg: #e9ebe9;
+  --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181b; --surface: #1c2226; --ink: #e5e8e6; --muted: #9aa2a8; --line: #30393e;
+    --accent: #e2a23a; --accent-soft: #3a2f1a; --data: #5cc0b8; --data-soft: #183331;
+    --ok: #6ccf84; --ok-soft: #1e3325; --wip: #e2a23a; --wip-soft: #3a2f1a;
+    --todo: #a2a9af; --todo-soft: #283035; --bad: #ef8a80; --bad-soft: #3a2220;
+    --code-bg: #222a2e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181b; --surface: #1c2226; --ink: #e5e8e6; --muted: #9aa2a8; --line: #30393e;
+  --accent: #e2a23a; --accent-soft: #3a2f1a; --data: #5cc0b8; --data-soft: #183331;
+  --ok: #6ccf84; --ok-soft: #1e3325; --wip: #e2a23a; --wip-soft: #3a2f1a;
+  --todo: #a2a9af; --todo-soft: #283035; --bad: #ef8a80; --bad-soft: #3a2220;
+  --code-bg: #222a2e;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 72px;
+}
+a { color: var(--ink); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+.page { max-width: 1200px; margin: 0 auto; display: grid; gap: 0 48px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1000px) { .page { grid-template-columns: 210px minmax(0, 1fr); } }
+
+/* contents rail */
+nav.toc { padding-block: 24px 8px; }
+@media (min-width: 1000px) {
+  nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; max-height: 100vh; overflow-y: auto; padding-block: 40px 24px; }
+}
+nav.toc .label { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+@media (min-width: 1000px) { nav.toc ol { display: grid; gap: 2px; } }
+nav.toc a { font-size: 14.5px; text-decoration: none; color: var(--muted); display: inline-block; padding: 2px 0; }
+nav.toc a:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--accent); }
+
+main { display: grid; gap: 64px; min-width: 0; }
+
+header.top { padding-block: 40px 20px; display: grid; gap: 16px; border-bottom: 2px solid var(--ink); }
+.eyebrow { font-family: var(--mono); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(40px, 6vw, 64px); line-height: 1; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 700; font-size: 32px; line-height: 1.1; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h3 { font-size: 17px; font-weight: 600; margin: 0; }
+p { margin: 0; }
+.lead { font-size: 18px; color: var(--muted); max-width: 66ch; }
+.prose { max-width: 70ch; }
+.muted { color: var(--muted); }
+section { display: grid; gap: 18px; scroll-margin-top: 16px; }
+.sub { display: grid; gap: 12px; }
+
+.facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0; }
+.facts div { display: grid; gap: 0; }
+.facts dt { font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 0; font-family: var(--display); font-weight: 700; font-size: 26px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.facts dd small { font-family: var(--body); font-weight: 400; font-size: 14px; color: var(--muted); }
+
+code, .mono { font-family: var(--mono); font-size: .88em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+pre.cmd, pre.tree {
+  margin: 0; background: var(--code-bg); border-radius: 6px; padding: 14px 16px;
+  font-family: var(--mono); font-size: 13px; line-height: 1.55; overflow-x: auto; white-space: pre;
+}
+pre.tree { background: var(--surface); border: 1px solid var(--line); }
+pre.tree .c { color: var(--muted); }
+pre.tree .d { color: var(--accent); font-weight: 500; }
+pre.tree .x { color: var(--todo); }
+
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; overflow-x: auto; }
+.diagram pre.mermaid { margin: 0; background: transparent; text-align: center; font-family: var(--mono); font-size: 12px; }
+.caption { font-size: 14px; color: var(--muted); max-width: 72ch; }
+
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 500; white-space: nowrap; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.file { font-family: var(--mono); font-size: 13.5px; white-space: nowrap; }
+td.wrapfile { font-family: var(--mono); font-size: 13.5px; overflow-wrap: anywhere; }
+tr.group td { font-family: var(--mono); font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding-top: 18px; border-bottom: 1px solid var(--ink); }
+
+.pill { display: inline-block; font-family: var(--mono); font-size: 11.5px; letter-spacing: .03em; padding: 1px 8px; border-radius: 99px; white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.wip { background: var(--wip-soft); color: var(--wip); }
+.pill.todo { background: var(--todo-soft); color: var(--todo); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.var { background: var(--accent-soft); color: var(--accent); }
+.pill.dat { background: var(--data-soft); color: var(--data); }
+
+.steps { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: step; }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 2.4em minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+.steps li::before { content: counter(step); font-family: var(--display); font-weight: 700; font-size: 22px; line-height: 1.2; color: var(--muted); }
+.steps li.var { background: var(--accent-soft); border-radius: 6px; padding-inline: 10px; border-bottom-color: transparent; }
+.steps li.var::before { color: var(--accent); }
+.steps li.rec::before { color: var(--data); }
+.steps .t { min-width: 0; }
+.steps .t span { display: block; color: var(--muted); font-size: 15px; }
+
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; }
+.two > * { min-width: 0; }
+
+ul.rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+ul.rules li { padding: 9px 0 9px 22px; border-bottom: 1px solid var(--line); position: relative; }
+ul.rules li::before { content: ""; position: absolute; left: 4px; top: 18px; width: 8px; height: 8px; background: var(--accent); }
+
+.issue { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.issue p { color: var(--muted); font-size: 15px; grid-column: 2; }
+
+details { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+details > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; list-style-position: inside; }
+details > .inner { padding: 0 16px 16px; display: grid; gap: 12px; }
+
+footer { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; display: grid; gap: 6px; }
+
+@media (max-width: 520px) {
+  body { font-size: 15px; }
+  .facts dd { font-size: 22px; }
+}
+</style>
+
+<div class="page">
+
+<nav class="toc" aria-label="Contents">
+  <div class="label">Contents</div>
+  <ol>
+    <li><a href="#overview">Big picture</a></li>
+    <li><a href="#repository">Repository</a></li>
+    <li><a href="#packages">Packages</a></li>
+    <li><a href="#modules">Modules</a></li>
+    <li><a href="#run">A run, start to end</a></li>
+    <li><a href="#decision">The decision loop</a></li>
+    <li><a href="#engine">The engine</a></li>
+    <li><a href="#states">State machines</a></li>
+    <li><a href="#maps">Maps and roads</a></li>
+    <li><a href="#data">Data and learning</a></li>
+    <li><a href="#ros">ROS and Gazebo</a></li>
+    <li><a href="#scripts">Scripts</a></li>
+    <li><a href="#files">Configs, map, world</a></li>
+    <li><a href="#tests">Tests</a></li>
+    <li><a href="#docs">Documents</a></li>
+    <li><a href="#status">Status</a></li>
+    <li><a href="#rules">Rules</a></li>
+    <li><a href="#issues">Known issues</a></li>
+    <li><a href="#updating">Updating this page</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<header class="top">
+  <div class="eyebrow">rnd_mrta_ilp_ws · living reference · updated 2026-10-24</div>
+  <h1>MRTA Workspace Atlas</h1>
+  <p class="lead">Everything in this repository: what each part does, how data moves through it, and where the project stands. Outcome-aware ILP for explainable, grid-aware task allocation in multi-robot warehouses.</p>
+  <dl class="facts">
+    <div><dt>Packages</dt><dd>6</dd></div>
+    <div><dt>Python modules</dt><dd>33</dd></div>
+    <div><dt>Strategies</dt><dd>3 <small>of 11 planned</small></dd></div>
+    <div><dt>Tests</dt><dd>388 <small>passing</small></dd></div>
+    <div><dt>Simulator checks</dt><dd>14/14</dd></div>
+    <div><dt>Map · config · world</dt><dd>1 · 1 · 1 <small>W100, ≤ 100 robots</small></dd></div>
+  </dl>
+  <p class="caption">Code basis: last commit <code>d6d67c1</code> (2026-10-11) plus the uncommitted work of 2026-10-22 to 2026-10-24 (decision window, dataset, strategies, drawn maps, W100, one config, the 100-robot speed fixes). Every number on this page was measured on that tree.</p>
+</header>
+
+<!-- ============================================================ -->
+<section id="overview">
+  <h2>Big picture</h2>
+  <p class="prose">Three files go in. A fixed simulator runs them. Only one part changes between experiments: the <strong>strategy</strong> that decides which robot gets which order. Map, roads, traffic, battery, speed and service times are identical for every strategy, so a difference in the results is caused by the strategy.</p>
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    subgraph IN["INPUTS"]
+        MAP["W100.xlsx&lt;br/&gt;walls, stations,&lt;br/&gt;road arrows"]
+        CFG["warehouse.yaml&lt;br/&gt;the one config"]
+        ORD["orders.csv&lt;br/&gt;2000 orders"]
+    end
+    subgraph SIM["SIMULATOR, the same for every strategy"]
+        LOAD["load"]
+        LOOP["decision loop&lt;br/&gt;which robot, which order?"]
+        STRAT["STRATEGY&lt;br/&gt;nearest_astar&lt;br/&gt;nearest_manhattan&lt;br/&gt;random"]
+        ENG["engine&lt;br/&gt;driving, traffic,&lt;br/&gt;battery, charging"]
+    end
+    subgraph OUT["OUTPUTS"]
+        REP["terminal report"]
+        DATA["dataset&lt;br/&gt;decisions + outcomes"]
+        LEARN["Prolog facts&lt;br/&gt;for ILP"]
+        VIEW["Gazebo 3D view"]
+    end
+    MAP --> LOAD
+    CFG --> LOAD
+    ORD --> LOAD
+    LOAD --> LOOP
+    LOOP -->|asks| STRAT
+    STRAT -->|chooses| LOOP
+    LOOP -->|missions| ENG
+    ENG -->|robot free again| LOOP
+    ENG --> REP
+    LOOP --> DATA
+    ENG --> DATA
+    DATA --> LEARN
+    ENG -.->|mirror only| VIEW
+    style STRAT stroke-width:4px
+</pre>
+  </div>
+  <p class="caption">The research chain is State → Decision → Outcome. The decision is recorded before anything moves; the outcome is recorded after the order is delivered. The two are joined only by a decision id, so the learner can never see the future.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="repository">
+  <h2>Repository</h2>
+  <p class="prose">Top level, with what is tracked in git and what is generated or ignored.</p>
+<pre class="tree"><span class="d">rnd_mrta_ilp_ws/</span>
+├── README.md                <span class="c">why it was built, results, figures</span>
+├── CLAUDE.md                <span class="c">the project's rules (also read by AI assistants)</span>
+├── pixi.toml, pixi.lock     <span class="c">the Python environment: pixi install</span>
+│
+├── <span class="d">docs/</span>                    <span class="c">see Documents below</span>
+│   ├── REPO_ATLAS.html      <span class="c">this page</span>
+│   ├── START_HERE.md · HOW_IT_WORKS.md · MAKE_A_MAP.md
+│   ├── CURRENT_PHASE · DECISIONS · ROADMAP · EXPERIMENT_PROTOCOL · ARCHITECTURE
+│   ├── figures/  images/  agents/  papers/  archive/
+│
+├── <span class="d">src/</span>                     <span class="c">six packages, ROS 2 layout</span>
+│   ├── mrta_core/           <span class="c">map, roads, orders, battery maths (pure Python)</span>
+│   ├── task_management/     <span class="c">the strategies: the research variable</span>
+│   ├── simulation_env/      <span class="c">the simulator, scripts, configs, maps, worlds, tests</span>
+│   ├── rmf_grid_traffic/    <span class="c">Open-RMF nav graph from the lanes, C++ graph checks</span>
+│   ├── robot_interfaces/    <span class="c">ROS messages: RobotState, RobotStateArray</span>
+│   └── gazebo_fleet_pose_transport/  <span class="c">C++ helper that moves robots in Gazebo</span>
+│
+├── .scratch/                <span class="c">local issue tracker (markdown)</span>
+├── .claude/                 <span class="c">assistant settings</span>
+│
+<span class="x">├── runs/                    ignored · recorded datasets
+├── build/ install/ log/     ignored · colcon build output
+├── data/                    empty placeholder folders: raw/ processed/ results/
+├── Mrta_experiments/        ignored · 33 runs of the OLD simulator (removed 2026-08-30)
+├── ilp_ws.zip               ignored · 160 MB archive of the earlier ICAPS'26 workspace
+└── ICAPS 26 PlanRob Presentation.zip</span></pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="packages">
+  <h2>Packages</h2>
+  <div class="two">
+    <div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    SCR["scripts/&lt;br/&gt;run_workload, map_tool, ..."]
+    SIM["simulation_env&lt;br/&gt;loop, engine, battery, dataset"]
+    NODE["fleet_node&lt;br/&gt;ROS 2 node"]
+    TM["task_management&lt;br/&gt;strategies"]
+    CORE["mrta_core&lt;br/&gt;map, roads, orders, battery maths"]
+    RMF["rmf_grid_traffic&lt;br/&gt;nav graph"]
+    MSG["robot_interfaces&lt;br/&gt;messages"]
+    GZT["gazebo_fleet_pose_transport&lt;br/&gt;C++"]
+    SCR --> SIM
+    SCR --> TM
+    SCR --> CORE
+    SIM --> CORE
+    TM --> CORE
+    NODE --> SIM
+    NODE --> TM
+    NODE --> MSG
+    NODE -->|subprocess| GZT
+    RMF --> CORE
+    style TM stroke-width:4px
+</pre>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Package</th><th>Language</th><th>Job</th></tr></thead>
+        <tbody>
+          <tr><td class="file">mrta_core</td><td>Python</td><td>The warehouse as data: the Excel map, one-way roads, directed A*, orders, the FIFO queue, battery maths, config. Depends on nothing else here, so it can be tested alone.</td></tr>
+          <tr><td class="file">task_management</td><td>Python</td><td>The strategies. Scores every robot-order pair and chooses. Never touches the simulator; it is only asked questions.</td></tr>
+          <tr><td class="file">simulation_env</td><td>Python</td><td>The simulator: decision loop, event clock, traffic, battery ledger, charging, parking, dataset recording, the ROS node. Also holds scripts, configs, maps, worlds and most tests.</td></tr>
+          <tr><td class="file">rmf_grid_traffic</td><td>Python, C++</td><td>Turns the lane policy into an Open-RMF nav graph and checks it. Derived, never edited by hand.</td></tr>
+          <tr><td class="file">robot_interfaces</td><td>ROS msg</td><td><code>RobotState</code>, <code>RobotStateArray</code>: every robot on <code>/mrta/robot_states</code> (with its charging state and current order); <code>FleetStatus</code>: the run at a glance on <code>/mrta/fleet_status</code>.</td></tr>
+          <tr><td class="file">gazebo_fleet_pose_transport</td><td>C++</td><td>Reads fleet pose frames on stdin and sends them to Gazebo's <code>set_pose_vector</code> service. Visualization only.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="modules">
+  <h2>Modules</h2>
+  <p class="prose">How the modules that run a simulation import each other. Arrows point at what is used. Taken from the actual imports, with small helpers such as <code>grid</code> left out of the first diagram.</p>
+  <div class="two">
+    <div class="sub">
+      <h3>The simulator and the strategies</h3>
+      <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    RW["run_workload.py"]
+    WE["workload_executor"]
+    AS["allocation_strategy"]
+    FT["features"]
+    FE["fleet_engine"]
+    CH["charging"]
+    SP["stage_parking"]
+    DS["dataset"]
+    FL["fleet"]
+    RES["reservations"]
+    LTC["local_traffic_controller"]
+    LYS["local_yield_selector"]
+    BL["battery_ledger"]
+    GR["grid_robot"]
+    RW --> AS
+    RW --> WE
+    RW --> FL
+    RW --> DS
+    AS --> FT
+    WE --> FE
+    WE --> CH
+    WE --> SP
+    WE --> DS
+    SP --> FL
+    FE --> RES
+    FE --> LTC
+    FE --> LYS
+    FE --> BL
+    FE --> GR
+    style AS stroke-width:4px
+    style FT stroke-width:4px
+</pre>
+      </div>
+    </div>
+    <div class="sub">
+      <h3>Inside mrta_core</h3>
+      <div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    SC["sim_config"]
+    XL["warehouse_map_xlsx"]
+    OQ["order_queue"]
+    OR["orders"]
+    WR["warehouse_routing"]
+    WM["warehouse_map"]
+    BA["battery"]
+    WO["world"]
+    GD["grid"]
+    SC --> BA
+    XL --> WM
+    OQ --> OR
+    OR --> WM
+    WR --> WM
+    WR --> GD
+    WM --> WO
+    WM --> GD
+    WO --> GD
+</pre>
+      </div>
+    </div>
+  </div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Module</th><th>Uses from mrta_core</th></tr></thead>
+      <tbody>
+        <tr><td class="file">run_workload.py</td><td class="mono">sim_config · warehouse_map_xlsx · orders · order_queue</td></tr>
+        <tr><td class="file">workload_executor</td><td class="mono">warehouse_routing · battery · order_queue · orders · warehouse_map</td></tr>
+        <tr><td class="file">fleet_engine</td><td class="mono">warehouse_routing · battery · warehouse_map</td></tr>
+        <tr><td class="file">features</td><td class="mono">warehouse_routing · battery · grid</td></tr>
+        <tr><td class="file">allocation_strategy</td><td class="mono">battery</td></tr>
+        <tr><td class="file">charging · stage_parking</td><td class="mono">warehouse_routing</td></tr>
+        <tr><td class="file">battery_ledger</td><td class="mono">battery</td></tr>
+        <tr><td class="file">fleet</td><td class="mono">sim_config · warehouse_map · warehouse_routing</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="caption">The executor never imports a strategy: the script hands one in. That is what keeps the strategy a swappable part. And everything that needs a road goes through <code>warehouse_routing</code>, so prediction and execution can never disagree about a route.</p>
+
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Module</th><th class="num">Lines</th><th>What it does</th><th></th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="4">mrta_core — the map and the roads</td></tr>
+        <tr><td class="file">warehouse_map_xlsx.py</td><td class="num">828</td><td>Reads the Excel map: orange frame, red walls, stations (full labels or S D C H P), road arrows. Errors name the Excel cell.</td><td></td></tr>
+        <tr><td class="file">warehouse_map.py</td><td class="num">205</td><td>The map in memory: grid, stations, drawn lanes (<code>lane_edges</code>). Zone and cell lookups are built once, so routing never rescans the zones.</td><td></td></tr>
+        <tr><td class="file">warehouse_routing.py</td><td class="num">1268</td><td>The one-way lane policy (drawn arrows, or the built-in V2 rules), directed A*, mission plans, route cache. Every consumer reads lanes through <code>directional_blocked_edges()</code>.</td><td></td></tr>
+        <tr><td class="file">map_builder.py</td><td class="num">480</td><td>Makes maps: blank, generated example, export with arrows; writes the Excel file.</td><td></td></tr>
+        <tr><td class="file">map_check.py</td><td class="num">359</td><td>The drawing checker: dead ends, two-way roads, disconnected areas, unreachable stations, rotaries.</td><td></td></tr>
+        <tr><td class="file">orders.py</td><td class="num">204</td><td>The order schema; loads and validates the order CSV against the map.</td><td></td></tr>
+        <tr><td class="file">order_queue.py</td><td class="num">136</td><td>The FIFO queue of waiting orders; the candidate window.</td><td></td></tr>
+        <tr><td class="file">battery.py</td><td class="num">344</td><td>Battery V1 maths and the decision-time energy check (can this robot afford this order?).</td><td></td></tr>
+        <tr><td class="file">sim_config.py</td><td class="num">247</td><td>Reads the config YAML; resolves map and order paths; rewrites the map and fleet lines when a new map becomes current.</td><td></td></tr>
+        <tr><td class="file">grid.py</td><td class="num">189</td><td>Grid map and A* search.</td><td></td></tr>
+        <tr><td class="file">world.py</td><td class="num">125</td><td><code>WorldGrid</code>: size, obstacles, world coordinates.</td><td></td></tr>
+        <tr><td class="file">world_view.py</td><td class="num">66</td><td>Grid ↔ world transform, shared by Gazebo, the node and the nav graph.</td><td></td></tr>
+        <tr><td class="file">warehouse_map_io.py</td><td class="num">211</td><td>An older CSV map loader.</td><td><span class="pill todo">old</span></td></tr>
+        <tr><td class="file">models.py</td><td class="num">33</td><td>Old <code>TaskState</code> with priority and deadline fields that are not in the active order schema.</td><td><span class="pill bad">legacy</span></td></tr>
+        <tr><td class="file">symbolic.py</td><td class="num">130</td><td>An old predicate builder on those fields. Review before the ILP phase; do not build on it.</td><td><span class="pill bad">legacy</span></td></tr>
+        <tr><td class="file">kinematics.py</td><td class="num">123</td><td>A second energy model. It is not the energy authority; <code>battery.py</code> is.</td><td><span class="pill bad">legacy</span></td></tr>
+
+        <tr class="group"><td colspan="4">task_management — the strategies</td></tr>
+        <tr><td class="file">features.py</td><td class="num">313</td><td>Scores every robot-order pair: C_static (directed A* metres), energy requirement, and the Manhattan key for the naive baseline.</td><td><span class="pill var">variable</span></td></tr>
+        <tr><td class="file">allocation_strategy.py</td><td class="num">399</td><td>The strategy registry, the shared <code>greedy_pairing</code> sweep, and <code>nearest_astar</code>, <code>nearest_manhattan</code>, <code>random</code>.</td><td><span class="pill var">variable</span></td></tr>
+
+        <tr class="group"><td colspan="4">simulation_env — the simulator</td></tr>
+        <tr><td class="file">workload_executor.py</td><td class="num">3139</td><td>The decision loop: free robots, candidate window, dispatch quantum, battery mask, recording, missions, charging requests, final parking.</td><td></td></tr>
+        <tr><td class="file">fleet_engine.py</td><td class="num">2040</td><td>The event clock (exact fractions): moves robots cell by cell, schedules events, applies traffic decisions, drains batteries.</td><td></td></tr>
+        <tr><td class="file">run_metrics.py</td><td class="num">162</td><td>The protocol's run-level metrics (MRTA, traffic, battery) from a finished run, written as <code>metrics.json</code>.</td><td><span class="pill dat">data</span></td></tr>
+        <tr><td class="file">reservations.py</td><td class="num">489</td><td>Who holds which cell and edge, and when; the end-of-run audit (no shared cell, no swap), which compares only intervals that can conflict.</td><td></td></tr>
+        <tr><td class="file">local_traffic_controller.py</td><td class="num">243</td><td>For each robot: MOVE, WAIT, or YIELD_REQUIRED.</td><td></td></tr>
+        <tr><td class="file">local_yield_selector.py</td><td class="num">134</td><td>Picks a side cell for a robot that has to yield.</td><td></td></tr>
+        <tr><td class="file">grid_robot.py</td><td class="num">253</td><td>One robot: position, status, distance and time counters.</td><td></td></tr>
+        <tr><td class="file">battery_ledger.py</td><td class="num">489</td><td>The one exact record of every robot's charge, in rational arithmetic.</td><td></td></tr>
+        <tr><td class="file">charging.py</td><td class="num">511</td><td>Charger and holding slots, the charging workflow, promotion (from holding and Stage Zones) and preemption.</td><td></td></tr>
+        <tr><td class="file">stage_parking.py</td><td class="num">199</td><td>End of work: each robot parks on the nearest free cell.</td><td></td></tr>
+        <tr><td class="file">fleet.py</td><td class="num">263</td><td>Creates the robots at their start cells (<code>home</code> or <code>spread</code>).</td><td></td></tr>
+        <tr><td class="file">dataset.py</td><td class="num">392</td><td>Records decisions and outcomes; writes Parquet (CSV fallback) and the run manifest.</td><td><span class="pill dat">data</span></td></tr>
+        <tr><td class="file">dataset_export.py</td><td class="num">302</td><td>Reads a run back out: CSV, Prolog facts and examples.</td><td><span class="pill dat">data</span></td></tr>
+        <tr><td class="file">fleet_node.py</td><td class="num">1159</td><td>The ROS 2 node <code>mrta_fleet</code>: runs the same loop, sets Gazebo's fleet to exactly this run's robots, publishes robot states, drives Gazebo.</td><td></td></tr>
+        <tr><td class="file">gazebo_bridge.py</td><td class="num">469</td><td>Talks to Gazebo: lists, creates and removes robot models, holds the one robot model, and feeds the pose transport process.</td><td></td></tr>
+        <tr><td class="file">gazebo_world.py</td><td class="num">269</td><td>Starting Gazebo: writes the world plus the run's robots parked on their start cells to a temporary copy, and stops any Gazebo already running this world.</td><td></td></tr>
+        <tr><td class="file">gazebo_view.py</td><td class="num">53</td><td>Grid ↔ Gazebo coordinates.</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="run">
+  <h2>A run, start to end</h2>
+  <p class="prose">What happens for one command, for example:</p>
+<pre class="cmd">PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+    --robots 50 --orders 300 --strategy nearest_astar --dataset runs/demo</pre>
+  <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    participant S as run_workload.py
+    participant L as loaders
+    participant W as WorkloadExecutor
+    participant A as Strategy
+    participant E as FleetSimulationEngine
+    participant D as RunRecorder
+    S->>L: config, Excel map, orders
+    L-->>S: SimConfig, WarehouseMap, 300 orders
+    S->>S: 50 robots on spread start cells
+    S->>W: run()
+    loop until every order is delivered
+        E->>W: tick: robots are free
+        W->>W: candidate window, battery mask
+        W->>D: record every candidate pair
+        W->>A: assign()
+        A-->>W: robot-order pairs
+        W->>E: missions, as one batch
+        E->>E: drive, wait, yield, serve, drain battery
+        E-->>W: robot delivered and backed out
+        W->>D: record the order's outcome
+    end
+    W->>E: park every robot on the nearest free cell
+    W-->>S: totals
+    S->>D: write runs/demo/
+</pre>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="decision">
+  <h2>The decision loop</h2>
+  <p class="prose">Whenever one or more robots become free, one decision happens. A run of 300 orders on W100 makes a few hundred.</p>
+  <ol class="steps">
+    <li><div class="t">Find the free robots<span>Idle, and not due to charge. At or below 10% a robot finishes its current order and then goes to charge instead.</span></div></li>
+    <li><div class="t">Hold briefly, if batching is on<span>With a dispatch quantum (<code>--quantum 3.0</code>) freed robots wait a moment so several are assigned together. Off by default.</span></div></li>
+    <li><div class="t">Choose the orders on offer<span>The oldest waiting orders, as many as the fleet has robots. If none of them can be served, the window reaches further down the queue so the run cannot stall.</span></div></li>
+    <li><div class="t">Score every robot × order pair<span>Directed A* distance through the one-way roads, through every shelf of the order in the best visiting order, to the drop-off. Plus the energy needed: the order, the trip to the nearest charger, and the 10% reserve.</span></div></li>
+    <li><div class="t">Remove pairs a robot cannot afford<span>The battery check is a hard rule for every strategy, and the executor re-checks every pair a strategy returns.</span></div></li>
+    <li class="rec"><div class="t">Record the decision<span>Every pair and its scores are written before anything is chosen or moves. A test proves the recorded rows cannot contain the future.</span></div></li>
+    <li class="var"><div class="t">The strategy chooses<span>The only step that differs between strategies. All three run the same greedy sweep over a different ranking.</span></div></li>
+    <li><div class="t">Build the missions and hand them to the engine<span>Every robot's route is the directed A* route, whatever the strategy ranked on.</span></div></li>
+  </ol>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Strategy</th><th>Ranks pairs by</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td class="file">nearest_astar</td><td>real driving distance (directed A*)</td><td>the grid-aware baseline</td></tr>
+        <tr><td class="file">nearest_manhattan</td><td>straight-line grid distance, ignoring walls and one-way roads</td><td>the naive control: shows what grid-awareness is worth</td></tr>
+        <tr><td class="file">random</td><td>a seeded shuffle</td><td>the floor every strategy must beat</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="engine">
+  <h2>The engine</h2>
+  <p class="prose">Between decisions the engine moves the fleet on one simulated clock, kept as exact fractions so a run is identical every time. It never decides who gets which order.</p>
+  <div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    Q["event queue&lt;br/&gt;earliest event first"]
+    H["handle the event&lt;br/&gt;for its robot"]
+    T["traffic controller&lt;br/&gt;MOVE, WAIT or YIELD_REQUIRED"]
+    R["reservations&lt;br/&gt;is the next cell free?"]
+    B["battery ledger&lt;br/&gt;drain for distance, service, waiting"]
+    N["schedule the robot's next event"]
+    X["executor tick&lt;br/&gt;delivered? due to charge? free?"]
+    Q --> H --> T
+    T --> R
+    R --> B --> N --> Q
+    H -->|mission complete| X
+    X -->|new missions| Q
+</pre>
+  </div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Event</th><th>Means</th></tr></thead>
+      <tbody>
+        <tr><td class="file">MOVE_COMPLETE</td><td>a robot reached the next cell of its path</td></tr>
+        <tr><td class="file">WAIT_COMPLETE</td><td>a robot that was blocked tries again; this is where waiting time comes from</td></tr>
+        <tr><td class="file">SERVICE_COMPLETE</td><td>picking at a shelf or dropping off is done (2 s each)</td></tr>
+        <tr><td class="file">RETREAT_COMPLETE</td><td>the robot has backed out of a station into the aisle</td></tr>
+        <tr><td class="file">YIELD_COMPLETE</td><td>the robot has stepped aside to let another pass</td></tr>
+        <tr><td class="file">REJOIN_COMPLETE</td><td>the robot is back on its path after yielding</td></tr>
+        <tr><td class="file">CHARGE_COMPLETE</td><td>charging is finished</td></tr>
+        <tr><td class="file">MISSION_COMPLETE</td><td>the robot reached the end of its mission</td></tr>
+        <tr><td class="file">DISPATCH_WINDOW</td><td>a timer for the dispatch quantum; touches no robot and books no waiting</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="states">
+  <h2>State machines</h2>
+  <div class="two">
+    <div class="sub">
+      <h3>An order</h3>
+      <div class="diagram">
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --> PENDING: loaded from the CSV
+    PENDING --> ASSIGNED: a strategy picks it
+    ASSIGNED --> IN_PROGRESS: robot sets off
+    IN_PROGRESS --> COMPLETED: dropped off
+    COMPLETED --> [*]
+</pre>
+      </div>
+      <p class="caption"><code>FAILED</code> also exists in the schema and is never expected in a clean run.</p>
+    </div>
+    <div class="sub">
+      <h3>A charger or holding slot</h3>
+      <div class="diagram">
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --> FREE
+    FREE --> RESERVED: claimed before the robot moves
+    RESERVED --> OCCUPIED: robot arrives
+    OCCUPIED --> VACATING: robot starts to leave
+    VACATING --> FREE: robot is back in the aisle
+</pre>
+      </div>
+      <p class="caption">A slot is offered only while FREE, so no robot can drive into a cell another robot owns, stands on, or is backing out of.</p>
+    </div>
+  </div>
+  <div class="sub">
+    <h3>A robot's charging trip</h3>
+    <div class="diagram">
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --> REQUEST: SOC at or below 10%
+    REQUEST --> TO_CHARGER: a charger is free
+    REQUEST --> TO_HOLDING: all chargers taken
+    REQUEST --> TO_STAGE_FALLBACK: chargers and holding all taken
+    TO_CHARGER --> OCCUPIED_CHARGER
+    OCCUPIED_CHARGER --> CHARGING
+    CHARGING --> LEAVING_CHARGER: full, 100%
+    LEAVING_CHARGER --> REJOINED
+    CHARGING --> PREEMPTED_LEAVING_CHARGER: a robot in more need takes the charger
+    PREEMPTED_LEAVING_CHARGER --> REJOINED: enough charge to work
+    PREEMPTED_LEAVING_CHARGER --> PREEMPTED: not enough
+    PREEMPTED --> TO_HOLDING: new holding trip
+    TO_HOLDING --> HOLDING
+    HOLDING --> LEAVING_HOLDING: a charger frees up
+    LEAVING_HOLDING --> PROMOTED
+    PROMOTED --> TO_CHARGER: new charger trip
+    TO_STAGE_FALLBACK --> STAGE_FALLBACK
+    REJOINED --> [*]
+</pre>
+    </div>
+    <p class="caption">From <code>ChargeState</code> in <code>charging.py</code>. Preemption takes the charger from the highest-charged robot; promotion out of holding or a Stage Zone goes to the lowest-charged robot first.</p>
+  </div>
+  <div class="sub">
+    <h3>A robot's status</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Status</th><th>Means</th></tr></thead>
+        <tbody>
+          <tr><td class="file">IDLE</td><td>no mission; available if not due to charge</td></tr>
+          <tr><td class="file">MOVING</td><td>driving along its route</td></tr>
+          <tr><td class="file">WAITING</td><td>blocked by another robot; drains 1% per 300 s</td></tr>
+          <tr><td class="file">PICKING / DROPPING</td><td>at a shelf or a drop-off; 2 s, drains 1% per 60 s</td></tr>
+          <tr><td class="file">CHARGING</td><td>on a charger, +1% per second</td></tr>
+          <tr><td class="file">FAILED</td><td>not used in a clean run</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="maps">
+  <h2>Maps and roads</h2>
+  <p class="prose">A map is an Excel workbook. Since 2026-10-23 a map can carry its own traffic rules as arrows in its road cells, so any layout can be simulated without changing code. Maps without arrows (V1, V2) keep the built-in V2 rules.</p>
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    XL["Excel map&lt;br/&gt;orange frame, red walls,&lt;br/&gt;S D C H P stations,&lt;br/&gt;road arrows"]
+    LD["warehouse_map_xlsx&lt;br/&gt;load and validate"]
+    WM["WarehouseMap&lt;br/&gt;grid, stations, lane_edges"]
+    DBE{"directional_blocked_edges&lt;br/&gt;arrows drawn?"}
+    DR["drawn lanes&lt;br/&gt;the map's own arrows"]
+    V2["built-in V2 rules&lt;br/&gt;only fit the 17 x 35 V2 layout"]
+    AST["directed A*&lt;br/&gt;scoring and missions"]
+    TRF["traffic and yielding"]
+    NAV["RMF nav graph"]
+    CHK["map_tool check&lt;br/&gt;check_map_topology"]
+    XL --> LD --> WM --> DBE
+    DBE -->|yes| DR
+    DBE -->|no| V2
+    DR --> AST
+    V2 --> AST
+    DR --> TRF
+    V2 --> TRF
+    DR --> NAV
+    V2 --> NAV
+    WM --> CHK
+</pre>
+  </div>
+  <div class="two">
+    <div class="tbl">
+      <table>
+        <thead><tr><th>In a cell</th><th>Means</th></tr></thead>
+        <tbody>
+          <tr><td>red fill</td><td>wall</td></tr>
+          <tr><td>white + <code>&gt; &lt; ^ v</code></td><td>one-way road; a junction gets two arrows</td></tr>
+          <tr><td><code>S</code></td><td>shelf</td></tr>
+          <tr><td><code>D</code></td><td>drop-off</td></tr>
+          <tr><td><code>C</code></td><td>charger</td></tr>
+          <tr><td><code>H</code></td><td>holding cell, waiting for a charger</td></tr>
+          <tr><td><code>P</code></td><td>parking; one per robot, so the fleet limit</td></tr>
+          <tr><td>orange</td><td>the coordinate frame</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="sub">
+      <h3>Rules every map must meet</h3>
+      <ul class="rules">
+        <li>Roads are one-way: two neighbouring cells never point at each other.</li>
+        <li>Every road cell has an arrow out.</li>
+        <li>No arrow points into a station or a wall. Robots enter any station from a neighbouring road by themselves, and never drive through one.</li>
+        <li>Every station touches a road, and from any road every other road can be reached.</li>
+        <li>For a large fleet: no rotaries, 2 × 2 loops where four robots can lock each other forever.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Map</th><th class="num">Size</th><th class="num">Parking</th><th class="num">Shelves</th><th class="num">Drop-offs</th><th class="num">Chargers</th><th class="num">Holding</th><th>Lanes</th><th>Rotaries</th></tr></thead>
+      <tbody>
+        <tr><td class="file">W100.xlsx</td><td class="num">40 × 54</td><td class="num">100</td><td class="num">552</td><td class="num">36</td><td class="num">24</td><td class="num">12</td><td>drawn</td><td><span class="pill ok">0</span></td></tr>
+        <tr><td class="file">CSV_To_Gazebo_v2.xlsx</td><td class="num">17 × 35</td><td class="num">22</td><td class="num">72</td><td class="num">36</td><td class="num">8</td><td class="num">14</td><td>built-in V2</td><td><span class="pill wip">33</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="caption">V2's arrow form was proven exact: exported as arrows and loaded back, it blocks the same 775 moves as the built-in rules. Making a map: <code>docs/MAKE_A_MAP.md</code>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="data">
+  <h2>Data and learning</h2>
+  <p class="prose">With <code>--dataset DIR</code> a run writes what was known at each decision and what really happened, in separate tables. With <code>--export</code> it also writes text and Prolog. Recording is proven to change nothing in the run.</p>
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    D["decision loop"] -->|"one row per robot x order pair,&lt;br/&gt;at the moment of deciding"| DEC["decisions.parquet"]
+    E["engine"] -->|"one row per order,&lt;br/&gt;after delivery"| OC["outcomes.parquet"]
+    DEC --- J{{"joined by decision_id"}}
+    OC --- J
+    RUN["the run"] --> MAN["run.json&lt;br/&gt;hashes of map, config, orders;&lt;br/&gt;git version; run_id"]
+    DEC --> CSV["decisions.csv, outcomes.csv"]
+    DEC --> PL["bk.pl facts&lt;br/&gt;exs.pl examples"]
+    PL -.-> POP["Popper ILP learner&lt;br/&gt;not yet"]
+    DEC --> FIG["plot_dataset.py&lt;br/&gt;figures"]
+    OC --> FIG
+</pre>
+  </div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>File</th><th>One row is</th><th>Columns that matter</th></tr></thead>
+      <tbody>
+        <tr><td class="file">decisions.parquet</td><td>a pair the strategy could choose (39 columns)</td><td class="wrapfile">c_static_m · route_cells · robot_soc_percent · required_soc_percent · energy_margin_percent · fifo_position · free_robots · eligible · selected</td></tr>
+        <tr><td class="file">outcomes.parquet</td><td>a delivered order (22 columns)</td><td class="wrapfile">realized_distance_m · realized_waiting_s · realized_travel_time_s · energy_consumed_percent · completed_at · predicted_distance_m</td></tr>
+        <tr><td class="file">run.json</td><td>the whole run</td><td>content hashes of map, config and orders; git commit and whether the tree was dirty; format (parquet or csv)</td></tr>
+        <tr><td class="file">exs.pl</td><td>a learning example</td><td class="wrapfile">pos(assign(D,R,O)) chosen · neg(assign(D,R,O)) eligible, not chosen</td></tr>
+        <tr><td class="file">bk.pl</td><td>a fact</td><td class="wrapfile">cost(D,R,O,73.0) · soc(D,R,100.0) · energy_margin(D,R,O,84.8) · free_robots(D,22) · ...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="caption">Values are stored raw, never as ready-made predicates such as <code>battery_high</code>: where a threshold goes is the learner's experiment. Exact numbers (clock, charge) are stored twice, as a float and as an exact fraction string. Identifiers like <code>robot_003</code> are labels only, never facts to learn from. On V2, 100 orders give 1,973 decision rows (100 positive, 1,873 negative examples) and 100 outcome rows.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="ros">
+  <h2>ROS and Gazebo</h2>
+  <p class="prose">Optional, for watching. One world, built from the current map, holding the warehouse only. Starting Gazebo (<code>gazebo.launch.py</code>) first stops any Gazebo already running this world, then loads a temporary copy of the world with the run's robots parked on their start cells, so they appear with the warehouse. When a run starts the fleet node finds them; if the run asks for a different number it creates the missing ones or removes the extra. The node runs the same decision loop and engine as the headless runner, so a live run and a headless run produce byte-identical datasets.</p>
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    BS["build_scenario.py --map X.xlsx"] --> CFG["config/warehouse.yaml&lt;br/&gt;+ orders.csv"]
+    BS --> WLD["worlds/warehouse.world&lt;br/&gt;the warehouse only"]
+    BS --> NG["warehouse_nav_graph.yaml&lt;br/&gt;from the lanes"]
+    GL["gazebo.launch.py robots:=N"] -->|"stop old Gazebo"| GZ["Gazebo"]
+    WLD --> FW["/tmp/mrta_gazebo/warehouse.world&lt;br/&gt;+ N parked robots"]
+    GL --> FW
+    FW --> GZ
+    LAUNCH["warehouse_sim.launch.py orders:=true"] --> NODE["fleet_node&lt;br/&gt;mrta_fleet"]
+    CFG --> NODE
+    NODE -->|"scene/info, create_multiple, remove"| GZ
+    NODE --> EXE["WorkloadExecutor&lt;br/&gt;the same loop and engine"]
+    NODE -->|RobotStateArray| TOPIC["/mrta/robot_states"]
+    NODE -->|FleetStatus| FST["/mrta/fleet_status"]
+    NODE -->|String| EVT["/mrta/events"]
+    NODE --> BR["gazebo_bridge"]
+    BR -->|"FRAME lines on stdin"| GPT["gazebo_fleet_pose_transport"]
+    GPT -->|"set_pose_vector service"| GZ
+</pre>
+  </div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Step</th><th>Command</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td>Build the ROS packages</td><td class="wrapfile">colcon build --packages-select mrta_core task_management simulation_env rmf_grid_traffic robot_interfaces gazebo_fleet_pose_transport --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3</td><td>once, and after code changes</td></tr>
+        <tr><td>Build config, orders, world</td><td class="wrapfile">build_scenario.py --map src/simulation_env/maps/W100.xlsx</td><td>when the map changes; no colcon rebuild needed</td></tr>
+        <tr><td>Gazebo + parked robots</td><td class="wrapfile">ros2 launch simulation_env gazebo.launch.py robots:=30</td><td>terminal 1; stops any older Gazebo of this world first</td></tr>
+        <tr><td>A run (strategy + orders)</td><td class="wrapfile">ros2 launch simulation_env warehouse_sim.launch.py start_gazebo:=false orders:=true robots:=30 strategy:=nearest_astar</td><td>terminal 2, as often as you like</td></tr>
+        <tr><td>Or both at once</td><td class="wrapfile">ros2 launch simulation_env warehouse_sim.launch.py orders:=true robots:=30</td><td>one terminal; Ctrl+C stops both</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="caption">Tested 2026-10-24 on a private GZ_PARTITION, headless: Gazebo held all 100 robots as soon as the server was up; starting it again stopped the first server in 1 s and left exactly one; a run printed <code>Gazebo already shows these 100 robot(s)</code> and its first robot moved 8.9 s after the run started (18.9 s before); the one-command launch with 50 robots replaced the old server. Full sequence with expected output and fixes: <code>docs/START_HERE.md</code>, step 9.</p>
+  <p class="caption">Launch arguments: <code>robots</code>, <code>orders</code>, <code>strategy</code>, <code>speed</code>, <code>window</code>, <code>quantum</code>, <code>dataset</code>, <code>headless</code>, <code>start_gazebo</code>, <code>config_file</code>, <code>world_file</code>. The config and world are read from the source tree. The live node writes datasets as CSV, since the system Python usually lacks pyarrow. Ctrl+C stops it cleanly.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="scripts">
+  <h2>Scripts</h2>
+  <p class="prose">All in <code>src/simulation_env/scripts/</code>. Run from the repository root with <code>PYTHONPATH=$PP $PY</code> in front (see <code>docs/START_HERE.md</code>, step 0).</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Script</th><th>What for</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="2">Everyday</td></tr>
+        <tr><td class="file">run_workload.py</td><td>Run a simulation. <code>--robots --orders --orders-file --strategy --seed --quantum --window --speed --dataset --export</code></td></tr>
+        <tr><td class="file">map_tool.py</td><td>Maps: <code>new</code>, <code>example</code>, <code>check</code>, <code>show</code>, <code>export</code></td></tr>
+        <tr><td class="file">generate_orders.py</td><td>A seeded order list from the current map (build_scenario runs it)</td></tr>
+        <tr><td class="file">check_strategy_distinctness.py</td><td>Proves strategies make different choices on the same decisions</td></tr>
+        <tr><td class="file">check_map_topology.py</td><td>Full map acceptance: plans a route between every pair of stations</td></tr>
+        <tr><td class="file">build_scenario.py</td><td><code>--map X.xlsx</code>: check the map, rewrite the one config, regenerate the orders, rebuild the one world and nav graph</td></tr>
+        <tr><td class="file">plot_dataset.py</td><td>Figures from recorded datasets</td></tr>
+        <tr><td class="file">run_experiment.py</td><td>An experiment grid: strategies &times; fleet sizes &times; seeds, in parallel; each run keeps <code>run.log</code>, <code>metrics.json</code> and its dataset; one <code>summary.csv</code></td></tr>
+        <tr><td class="file">plot_experiment.py</td><td>Figures for every core metric of an experiment, and <code>summary.md</code></td></tr>
+        <tr><td class="file">generate_gazebo_grid_world.py</td><td>The Gazebo world alone (called by build_scenario)</td></tr>
+        <tr class="group"><td colspan="2">Simulator regression checks</td></tr>
+        <tr><td class="file">check_batch_reservations.py</td><td>A cell is never booked twice</td></tr>
+        <tr><td class="file">check_engine_batch_traffic.py</td><td>Robots moving in one batch resolve conflicts correctly</td></tr>
+        <tr><td class="file">check_engine_headon_yield.py</td><td>The engine prevents head-on meetings</td></tr>
+        <tr><td class="file">check_local_headon_resolution.py</td><td>Head-on detection, yielding and rejoining on the real map</td></tr>
+        <tr><td class="file">check_local_traffic_controller.py</td><td>The traffic controller's decisions on hand-built cases</td></tr>
+        <tr><td class="file">check_local_yield_selector.py</td><td>A yielding robot picks a legal side cell</td></tr>
+        <tr><td class="file">check_18_robot_traffic_stress.py</td><td>18 robots on deliberately difficult routes</td></tr>
+        <tr><td class="file">check_raw_mission_cycle.py</td><td>One robot's full mission cycle</td></tr>
+        <tr><td class="file">check_battery_eligibility.py</td><td>Robots are refused orders they cannot finish</td></tr>
+        <tr><td class="file">check_charger_evacuation.py</td><td>Robots leave the roads to charge</td></tr>
+        <tr><td class="file">check_b4_charging.py</td><td>Charge to 100%, leave, rejoin the fleet</td></tr>
+        <tr><td class="file">check_b5_queue.py</td><td>Holding promotion and charger preemption</td></tr>
+        <tr class="group"><td colspan="2">V2 only, kept for the record</td></tr>
+        <tr><td class="file">discover_directional_highways.py</td><td>Lists V2's straight road runs</td></tr>
+        <tr><td class="file">validate_directional_highways.py</td><td>Reports V2's built-in lane rules against its map</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="files">
+  <h2>Configs, map and world</h2>
+  <p class="prose">One of each. They always describe the current map, and switching map is one command: <code>build_scenario.py --map X.xlsx</code>.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>File</th><th>What it is</th></tr></thead>
+      <tbody>
+        <tr><td class="file">config/warehouse.yaml</td><td><strong>The one config.</strong> The default for every script, the ROS node and the launch. Every setting explained and marked FREE or FIXED.</td></tr>
+        <tr><td class="file">config/orders.csv</td><td>2000 orders from the current map's stations, seed 42. <code>--orders N</code> takes the first N.</td></tr>
+        <tr><td class="file">maps/W100.xlsx</td><td><strong>The current map</strong>: 40 × 54, 100 parking, 552 shelves, 36 drop-offs, 24 chargers, 12 holding, no rotaries. New maps go beside it.</td></tr>
+        <tr><td class="file">worlds/warehouse.world</td><td><strong>The one Gazebo world</strong>, the warehouse only. Starting Gazebo loads a temporary copy with the robots parked (<code>/tmp/mrta_gazebo_&lt;uid&gt;/</code>).</td></tr>
+        <tr><td class="file">rmf_grid_traffic/config/warehouse_nav_graph.yaml</td><td>The nav graph of the current map: 2148 waypoints, 4244 directed lanes.</td></tr>
+        <tr class="group"><td colspan="2">src/simulation_env/test/fixtures/ — for the tests, not for experiments</td></tr>
+        <tr><td class="file">v2_reference.yaml</td><td>The V2 scenario (22 robots). Every frozen V2 baseline and most tests are measured on it.</td></tr>
+        <tr><td class="file">CSV_To_Gazebo_v2.xlsx</td><td>The V2 map: 17 × 35, built-in lane rules, 33 rotaries.</td></tr>
+        <tr><td class="file">orders.csv, orders_500.csv</td><td>100 and 500 orders for V2.</td></tr>
+        <tr><td class="file">warehouse_sim_b3_*.yaml</td><td>Battery test configs: robots start low on charge.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="caption">Settings in the config: <strong>FIXED</strong> map, start mode, speed, battery, service times, candidate window. <strong>FREE</strong> robot count, order file, dispatch quantum, seed. Per run, override on the command line (<code>--robots</code>, <code>--orders</code>, <code>--strategy</code>, ...) or at launch (<code>robots:=N</code>). Removed 2026-10-23: the per-fleet-size configs and worlds, V1, the demo CSV and the map templates (<code>map_tool.py new</code> and <code>example</code> make templates on demand).</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="tests">
+  <h2>Tests</h2>
+  <p class="prose">388 tests (<code>pixi run test</code>, under a minute) and 14 simulator checks (the scripts above). The checks and most tests use the V2 fixture, so a change to the current map never changes a frozen baseline.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Test file</th><th class="num">Tests</th><th>Protects</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="3">mrta_core/tests</td></tr>
+        <tr><td class="file">test_map_lanes.py</td><td class="num">46</td><td>drawn lanes, V2 identity, the checker, rotaries, generated maps</td></tr>
+        <tr><td class="file">test_battery.py</td><td class="num">24</td><td>battery maths and energy eligibility</td></tr>
+        <tr><td class="file">test_orders.py</td><td class="num">23</td><td>order schema and validation</td></tr>
+        <tr><td class="file">test_order_queue.py</td><td class="num">19</td><td>FIFO queue and window</td></tr>
+        <tr><td class="file">test_kinematics.py · test_world.py · test_warehouse_routing.py · test_symbolic.py · test_grid.py · test_models.py</td><td class="num">32</td><td>geometry, routing, legacy modules</td></tr>
+        <tr><td class="file">test_map_lookups.py</td><td class="num">7</td><td>the map's zone and cell lookups give exactly what a full scan gave</td></tr>
+        <tr class="group"><td colspan="3">simulation_env/test</td></tr>
+        <tr><td class="file">test_battery_ledger.py</td><td class="num">29</td><td>exact charge bookkeeping</td></tr>
+        <tr><td class="file">test_dataset.py</td><td class="num">24</td><td>no future leakage, recording changes nothing, exports</td></tr>
+        <tr><td class="file">test_charger_evacuation.py</td><td class="num">19</td><td>robots leave the roads to charge</td></tr>
+        <tr><td class="file">test_b5_queue.py</td><td class="num">17</td><td>holding promotion and preemption</td></tr>
+        <tr><td class="file">test_run_metrics.py</td><td class="num">3</td><td>metrics.json reports the run's own numbers; a charge request is counted once</td></tr>
+        <tr><td class="file">test_gazebo_world.py</td><td class="num">18</td><td>the robots Gazebo loads stand where the node puts them; only this world's Gazebo, on this partition, is stopped</td></tr>
+        <tr><td class="file">test_stage_promotion.py</td><td class="num">12</td><td>Stage Zone robots queue with holding robots, reach a charger they can afford, charge and rejoin</td></tr>
+        <tr><td class="file">test_s0_window.py</td><td class="num">16</td><td>candidate window, liveness, dispatch quantum</td></tr>
+        <tr><td class="file">test_battery_eligibility.py</td><td class="num">14</td><td>the battery mask</td></tr>
+        <tr><td class="file">test_one_config.py</td><td class="num">15</td><td>one config, map and world; config rewrite; Gazebo create/remove plan</td></tr>
+        <tr><td class="file">test_spawn_spread.py</td><td class="num">13</td><td>start positions</td></tr>
+        <tr><td class="file">test_reservation_audit.py</td><td class="num">4</td><td>the audit finds what the all-pairs scan found, and a long run is audited in seconds</td></tr>
+        <tr><td class="file">test_b4_lifecycle.py · test_stage_parking.py · test_charging_bank.py</td><td class="num">24</td><td>charging lifecycle, parking, charger bank</td></tr>
+        <tr class="group"><td colspan="3">task_management/test</td></tr>
+        <tr><td class="file">test_strategies.py</td><td class="num">24</td><td>the three strategies, the battery mask, seeds, Manhattan key</td></tr>
+        <tr><td class="file">test_nearest_astar.py</td><td class="num">5</td><td>A* pairing on a miniature warehouse</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="docs">
+  <h2>Documents</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Document</th><th>Read it when</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="2">To run it</td></tr>
+        <tr><td class="file">docs/START_HERE.md</td><td>you want to run it: map, build, run, Gazebo, step by step</td></tr>
+        <tr><td class="file">docs/HOW_IT_WORKS.md</td><td>you want the data flow and a demo script in markdown</td></tr>
+        <tr><td class="file">docs/MAKE_A_MAP.md</td><td>you want a warehouse other than W100</td></tr>
+        <tr><td class="file">docs/REPO_ATLAS.html</td><td>you want to know what is where (this page)</td></tr>
+        <tr class="group"><td colspan="2">The project contract, kept current</td></tr>
+        <tr><td class="file">docs/CURRENT_PHASE.md</td><td>you want what is done, with every measured number</td></tr>
+        <tr><td class="file">docs/DECISIONS.md</td><td>you want the reason behind a rule</td></tr>
+        <tr><td class="file">docs/ROADMAP.md</td><td>you want the phases and their status</td></tr>
+        <tr><td class="file">docs/EXPERIMENT_PROTOCOL.md</td><td>you are designing an experiment</td></tr>
+        <tr><td class="file">CLAUDE.md</td><td>you want the hard rules of the project</td></tr>
+        <tr class="group"><td colspan="2">In depth</td></tr>
+        <tr><td class="file">README.md</td><td>you want the story, figures and results</td></tr>
+        <tr><td class="file">docs/ARCHITECTURE.md</td><td>you are changing code</td></tr>
+        <tr><td class="file">docs/00_RUNBOOK.md</td><td>you want every command with expected output</td></tr>
+        <tr><td class="file">docs/18_TRAFFIC_TOPOLOGY.md</td><td>you want why roads are one-way</td></tr>
+        <tr class="group"><td colspan="2">History</td></tr>
+        <tr><td class="file">docs/archive/</td><td>never, to learn the system: documents 01–17 and the August audit, as the repo was then</td></tr>
+        <tr><td class="file">docs/papers/</td><td>the ICAPS'26 PlanRob paper and slides</td></tr>
+        <tr><td class="file">.scratch/</td><td>open issues, as markdown</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="status">
+  <h2>Status</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Phase</th><th>What</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td>1–3</td><td>Deterministic simulator, one-way traffic, Gazebo and RMF mirror</td><td><span class="pill ok">done</span></td></tr>
+        <tr><td>4</td><td>V2 baseline freeze</td><td><span class="pill ok">done</span></td></tr>
+        <tr><td>6</td><td>Battery V1: charge accounting, eligibility, charging, holding, preemption (B0–B5)</td><td><span class="pill ok">done</span></td></tr>
+        <tr><td>6</td><td>Battery V1 B6: battery metrics, split of makespan and end-of-work time</td><td><span class="pill todo">not started</span></td></tr>
+        <tr><td>6b</td><td>Decision window and dispatch quantum (S0)</td><td><span class="pill wip">built, not committed</span></td></tr>
+        <tr><td>8</td><td>Decision and outcome recording</td><td><span class="pill wip">built, not committed</span></td></tr>
+        <tr><td>7.1</td><td>Strategies: nearest_astar, nearest_manhattan, random</td><td><span class="pill wip">built, not committed</span></td></tr>
+        <tr><td>5</td><td>Any map in Excel; W100 for 10–100 robots; one map, one config, one world</td><td><span class="pill wip">built, not committed</span></td></tr>
+        <tr><td>7.2</td><td>Earliest finish, multi-criteria, auction, Hungarian, MILP</td><td><span class="pill todo">not started</span></td></tr>
+        <tr><td>9</td><td>Experiment runner: many seeds and fleet sizes, result tables</td><td><span class="pill todo">not started</span></td></tr>
+        <tr><td>10–11</td><td>Popper on the recorded data; learn to copy one strategy</td><td><span class="pill todo">not started</span></td></tr>
+        <tr><td>12–13</td><td>Learn from several strategies; outcome-aware learning</td><td><span class="pill todo">not started</span></td></tr>
+        <tr><td>14–16</td><td>Explanations, full evaluation, report</td><td><span class="pill todo">not started</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="two">
+    <div class="sub">
+      <h3>Measured on W100, 300 orders</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Strategy</th><th class="num">10 robots</th><th class="num">100 robots</th></tr></thead>
+          <tbody>
+            <tr><td class="file">nearest_astar</td><td class="num">2860.8 s</td><td class="num">416.7 s</td></tr>
+            <tr><td class="file">nearest_manhattan</td><td class="num">2885.4 s</td><td class="num">460.7 s</td></tr>
+            <tr><td class="file">random</td><td class="num">2930.9 s</td><td class="num">483.3 s</td></tr>
+            <tr><td>random vs A*</td><td class="num">+2.4 %</td><td class="num">+16.0 %</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="caption">Makespan. All orders completed with zero traffic violations. The gap grows with congestion.</p>
+    </div>
+    <div class="sub">
+      <h3>Fleet sweep, nearest_astar</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th class="num">Robots</th><th class="num">Makespan</th><th class="num">Waiting</th></tr></thead>
+          <tbody>
+            <tr><td class="num">10</td><td class="num">2860.8 s</td><td class="num">105.9 s</td></tr>
+            <tr><td class="num">20</td><td class="num">1463.4 s</td><td class="num">219.7 s</td></tr>
+            <tr><td class="num">30</td><td class="num">931.3 s</td><td class="num">380.7 s</td></tr>
+            <tr><td class="num">50</td><td class="num">616.7 s</td><td class="num">687.3 s</td></tr>
+            <tr><td class="num">70</td><td class="num">483.3 s</td><td class="num">1910.7 s</td></tr>
+            <tr><td class="num">100</td><td class="num">416.7 s</td><td class="num">3399.3 s</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="caption">Waiting grows 32-fold from 10 to 100 robots: the congestion the outcome-aware learner is meant to learn about.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="rules">
+  <h2>Rules that must not break</h2>
+  <p class="prose">From <code>CLAUDE.md</code> and <code>ARCHITECTURE.md</code>. A change that breaks one of these is a regression, whatever else it improves.</p>
+  <ul class="rules">
+    <li>Only the allocation strategy varies. No strategy may change routing, traffic, battery drain, charger policy, speed or service time.</li>
+    <li>One simulated clock in exact fractions; no wall-clock time in any result.</li>
+    <li>Ordinary roads are one-way; zero uncontrolled two-way road edges.</li>
+    <li>Stations are never used as shortcuts, and robots never hop from one station to another.</li>
+    <li>Traffic never changes which robot owns which order.</li>
+    <li>The battery check is a hard rule, applied identically to every strategy.</li>
+    <li>Decision data contains nothing that happened after the decision.</li>
+    <li>The charge bookkeeping is exact; a charger slot is offered only while free.</li>
+    <li><code>robot_id</code> may break an exact tie, and is never a learned feature.</li>
+    <li>Gazebo contains no planning. It shows what the simulator decided.</li>
+    <li>Orders have exactly <code>order_id, item_id, shelf_id, quantity, dropoff_id</code>; no priority, release time or deadline.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="issues">
+  <h2>Known issues and open decisions</h2>
+  <div>
+    <div class="issue"><span class="pill bad">traffic</span><h3>A circle of waiting robots cannot be untangled</h3><p>If robots form a closed loop each waiting for the next, the run stops with STALLED and a CYCLES report. The circle that happens in practice is the 2 × 2 rotary; W100 has none and the checker warns on every one. V2 has 33, and one caused the deadlock under the random strategy. <code>.scratch/traffic-liveness/issues/01</code></p></div>
+    <div class="issue"><span class="pill wip">commit</span><h3>Most recent work is not committed</h3><p>Decision window, recording, strategies, drawn maps, W100, the docs reorganisation. Review <code>git status</code> before committing.</p></div>
+    <div class="issue"><span class="pill ok">battery</span><h3>Fixed: Stage Zone robots now return to work</h3><p>At 100 robots, robots that asked for a charger while every charger and holding cell was full used to wait on a Stage Zone for the rest of the run (36 of 100). Approved 2026-10-24 (DECISIONS.md, "Stage Zone Promotion"): they now queue with the holding robots, lowest SOC first, and take a freed charger they can reach. 100 robots / 2000 orders: 100 charge sessions instead of 64, none left on a Stage Zone, makespan 2441.29 s &rarr; 2133.49 s, 0 violations. Preemption itself (CHARGE_DUE only) still never fires by order volume and is covered by its own tests.</p></div>
+    <div class="issue"><span class="pill todo">demo</span><h3><code>real_warehouse_traffic_demo.py</code> finds no conflict</h3><p>Its premise is stale: one-way roads removed the head-on conflicts it looks for. The behaviour is covered by three passing checks. <code>.scratch/traffic-demos/issues/01</code></p></div>
+    <div class="issue"><span class="pill todo">legacy</span><h3><code>models.py</code>, <code>symbolic.py</code>, <code>kinematics.py</code></h3><p>Older interfaces with fields and an energy model that are not the active ones. Review before building the ILP predicate layer.</p></div>
+    <div class="issue"><span class="pill todo">cleanup</span><h3><code>Mrta_experiments/</code></h3><p>Output of the old simulator; not usable for this R&amp;D. Waiting for a decision: delete it, or zip it into <code>docs/archive/</code> first. It is not in git.</p></div>
+    <div class="issue"><span class="pill todo">research</span><h3>The held-out map does not exist yet</h3><p>Planned: a second map, never trained on, to test whether learned rules transfer.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="updating">
+  <h2>Updating this page</h2>
+  <p class="prose">This page is <code>docs/REPO_ATLAS.html</code> in the repository, versioned with the code. Open it in any browser, or use the published copy. Update it in the same change that alters what it describes: a new module, script, strategy, map, phase, or measured result.</p>
+  <details>
+    <summary>How to update it</summary>
+    <div class="inner">
+      <p>Ask Claude in this repository: <em>"update the repo atlas"</em>, describing what changed. It edits <code>docs/REPO_ATLAS.html</code> and republishes it to the same link.</p>
+      <p>Published copy: <code>https://claude.ai/artifact/GyoUEbzA7pxzMv4Q8RvqNP</code>. Always republish to this address; publishing without it creates a second page.</p>
+      <p>By hand: edit the file and keep these rules.</p>
+      <ul class="rules">
+        <li>Every number comes from a run or a test, never from memory. Note what it was measured on.</li>
+        <li>Diagrams are mermaid inside <code>&lt;pre class="mermaid"&gt;</code>. Write <code>&amp;lt;br/&amp;gt;</code> for a line break in a label and <code>&amp;lt;</code> for a less-than sign.</li>
+        <li>Module lines, test counts and import arrows are measured; re-measure them rather than guessing.</li>
+        <li>Change the date in the header and add a line to the change log below.</li>
+      </ul>
+    </div>
+  </details>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Date</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td class="file">2026-10-24 (2)</td><td>100 robots in Gazebo: robots no longer all pause together (zone lookups built once: allocator 12.3 s &rarr; 1.8 s, worst frame gap 0.47 s &rarr; 0.17 s) and the final report prints at once (audit 28 min &rarr; 0.33 s). Identical decisions, outcomes and metrics. START_HERE 9.5 "Watch the battery". New issue: Stage Zone fallback robots never return at 100 robots. Tests 355.</td></tr>
+        <tr><td class="file">2026-10-24 (3)</td><td>Stage Zone promotion (approved scope change to Battery V1): saturated robots queue with holding robots and are promoted onto a reachable free charger. 100 robots: 100/100 charge and rejoin, makespan 2441.29 s &rarr; 2133.49 s. V2 baseline unchanged. Config battery rates back to 1.0. Tests 367.</td></tr>
+        <tr><td class="file">2026-10-24 (4)</td><td>Gazebo opens with the robots parked on their start cells and only one Gazebo per world (<code>gazebo.launch.py</code>, also used by the one-command launch). A run finds the robots and makes them move; first move 18.9 s &rarr; 8.9 s after the run starts. Tests 385.</td></tr>
+        <tr><td class="file">2026-10-25</td><td>Experiments: <code>run_experiment.py</code>, <code>plot_experiment.py</code>, <code>metrics.json</code> per run. fleet_sweep (30/40/50 robots, 2000 orders, 3 strategies): A* beats Manhattan by 1.5&ndash;2.4% and random by 3.1&ndash;4.4% in makespan. Quiet terminal: one status line per 60 simulated s and a short summary; detail on <code>/mrta/fleet_status</code>, <code>/mrta/events</code>, <code>/mrta/robot_states</code>. Finding: charging comes in synchronized waves. Tests 388.</td></tr>
+        <tr><td class="file">2026-10-24</td><td>One map, one config, one world: <code>config/warehouse.yaml</code>, <code>maps/W100.xlsx</code>, <code>worlds/warehouse.world</code>; <code>build_scenario.py --map</code>; robots created and removed at run time (<code>robots:=N</code>); V2 moved to test fixtures; build flag for CMake's Python. Tests 344.</td></tr>
+        <tr><td class="file">2026-10-23 (2)</td><td>Gazebo: W100 and W100_20 worlds built and tested; run steps added to ROS and Gazebo; <code>warehouse_W100_20.yaml</code> added to Configs; node prints the real order count and stops cleanly on Ctrl+C.</td></tr>
+        <tr><td class="file">2026-10-23</td><td>Page created: repository, packages, modules, run sequence, decision loop, engine, state machines, maps, data, ROS and Gazebo, scripts, files, tests, documents, status, rules, issues.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <span>MRTA Workspace Atlas · docs/REPO_ATLAS.html · rnd_mrta_ilp_ws</span>
+  <span>Outcome-Aware ILP for Explainable Grid-Aware Task Allocation in Multi-Robot Warehouse Systems</span>
+</footer>
+
+</main>
+</div>
+
+<script>
+/* Opened straight from the repository (file://) there is no viewer to render the
+   mermaid blocks, so load mermaid and render them here. Inside the claude.ai viewer
+   the diagrams are rendered by the viewer and this does nothing. */
+(function () {
+  function raw() {
+    return Array.prototype.filter.call(
+      document.querySelectorAll("pre.mermaid"),
+      function (el) { return !el.querySelector("svg") && !el.hasAttribute("data-processed"); }
+    );
+  }
+  function render() {
+    if (!raw().length) return;
+    var s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js";
+    s.onload = function () {
+      var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      window.mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default", securityLevel: "strict" });
+      window.mermaid.run({ nodes: raw() });
+    };
+    document.head.appendChild(s);
+  }
+  var inViewer = typeof window.claude !== "undefined";
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { setTimeout(render, inViewer ? 3000 : 0); });
+  } else {
+    setTimeout(render, inViewer ? 3000 : 0);
+  }
+})();
+</script>

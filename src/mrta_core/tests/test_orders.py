@@ -70,9 +70,7 @@ def test_one_hundred_logical_orders_load(warehouse):
 def test_every_loaded_order_starts_pending(warehouse):
     orders = load_orders_csv(WORKLOAD_CSV, warehouse)
 
-    assert all(
-        order.status is OrderStatus.PENDING for order in orders
-    )
+    assert all(order.status is OrderStatus.PENDING for order in orders)
     assert all(order.assigned_robot == "" for order in orders)
     assert all(order.start_time is None for order in orders)
     assert all(order.completion_time is None for order in orders)
@@ -103,12 +101,8 @@ def test_two_independent_loads_produce_identical_fifo_ordering(
     first = load_orders_csv(WORKLOAD_CSV, warehouse)
     second = load_orders_csv(WORKLOAD_CSV, warehouse)
 
-    assert [order.order_id for order in first] == [
-        order.order_id for order in second
-    ]
-    assert [order.shelf_ids for order in first] == [
-        order.shelf_ids for order in second
-    ]
+    assert [order.order_id for order in first] == [order.order_id for order in second]
+    assert [order.shelf_ids for order in first] == [order.shelf_ids for order in second]
     assert [order.dropoff_id for order in first] == [
         order.dropoff_id for order in second
     ]
@@ -117,14 +111,14 @@ def test_two_independent_loads_produce_identical_fifo_ordering(
 # -- grouping -----------------------------------------------
 
 
-def test_rows_sharing_an_order_id_form_one_logical_order(
-    warehouse, csv_from_rows
-):
-    path = csv_from_rows([
-        "O0001,SKU001,shelf_003,1,dropoff_001",
-        "O0001,SKU002,shelf_010,2,dropoff_001",
-        "O0002,SKU011,shelf_025,1,dropoff_004",
-    ])
+def test_rows_sharing_an_order_id_form_one_logical_order(warehouse, csv_from_rows):
+    path = csv_from_rows(
+        [
+            "O0001,SKU001,shelf_003,1,dropoff_001",
+            "O0001,SKU002,shelf_010,2,dropoff_001",
+            "O0002,SKU011,shelf_025,1,dropoff_004",
+        ]
+    )
 
     orders = load_orders_csv(path, warehouse)
 
@@ -135,14 +129,14 @@ def test_rows_sharing_an_order_id_form_one_logical_order(
     assert orders[1].shelf_ids == ("shelf_025",)
 
 
-def test_line_items_keep_csv_row_order_within_one_order(
-    warehouse, csv_from_rows
-):
-    path = csv_from_rows([
-        "O0001,SKU003,shelf_033,1,dropoff_001",
-        "O0001,SKU001,shelf_007,1,dropoff_001",
-        "O0001,SKU002,shelf_022,1,dropoff_001",
-    ])
+def test_line_items_keep_csv_row_order_within_one_order(warehouse, csv_from_rows):
+    path = csv_from_rows(
+        [
+            "O0001,SKU003,shelf_033,1,dropoff_001",
+            "O0001,SKU001,shelf_007,1,dropoff_001",
+            "O0001,SKU002,shelf_022,1,dropoff_001",
+        ]
+    )
 
     orders = load_orders_csv(path, warehouse)
 
@@ -158,17 +152,17 @@ def test_line_items_keep_csv_row_order_within_one_order(
     ]
 
 
-def test_fifo_sequence_follows_first_appearance_not_sorting(
-    warehouse, csv_from_rows
-):
+def test_fifo_sequence_follows_first_appearance_not_sorting(warehouse, csv_from_rows):
     """Interleaved and out-of-sequence ids keep their file order."""
 
-    path = csv_from_rows([
-        "O0009,SKU001,shelf_003,1,dropoff_001",
-        "O0002,SKU002,shelf_010,1,dropoff_002",
-        "O0009,SKU003,shelf_011,1,dropoff_001",
-        "O0005,SKU004,shelf_012,1,dropoff_003",
-    ])
+    path = csv_from_rows(
+        [
+            "O0009,SKU001,shelf_003,1,dropoff_001",
+            "O0002,SKU002,shelf_010,1,dropoff_002",
+            "O0009,SKU003,shelf_011,1,dropoff_001",
+            "O0005,SKU004,shelf_012,1,dropoff_003",
+        ]
+    )
 
     orders = load_orders_csv(path, warehouse)
 
@@ -194,72 +188,73 @@ def bad(warehouse, csv_from_rows, rows):
 
 def test_missing_order_id_is_rejected(warehouse, csv_from_rows):
     assert "order_id" in bad(
-        warehouse, csv_from_rows,
+        warehouse,
+        csv_from_rows,
         [",SKU001,shelf_003,1,dropoff_001"],
     )
 
 
 def test_missing_item_id_is_rejected(warehouse, csv_from_rows):
     assert "item_id" in bad(
-        warehouse, csv_from_rows,
+        warehouse,
+        csv_from_rows,
         ["O0001,,shelf_003,1,dropoff_001"],
     )
 
 
 @pytest.mark.parametrize("quantity", ["0", "-1"])
-def test_non_positive_quantity_is_rejected(
-    warehouse, csv_from_rows, quantity
-):
+def test_non_positive_quantity_is_rejected(warehouse, csv_from_rows, quantity):
     assert "quantity must be > 0" in bad(
-        warehouse, csv_from_rows,
+        warehouse,
+        csv_from_rows,
         [f"O0001,SKU001,shelf_003,{quantity},dropoff_001"],
     )
 
 
 def test_non_numeric_quantity_is_rejected(warehouse, csv_from_rows):
     assert "non-numeric" in bad(
-        warehouse, csv_from_rows,
+        warehouse,
+        csv_from_rows,
         ["O0001,SKU001,shelf_003,two,dropoff_001"],
     )
 
 
 def test_unknown_shelf_id_is_rejected(warehouse, csv_from_rows):
     assert "not in the warehouse map" in bad(
-        warehouse, csv_from_rows,
+        warehouse,
+        csv_from_rows,
         ["O0001,SKU001,shelf_999,1,dropoff_001"],
     )
 
 
 def test_unknown_dropoff_id_is_rejected(warehouse, csv_from_rows):
     assert "not in the warehouse map" in bad(
-        warehouse, csv_from_rows,
+        warehouse,
+        csv_from_rows,
         ["O0001,SKU001,shelf_003,1,dropoff_999"],
     )
 
 
-def test_shelf_id_naming_a_non_shelf_station_is_rejected(
-    warehouse, csv_from_rows
-):
+def test_shelf_id_naming_a_non_shelf_station_is_rejected(warehouse, csv_from_rows):
     assert "not a shelf station" in bad(
-        warehouse, csv_from_rows,
+        warehouse,
+        csv_from_rows,
         ["O0001,SKU001,staging_001,1,dropoff_001"],
     )
 
 
-def test_dropoff_id_naming_a_non_dropoff_station_is_rejected(
-    warehouse, csv_from_rows
-):
+def test_dropoff_id_naming_a_non_dropoff_station_is_rejected(warehouse, csv_from_rows):
     assert "not a dropoff station" in bad(
-        warehouse, csv_from_rows,
+        warehouse,
+        csv_from_rows,
         ["O0001,SKU001,shelf_003,1,shelf_004"],
     )
 
 
-def test_one_order_with_two_dropoffs_is_rejected(
-    warehouse, csv_from_rows
-):
+def test_one_order_with_two_dropoffs_is_rejected(warehouse, csv_from_rows):
     assert "must agree" in bad(
-        warehouse, csv_from_rows,
+        warehouse,
+        csv_from_rows,
         [
             "O0001,SKU001,shelf_003,1,dropoff_001",
             "O0001,SKU002,shelf_010,1,dropoff_002",
@@ -267,13 +262,13 @@ def test_one_order_with_two_dropoffs_is_rejected(
     )
 
 
-def test_a_release_time_or_deadline_column_is_not_required(
-    warehouse, csv_from_rows
-):
+def test_a_release_time_or_deadline_column_is_not_required(warehouse, csv_from_rows):
     """The loader reads the five active columns and ignores extras."""
 
-    path = csv_from_rows([
-        "O0001,SKU001,shelf_003,1,dropoff_001",
-    ])
+    path = csv_from_rows(
+        [
+            "O0001,SKU001,shelf_003,1,dropoff_001",
+        ]
+    )
 
     assert len(load_orders_csv(path, warehouse)) == 1

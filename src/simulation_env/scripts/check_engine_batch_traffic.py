@@ -109,10 +109,7 @@ for cell in [
     (2, 1),
     (3, 1),
 ]:
-    print(
-        f"  {cell}: "
-        f"{engine.reservations.owner(cell)}"
-    )
+    print(f"  {cell}: {engine.reservations.owner(cell)}")
 
 
 print()
@@ -128,11 +125,7 @@ events = sorted(
 )
 
 for event in events:
-    print(
-        f"  {event.robot_id} "
-        f"{event.kind.value} "
-        f"t={float(event.time):.6f}"
-    )
+    print(f"  {event.robot_id} {event.kind.value} t={float(event.time):.6f}")
 
 
 assert started == {
@@ -141,33 +134,19 @@ assert started == {
     "robot_003",
 }
 
-assert engine.reservations.owner(
-    (3, 1)
-) == "robot_001"
+assert engine.reservations.owner((3, 1)) == "robot_001"
 
-assert engine.reservations.owner(
-    (2, 1)
-) == "robot_002"
+assert engine.reservations.owner((2, 1)) == "robot_002"
 
-assert engine.reservations.owner(
-    (1, 1)
-) == "robot_003"
+assert engine.reservations.owner((1, 1)) == "robot_003"
 
-assert engine.reservations.owner(
-    (0, 1)
-) is None
+assert engine.reservations.owner((0, 1)) is None
 
 assert len(events) == 3
 
-assert all(
-    event.time == Fraction(2, 3)
-    for event in events
-)
+assert all(event.time == Fraction(2, 3) for event in events)
 
-assert all(
-    robot.status is GridRobotStatus.MOVING
-    for robot in robots
-)
+assert all(robot.status is GridRobotStatus.MOVING for robot in robots)
 
 
 print()

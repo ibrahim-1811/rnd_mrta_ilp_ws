@@ -42,7 +42,7 @@ from simulation_env.workload_executor import WorkloadExecutor
 from task_management.allocation_strategy import get_batch_strategy
 
 
-CONFIGS = Path(__file__).resolve().parents[1] / "config"
+CONFIGS = Path(__file__).resolve().parent / "fixtures"
 
 
 def low(*numbers, soc=9):
@@ -63,7 +63,7 @@ SATURATED = {**low(*range(1, 11)), "robot_011": Fraction(14)}
 
 @pytest.fixture(scope="module")
 def config():
-    return load_sim_config(CONFIGS / "warehouse_sim.yaml")
+    return load_sim_config(CONFIGS / "v2_reference.yaml")
 
 
 @pytest.fixture(scope="module")
@@ -133,7 +133,7 @@ class Monitor:
         return list(last.values())
 
 
-def build(config, warehouse, overrides, *, holding=None, orders=None):
+def build(config, warehouse, overrides, *, holding=None, orders=None, window="fleet_size"):
 
     config = replace(
         config,
@@ -158,6 +158,7 @@ def build(config, warehouse, overrides, *, holding=None, orders=None):
         on_order_status=lambda *status: statuses.append(status),
         progress_interval_s=0,
         battery=config.battery,
+        window=window,
     )
 
     if holding is not None:
@@ -218,7 +219,8 @@ def trip_end(record):
     """When one terminal trip stopped owning its robot, or None.
 
     A charger trip ends when the robot rejoins the fleet; a holding
-    trip ends when the robot is promoted and clears the cell (B5); a
+    trip ends when the robot is promoted and clears the cell (B5), a
+    Stage Zone trip when its robot is promoted and drives off; a
     preempted trip that found no eligible work ends when the robot
     clears the charger and its holding trip takes over. Consecutive
     trips are contiguous, so the union of these windows is the whole
@@ -230,6 +232,10 @@ def trip_end(record):
 
     if record.left_holding_at is not None:
         return record.left_holding_at
+
+    if record.kind == "stage" and record.promoted_at is not None:
+        # A Stage Zone robot drives off in the instant it is promoted.
+        return record.promoted_at
 
     if record.state is ChargeState.PREEMPTED:
         return record.left_charger_at
@@ -632,22 +638,42 @@ def test_resource_remains_unavailable_while_occupied(late):
 
 
 def test_saturation_falls_back_to_a_safe_stage_zone(saturated, terminals):
+    """Every charger and holding cell taken: wait on a Stage Zone.
+
+    Since Stage Zone promotion (docs/DECISIONS.md) the robot does not
+    stay there: it is promoted onto the first charger it can take,
+    charges, and rejoins the fleet.
+    """
+
     executor, monitor, _ = saturated
 
-    record = executor.charge["robot_011"]
+    trips = {
+        id(r): r for r in (*executor.charge_history, *executor.charge.values())
+    }.values()
+
+    (record,) = [r for r in trips if r.robot_id == "robot_011" and r.kind == "stage"]
 
     assert executor.result.saturation_events == 1
     assert record.request_cell not in terminals
-    assert (record.kind, record.state) == ("stage", ChargeState.STAGE_FALLBACK)
+    assert record.state is ChargeState.PROMOTED
     assert warehouse_type(executor, record.target_cell) is ZoneType.STAGING
-    assert executor.parking.claim_of("robot_011") == record.zone_id
 
     events = [e for e in executor.result.battery_events if e.robot_id == "robot_011"]
-    assert [e.kind for e in events] == ["REQUEST", "SATURATION", "RESERVE", "ARRIVE"]
+    assert [e.kind for e in events] == [
+        "REQUEST",
+        "SATURATION",
+        "RESERVE",
+        "ARRIVE",
+        "PROMOTE",
+        "RESERVE",
+        "ARRIVE",
+        "CHARGE_START",
+        "CHARGE_FULL",
+        "REJOIN",
+    ]
 
-    # The fallback cell is never handed to a robot parking at the end.
+    # No two robots ever park on one cell, the fallback robot included.
     parked_cells = {executor.engine.robots[r].cell for r in executor.parked}
-    assert record.target_cell not in parked_cells
     assert len(parked_cells) == len(executor.parked)
 
 

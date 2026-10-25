@@ -92,11 +92,7 @@ def practice_warehouse():
     x=2 are the left frontage lanes, x=15 the right one.
     """
 
-    obstacles = frozenset(
-        (x, y)
-        for x in range(WIDTH)
-        for y in (0, HEIGHT - 1)
-    )
+    obstacles = frozenset((x, y) for x in range(WIDTH) for y in (0, HEIGHT - 1))
 
     homes = tuple(
         WarehouseZone(
@@ -105,11 +101,7 @@ def practice_warehouse():
             frozenset({(x, y)}),
         )
         for number, (x, y) in enumerate(
-            (
-                (x, y)
-                for x in HOME_COLS
-                for y in OPEN_ROWS
-            ),
+            ((x, y) for x in HOME_COLS for y in OPEN_ROWS),
             start=1,
         )
     )
@@ -117,12 +109,8 @@ def practice_warehouse():
     stations = (
         WarehouseZone("shelf_west", ZoneType.SHELF, frozenset({SHELF_WEST})),
         WarehouseZone("shelf_east", ZoneType.SHELF, frozenset({SHELF_EAST})),
-        WarehouseZone(
-            "dropoff_west", ZoneType.DROPOFF, frozenset({DROPOFF_WEST})
-        ),
-        WarehouseZone(
-            "dropoff_east", ZoneType.DROPOFF, frozenset({DROPOFF_EAST})
-        ),
+        WarehouseZone("dropoff_west", ZoneType.DROPOFF, frozenset({DROPOFF_WEST})),
+        WarehouseZone("dropoff_east", ZoneType.DROPOFF, frozenset({DROPOFF_EAST})),
     )
 
     return WarehouseMap(
@@ -183,17 +171,15 @@ def test_practice_map_obeys_the_production_lane_policy():
         (x, y)
         for y in range(HEIGHT)
         for x in range(WIDTH)
-        if (x, y) not in warehouse.grid.obstacles
-        and (x, y) not in terminals
+        if (x, y) not in warehouse.grid.obstacles and (x, y) not in terminals
     }
 
     forward = {cell: set() for cell in core}
     backward = {cell: set() for cell in core}
     two_way = set()
 
-    for (x, y) in core:
+    for x, y in core:
         for target in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-
             if target not in core:
                 continue
 
@@ -287,10 +273,7 @@ def test_cost_is_grid_distance_not_euclidean():
     # straight-line measure can see.
     cost = solo_cost(warehouse, EAST_HOME, west_order())
 
-    euclidean = (
-        math.dist(EAST_HOME, SHELF_WEST)
-        + math.dist(SHELF_WEST, DROPOFF_WEST)
-    )
+    euclidean = math.dist(EAST_HOME, SHELF_WEST) + math.dist(SHELF_WEST, DROPOFF_WEST)
 
     manhattan = (
         abs(EAST_HOME[0] - SHELF_WEST[0])

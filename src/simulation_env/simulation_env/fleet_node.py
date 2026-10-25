@@ -6,9 +6,27 @@ fleet on /mrta/robot_states at a configured rate.
 
 State is owned by GridRobot and is never read back from Gazebo.
 The selected FIFO/MRTA workload is executed here.
+
+The terminal stays short: a header, one status line every
+progress_interval_s simulated seconds, warnings, and a summary at the
+end, with the full report written to a file. The detail is on topics:
+
+    /mrta/robot_states   every robot: cell, status, battery, current
+                         order, charging state
+    /mrta/fleet_status   order and robot counts, chargers, SOC, who is
+                         charging and who waits for a charger
+    /mrta/events         one line per assignment, completed order and
+                         battery event
+
+verbose:=true prints the full trace to the terminal as well.
 """
 
+from dataclasses import replace
+from datetime import datetime
+import os
+import subprocess
 from math import ceil
+from pathlib import Path
 from time import perf_counter, sleep
 
 import rclpy
@@ -20,7 +38,8 @@ from rclpy.qos import (
     QoSReliabilityPolicy,
 )
 
-from robot_interfaces.msg import RobotState, RobotStateArray
+from robot_interfaces.msg import FleetStatus, RobotState, RobotStateArray
+from std_msgs.msg import String
 
 from mrta_core.order_queue import OrderQueue
 from mrta_core.sim_config import load_sim_config
@@ -28,6 +47,9 @@ from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from mrta_core.warehouse_routing import HOME_TYPES
 from simulation_env.battery_ledger import battery_report_lines
+from simulation_env.charging import ChargeState, ResourceState, WAITING_STATES
+from simulation_env.dataset import RunRecorder, build_manifest
+from simulation_env.run_metrics import run_metrics, write_metrics
 from simulation_env.fleet import build_fleet, home_stations
 from simulation_env.grid_robot import GridRobotStatus
 from simulation_env.workload_executor import (
@@ -41,42 +63,54 @@ from simulation_env.gazebo_bridge import (
     DEFAULT_ROBOT_Z,
     FleetPose,
     FleetPoseSink,
+    create_robots,
+    fleet_changes,
     provider_count,
-    read_robot_z,
+    remove_robot,
+    robot_models,
 )
 from simulation_env.gazebo_view import grid_to_gazebo
 
 
-DEFAULT_CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+DEFAULT_CONFIG = "src/simulation_env/config/warehouse.yaml"
 
-# How much of the FIFO workload to echo at startup.
+# How much of the FIFO workload to echo at startup (verbose only).
 PREVIEW_ORDERS = 18
 
+# A charge record in one of these states is no longer in the workflow.
+OUT_OF_WORKFLOW = {ChargeState.REJOINED, ChargeState.PROMOTED, ChargeState.PREEMPTED}
+
+# Battery events worth a terminal line even when not verbose.
+ALERT_EVENTS = {"OUT_OF_REACH"}
 
 
 class FleetNode(Node):
-
     def __init__(self) -> None:
         super().__init__("mrta_fleet")
 
         self.declare_parameter("config_file", DEFAULT_CONFIG)
 
-        self.config_path = str(
-            self.get_parameter("config_file").value
-        )
+        self.config_path = str(self.get_parameter("config_file").value)
 
         self.config = load_sim_config(self.config_path)
+
+        # Fleet size for this run. 0 keeps fleet.robot_count; a positive
+        # value overrides it. Gazebo is then given exactly these robots
+        # when the run starts, so one config and one world serve every
+        # fleet size on the map.
+        self.declare_parameter("robots", 0)
+
+        robots = int(self.get_parameter("robots").value)
+
+        if robots > 0:
+            self.config = replace(self.config, robot_count=robots)
 
         config = self.config
 
         self.declare_parameter("use_gazebo", config.gazebo_enabled)
-        self.declare_parameter(
-            "publish_hz", config.robot_state_publish_hz
-        )
+        self.declare_parameter("publish_hz", config.robot_state_publish_hz)
         self.declare_parameter("wait_for_gazebo", 0.0)
-        self.declare_parameter(
-            "gazebo_playback_hz", DEFAULT_PLAYBACK_HZ
-        )
+        self.declare_parameter("gazebo_playback_hz", DEFAULT_PLAYBACK_HZ)
         self.declare_parameter("load_orders", False)
         self.declare_parameter("run_workload", False)
         self.declare_parameter("strategy", "nearest_astar")
@@ -84,7 +118,26 @@ class FleetNode(Node):
         # overrides it, so a run can be re-timed without
         # editing the YAML.
         self.declare_parameter("speed_mps", 0.0)
-        self.declare_parameter("progress_interval_s", 10.0)
+        # Simulated seconds between terminal status lines.
+        self.declare_parameter("progress_interval_s", 60.0)
+        # Print the full trace (every assignment, robot event, battery
+        # event and per-robot table) to the terminal too.
+        self.declare_parameter("verbose", False)
+        # Allocation candidate window. Empty keeps the configured
+        # allocation.window, so a launch never silently changes a
+        # scientific parameter the YAML is authoritative for.
+        self.declare_parameter("window", "")
+        # Dispatch quantum. Negative keeps the configured
+        # allocation.dispatch_quantum_s, so 0.0 stays a usable override
+        # meaning "continuous dispatch" rather than "unset".
+        self.declare_parameter("dispatch_quantum_s", -1.0)
+        # Phase 8 dataset. Empty = do not record. The live path records
+        # through the same recorder as the headless path, because there
+        # is one scientific engine and it may not have two datasets.
+        self.declare_parameter("dataset", "")
+        # Allocation seed for stochastic strategies. Negative keeps the
+        # configured simulation.seed.
+        self.declare_parameter("allocation_seed", -1)
 
         def get(name):
             return self.get_parameter(name).value
@@ -96,16 +149,28 @@ class FleetNode(Node):
         self.load_orders = bool(get("load_orders"))
         self.run_workload = bool(get("run_workload"))
         self.strategy_name = str(get("strategy"))
-        self.progress_interval_s = float(
-            get("progress_interval_s")
+        self.progress_interval_s = float(get("progress_interval_s"))
+        self.verbose = bool(get("verbose"))
+
+        window = str(get("window")).strip()
+        self.window = window or config.allocation_window
+
+        quantum = float(get("dispatch_quantum_s"))
+        self.dispatch_quantum_s = (
+            config.dispatch_quantum_s if quantum < 0.0 else quantum
         )
+
+        self.dataset_dir = str(get("dataset")).strip()
+
+        seed = int(get("allocation_seed"))
+        self.allocation_seed = config.seed if seed < 0 else seed
 
         override = float(get("speed_mps"))
-        self.speed_mps = (
-            override if override > 0.0 else config.speed_mps
-        )
+        self.speed_mps = override if override > 0.0 else config.speed_mps
 
         self.world = config.gazebo_world_name
+        self.workload: WorkloadExecutor | None = None
+        self._next_publish = 0.0
         self.resolution = config.resolution_m
         self.robot_z = DEFAULT_ROBOT_Z
         self.gazebo_sink: FleetPoseSink | None = None
@@ -123,6 +188,12 @@ class FleetNode(Node):
             qos,
         )
 
+        # Counts at a glance; latched like the robot states, so an echo
+        # started late still gets the latest.
+        self.status_pub = self.create_publisher(FleetStatus, "/mrta/fleet_status", qos)
+
+        # A stream of one-line events. Not latched: it is a log.
+        self.events_pub = self.create_publisher(String, "/mrta/events", 100)
 
         self.warehouse = load_warehouse_xlsx(config.map_path)
 
@@ -136,9 +207,7 @@ class FleetNode(Node):
 
         # The whole workload is known at startup; nothing about it
         # depends on the clock.
-        self.orders = (
-            self.load_workload() if self.load_orders else None
-        )
+        self.orders = self.load_workload() if self.load_orders else None
 
         if self.use_gazebo:
             self.place_in_gazebo()
@@ -177,6 +246,21 @@ class FleetNode(Node):
             if warehouse.zones_of_type(zone_type)
         }
 
+        if not self.verbose:
+            stations = ", ".join(f"{count} {kind.value}" for kind, count in counts.items())
+            print()
+            print("=" * 74)
+            print(f"MRTA WAREHOUSE FLEET  |  {len(self.robots)} robots  |  {self.speed_mps} m/s")
+            print("=" * 74)
+            print(f"config : {self.config_path}")
+            print(f"map    : {grid.width} x {grid.height}, {stations}")
+            print(
+                "topics : /mrta/robot_states  /mrta/fleet_status  /mrta/events"
+                "  (ros2 topic echo <topic>)"
+            )
+            self.checks(counts)
+            return
+
         print()
         print("=" * 62)
         print("MRTA WAREHOUSE FLEET")
@@ -200,7 +284,6 @@ class FleetNode(Node):
         print()
 
         for robot in self.robots:
-
             world_x, world_y = self._world_xy(robot.cell)
 
             print(
@@ -233,24 +316,16 @@ class FleetNode(Node):
             ),
             (
                 "no robot on obstacle",
-                all(
-                    robot.cell not in warehouse.grid.obstacles
-                    for robot in robots
-                ),
+                all(robot.cell not in warehouse.grid.obstacles for robot in robots),
             ),
             (
                 "all robot positions in bounds",
-                all(
-                    grid_map.in_bounds(robot.cell)
-                    for robot in robots
-                ),
+                all(grid_map.in_bounds(robot.cell) for robot in robots),
             ),
             (
                 "all robots on home cells",
                 all(
-                    warehouse.zone_type_at(robot.cell)
-                    in HOME_TYPES
-                    for robot in robots
+                    warehouse.zone_type_at(robot.cell) in HOME_TYPES for robot in robots
                 ),
             ),
             (
@@ -264,17 +339,18 @@ class FleetNode(Node):
             ),
         ]
 
-        print()
-
-        for label, ok in results:
-            print(f"[{'OK' if ok else 'FAIL'}] {label}")
-
         failed = [label for label, ok in results if not ok]
 
+        if self.verbose or failed:
+            print()
+
+            for label, ok in results:
+                print(f"[{'OK' if ok else 'FAIL'}] {label}")
+        else:
+            print(f"[OK] fleet checks: {len(results)}/{len(results)} passed")
+
         if failed:
-            raise RuntimeError(
-                f"fleet initialisation checks failed: {failed}"
-            )
+            raise RuntimeError(f"fleet initialisation checks failed: {failed}")
 
     # -- outputs ----------------------------------------
 
@@ -305,9 +381,42 @@ class FleetNode(Node):
             self.use_gazebo = False
             return
 
-        self.robot_z = read_robot_z(
-            self.robots[0].robot_id, DEFAULT_ROBOT_Z
-        )
+        starts = [
+            FleetPose(robot.robot_id, *self._world_xy(robot.cell), DEFAULT_ROBOT_Z)
+            for robot in self.robots
+        ]
+
+        # The world holds the warehouse only. Make Gazebo show exactly
+        # this run's fleet: create the robots it lacks, remove any left
+        # over from an earlier, larger run.
+        try:
+            create, remove = fleet_changes(robot_models(self.world), starts)
+
+            for name in remove:
+                remove_robot(self.world, name)
+
+            create_robots(self.world, create)
+
+        except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+            self.get_logger().warn(
+                f"could not set up the robots in Gazebo: {error}; "
+                "continuing without Gazebo"
+            )
+            self.use_gazebo = False
+            return
+
+        if create or remove:
+            print(
+                f"[OK] Gazebo fleet set to {len(self.robots)} robot(s): "
+                f"{len(create)} created, {len(remove)} removed"
+            )
+        else:
+            print(f"[OK] Gazebo already shows these {len(self.robots)} robot(s)")
+
+        # Every robot is our own model at DEFAULT_ROBOT_Z, parked by
+        # gazebo.launch.py or created above. Asking Gazebo for the
+        # height back (gz model -p) cost about 10 s per run for the
+        # same answer, so it is not asked.
 
         try:
             self.gazebo_sink = FleetPoseSink(self.world)
@@ -355,9 +464,20 @@ class FleetNode(Node):
         msg.status = robot.status.value
         msg.current_target = ""
         msg.current_order = ""
+        msg.charge_state = ""
         msg.battery_percent = self._soc_percent(robot.robot_id)
         msg.speed_mps = float(robot.speed_mps)
         msg.distance_m = float(robot.distance_m)
+
+        executor = self.workload
+
+        if executor is not None:
+            msg.current_order = str(executor.active.get(robot.robot_id) or "")
+
+            record = executor.charge.get(robot.robot_id)
+
+            if record is not None and record.state not in OUT_OF_WORKFLOW:
+                msg.charge_state = record.state.value
 
         return msg
 
@@ -384,6 +504,63 @@ class FleetNode(Node):
 
         self.states_pub.publish(msg)
 
+        if self.workload is not None:
+            self.status_pub.publish(self.fleet_status())
+
+    def fleet_status(self) -> FleetStatus:
+        """The run at a glance, for /mrta/fleet_status. Reporting only."""
+
+        executor = self.workload
+        progress = executor.snapshot()
+        msg = FleetStatus()
+
+        msg.sim_time = float(progress.sim_time)
+        msg.strategy = self.strategy_name
+        msg.orders_total = progress.total
+        msg.orders_pending = progress.pending
+        msg.orders_assigned = progress.assigned
+        msg.orders_active = progress.in_progress
+        msg.orders_completed = progress.completed
+        msg.orders_failed = progress.failed
+        msg.robots_total = len(self.robots)
+        msg.robots_busy = progress.busy
+        msg.robots_available = progress.available
+        msg.robots_returning = progress.returning
+        msg.robots_parked = progress.parked
+
+        workflow = {
+            robot_id: record.state
+            for robot_id, record in executor.charge.items()
+            if record.state not in OUT_OF_WORKFLOW
+        }
+
+        msg.robots_in_charging = len(workflow)
+        msg.charging_robots = sorted(r for r, s in workflow.items() if s is ChargeState.CHARGING)
+        msg.waiting_robots = sorted(r for r, s in workflow.items() if s in WAITING_STATES)
+        msg.robots_charging = len(msg.charging_robots)
+        msg.robots_waiting_for_charger = len(msg.waiting_robots)
+
+        socs = [self._soc_percent(robot.robot_id) for robot in self.robots]
+        msg.soc_min = min(socs)
+        msg.soc_mean = sum(socs) / len(socs)
+
+        slots = executor.chargers.slots.values()
+        msg.chargers_total = len(slots)
+        msg.chargers_free = sum(1 for slot in slots if slot.state is ResourceState.FREE)
+        msg.charge_sessions = executor.result.charge_sessions
+        msg.promotions = executor.result.promotions
+        msg.saturation_events = executor.result.saturation_events
+
+        return msg
+
+    def event(self, line: str, *, alert: bool = False) -> None:
+        """One event: always on /mrta/events, on the terminal if verbose."""
+
+        self.events_pub.publish(String(data=line.strip()))
+
+        if self.verbose or alert:
+            print(line, flush=True)
+
     def load_workload(self) -> OrderQueue | None:
         """Load the configured deterministic FIFO workload.
 
@@ -393,12 +570,17 @@ class FleetNode(Node):
         """
 
         try:
-            queue = OrderQueue.from_csv(
-                self.config.orders_path, self.warehouse
-            )
+            queue = OrderQueue.from_csv(self.config.orders_path, self.warehouse)
         except (OSError, ValueError) as error:
             self.get_logger().error(f"orders not loaded: {error}")
             return None
+
+        if not self.verbose:
+            print(
+                f"orders : {len(queue)} ({queue.line_item_count} line items) "
+                f"from {self.config.orders_path.name}"
+            )
+            return queue
 
         print()
         print("=" * 62)
@@ -442,7 +624,9 @@ class FleetNode(Node):
         config = self.config
 
         try:
-            allocator = get_batch_strategy(self.strategy_name)
+            allocator = get_batch_strategy(
+                self.strategy_name, seed=self.allocation_seed
+            )
         except KeyError as error:
             self.get_logger().error(str(error))
             return
@@ -450,13 +634,21 @@ class FleetNode(Node):
         print()
         print("=" * 74)
         print(
-            f"100-ORDER WORKLOAD  |  {len(self.robots)} robots  |  "
+            f"{len(self.orders)}-ORDER WORKLOAD  |  {len(self.robots)} robots  |  "
             f"strategy={allocator.name}"
         )
         print("=" * 74)
-        print(f"orders     : {len(self.orders)}")
-        print(f"line items : {self.orders.line_item_count}")
-        print(f"speed      : {self.speed_mps} m/s")
+
+        if self.verbose:
+            print(f"orders     : {len(self.orders)}")
+            print(f"line items : {self.orders.line_item_count}")
+            print(f"speed      : {self.speed_mps} m/s")
+        else:
+            print(
+                f"one status line every {self.progress_interval_s:g} simulated s; "
+                "details: ros2 topic echo /mrta/fleet_status"
+            )
+
         print()
 
         # Gazebo renders exactly what the engine executes.
@@ -477,6 +669,34 @@ class FleetNode(Node):
         # _live_poses() reads the engine's own in-flight moves instead,
         # so the picture cannot drift from the simulation.
 
+        # Built from the inputs only, before the run, so the run_id
+        # names what is about to be measured.
+        manifest = None
+        recorder = None
+
+        if self.dataset_dir:
+            manifest = build_manifest(
+                config,
+                strategy=self.strategy_name,
+                window=self.window,
+                window_width=WorkloadExecutor.resolve_window(
+                    self.window, len(self.robots)
+                ),
+                repo=Path(__file__).resolve().parents[3],
+            )
+
+            recorder = RunRecorder(run_id=manifest["run_id"])
+
+            self.get_logger().info(
+                f"recording dataset: {self.dataset_dir} "
+                f"(run_id {manifest['run_id']})"
+            )
+
+            if manifest["git"]["dirty"]:
+                self.get_logger().warning(
+                    "dirty tree: this run is not reproducible"
+                )
+
         executor = WorkloadExecutor(
             warehouse=self.warehouse,
             robots=self.robots,
@@ -496,12 +716,17 @@ class FleetNode(Node):
             progress_interval_s=self.progress_interval_s,
             on_perf=self.announce_perf,
             battery=config.battery,
-            on_battery_event=lambda event: print(
-                battery_event_line(event), flush=True
+            on_battery_event=lambda event: self.event(
+                battery_event_line(event), alert=event.kind in ALERT_EVENTS
             ),
+            window=self.window,
+            dispatch_quantum_s=self.dispatch_quantum_s,
+            recorder=recorder,
+            strategy_name=self.strategy_name,
         )
 
         self.engine = executor.engine
+        self.workload = executor
 
         started = perf_counter()
 
@@ -514,27 +739,65 @@ class FleetNode(Node):
 
         wall = perf_counter() - started
 
-        self.report_workload(executor, result, wall)
+        # The last state of the run, whatever the publish throttle did.
+        self.publish_fleet()
 
+        run_dir = None
+
+        if recorder is not None:
+            run_dir = recorder.write(self.dataset_dir, manifest)
+
+            write_metrics(
+                run_dir,
+                run_metrics(
+                    executor,
+                    strategy=self.strategy_name,
+                    seed=self.allocation_seed,
+                    wall_s=wall,
+                ),
+            )
+
+        self.report_workload(executor, result, wall, run_dir)
+
+        if run_dir is not None:
+            print(
+                f"  dataset           : {run_dir} ({len(recorder.decisions)} "
+                f"decision rows, {len(recorder.outcomes)} outcome rows, metrics.json)"
+            )
+            print()
 
     def announce_perf(self, budget) -> None:
         """Report a dispatch that stalled the loop. CPU time only."""
 
-        for line in budget.lines():
-            print(line, flush=True)
+        if self.verbose:
+            for line in budget.lines():
+                print(line, flush=True)
 
     def announce_progress(self, progress) -> None:
-        """One compact progress block, not a per-move trace."""
+        """One status line; the full block only when verbose."""
 
-        for line in progress.lines():
-            print(line, flush=True)
+        if self.verbose:
+            for line in progress.lines():
+                print(line, flush=True)
+            return
+
+        status = self.fleet_status()
+
+        print(
+            f"[t={progress.sim_time:7.0f} s] orders {progress.completed}/"
+            f"{progress.total} done, {progress.in_progress + progress.assigned} "
+            f"active, {progress.pending} pending | robots {progress.busy} busy, "
+            f"{progress.available} free, {status.robots_in_charging} charging or "
+            f"queued | SOC min {status.soc_min:.1f}% mean {status.soc_mean:.1f}%",
+            flush=True,
+        )
 
     def announce_dispatch(self, record) -> None:
         """One robot-order assignment, as it is dispatched."""
 
         shelves = ", ".join(record.shelf_sequence)
 
-        print(
+        self.event(
             f"  t={record.sim_time:8.3f}  ASSIGN  {record.robot_id} "
             f"-> {record.order_id}  C_static={record.static_cost_m:6.1f} m"
             f"  [{shelves}] -> {record.dropoff_id}"
@@ -546,21 +809,78 @@ class FleetNode(Node):
         """Report one order lifecycle transition."""
 
         if status.value == "COMPLETED":
+            self.event(f"  t={sim_time:8.3f}  DONE    {robot_id} completed {order_id}")
+
+    def report_workload(self, executor, result, wall: float, run_dir=None) -> None:
+        """The full report to a file; a short summary on the terminal.
+
+        The file is the report this node always printed, per-robot
+        tables included: in the dataset directory when one is recorded,
+        otherwise under $ROS_HOME/mrta/. verbose:=true prints it too.
+        """
+
+        lines = self.full_report_lines(executor, result, wall)
+
+        if run_dir is not None:
+            path = Path(run_dir) / "report.txt"
+        else:
+            home = Path(os.environ.get("ROS_HOME", Path.home() / ".ros"))
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = home / "mrta" / f"{stamp}_{self.strategy_name}_{len(self.robots)}robots.txt"
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(lines) + "\n")
+
+        if self.verbose:
+            for line in lines:
+                print(line)
+
+        m = run_metrics(executor, strategy=self.strategy_name, seed=self.allocation_seed, wall_s=wall)
+
+        print()
+        print("=" * 74)
+        print(
+            f"RUN COMPLETE  |  {self.strategy_name}  |  {m['robots']} robots  |  "
+            f"{m['orders']} orders"
+        )
+        print("=" * 74)
+        print(f"  orders completed  : {m['orders_completed']}/{m['orders']}")
+        print(f"  makespan          : {m['makespan_s']:.4f} s simulated")
+        print(f"  throughput        : {m['throughput_orders_per_h']:.1f} orders/h")
+        print(f"  mean completion   : {m['mean_completion_time_s']:.1f} s")
+        print(f"  total distance    : {m['total_distance_m']:.1f} m")
+        print(f"  total waiting     : {m['total_waiting_s']:.4f} s")
+        print(f"  safety            : {m['reservation_violations']} reservation violations")
+
+        if m.get("battery_enabled"):
             print(
-                f"  t={sim_time:8.3f}  DONE    {robot_id} "
-                f"completed {order_id}"
+                f"  battery           : lowest SOC {m['min_soc_percent']:.2f}%, "
+                f"final mean {m['mean_final_soc_percent']:.2f}%, "
+                f"{m['below_zero_robots']} robot(s) below 0%"
+            )
+            print(
+                f"  charging          : {m['charge_sessions']} sessions, "
+                f"{m['promotions']} promotions ({m['stage_promotions']} from a "
+                f"Stage Zone), {m['saturation_events']} saturation, "
+                f"{m['preemptions']} preemptions"
             )
 
-    def report_workload(self, executor, result, wall: float) -> None:
+        print(
+            f"  allocator CPU     : {m['allocator_cpu_s']:.2f} s, worst decision "
+            f"{m['worst_dispatch_s']:.3f} s"
+        )
+        print(f"  wall clock        : {wall:.1f} s")
+        print(f"  full report       : {path}")
+
+    def full_report_lines(self, executor, result, wall: float) -> list[str]:
+        """Everything about the run, per-robot tables included."""
 
         totals = executor.totals()
 
         queue = self.orders
 
         completed = [
-            order
-            for order in queue.orders
-            if order.status.value == "COMPLETED"
+            order for order in queue.orders if order.status.value == "COMPLETED"
         ]
 
         # The bank is shared, so "parked" means standing on the Stage
@@ -578,73 +898,55 @@ class FleetNode(Node):
         moved = [
             robot
             for robot in parked
-            if claims[robot.robot_id]
-            != self.spawn_stations.get(robot.robot_id)
+            if claims[robot.robot_id] != self.spawn_stations.get(robot.robot_id)
         ]
 
-        idle = [
-            robot
-            for robot in self.robots
-            if robot.status is GridRobotStatus.IDLE
-        ]
+        idle = [robot for robot in self.robots if robot.status is GridRobotStatus.IDLE]
 
-        print()
-        print("=" * 74)
-        print("WORKLOAD SUMMARY")
-        print("=" * 74)
-        print(f"  orders completed      : {len(completed)}/{len(queue)}")
-        print(f"  dispatches            : {len(result.dispatches)}")
-        print(f"  robots parked at stage: {len(parked)}/{len(self.robots)}")
-        print(f"  parked off spawn stage: {len(moved)}/{len(self.robots)}")
-        print(f"  robots IDLE           : {len(idle)}/{len(self.robots)}")
-        print()
-        print(f"  makespan              : {totals['makespan_s']:.4f} s")
-        print(f"  total distance        : {totals['distance_m']:.1f} m")
-        print(f"  total travel time     : {totals['travel_time_s']:.4f} s")
-        print(f"  total waiting         : {totals['waiting_time_s']:.4f} s")
-        print(f"  total service time    : {totals['service_time_s']:.4f} s")
-        print(f"  plan deferrals        : {result.plan_failures}")
-        print(f"  peak in-progress      : {result.peak_in_progress}")
-        print(f"  max deferred-now      : {result.max_deferred_now}")
-        print()
-        print("  planning CPU (wall clock, not simulated time):")
-        for stage, spent in result.perf.items():
-            print(f"    {stage:<14}      : {spent:.3f} s")
-        print(f"    slow dispatches     : {result.slow_dispatches}")
-        print(f"    worst dispatch      : {result.worst_dispatch_s:.3f} s")
-        print(f"    static reuses       : {result.static_route_reuses}")
-        print(
-            f"  reservation violations: "
-            f"{totals['reservation_violations']}"
-        )
-        print(f"  events processed      : {totals['events']}")
-        print(f"  routes cached         : {executor.routes.stats()}")
-        print(f"  wall clock            : {wall:.1f} s")
-        print()
+        lines = [
+            "=" * 74,
+            "WORKLOAD SUMMARY",
+            "=" * 74,
+            f"  strategy              : {self.strategy_name} (seed {self.allocation_seed})",
+            f"  orders completed      : {len(completed)}/{len(queue)}",
+            f"  dispatches            : {len(result.dispatches)}",
+            f"  robots parked at stage: {len(parked)}/{len(self.robots)}",
+            f"  parked off spawn stage: {len(moved)}/{len(self.robots)}",
+            f"  robots IDLE           : {len(idle)}/{len(self.robots)}",
+            "",
+            f"  makespan              : {totals['makespan_s']:.4f} s",
+            f"  total distance        : {totals['distance_m']:.1f} m",
+            f"  total travel time     : {totals['travel_time_s']:.4f} s",
+            f"  total waiting         : {totals['waiting_time_s']:.4f} s",
+            f"  total service time    : {totals['service_time_s']:.4f} s",
+            f"  plan deferrals        : {result.plan_failures}",
+            f"  peak in-progress      : {result.peak_in_progress}",
+            f"  max deferred-now      : {result.max_deferred_now}",
+            "",
+            "  planning CPU (wall clock, not simulated time):",
+            *(f"    {stage:<14}      : {spent:.3f} s" for stage, spent in result.perf.items()),
+            f"    slow dispatches     : {result.slow_dispatches}",
+            f"    worst dispatch      : {result.worst_dispatch_s:.3f} s",
+            f"    static reuses       : {result.static_route_reuses}",
+            f"  reservation violations: {totals['reservation_violations']}",
+            f"  events processed      : {totals['events']}",
+            f"  routes cached         : {executor.routes.stats()}",
+            f"  wall clock            : {wall:.1f} s",
+            "",
+        ]
 
         ledger = executor.engine.battery
 
         if ledger is None:
-            print("BATTERY: disabled (battery.enabled is false)")
+            lines.append("BATTERY: disabled (battery.enabled is false)")
         else:
-            for line in battery_report_lines(
-                ledger,
-                executor.engine.time,
-                executor.engine.robots,
-            ):
-                print(line)
+            lines += battery_report_lines(ledger, executor.engine.time, executor.engine.robots)
+            lines.append("")
+            lines += eligibility_report_lines(executor)
+            lines.append("")
+            lines += charging_report_lines(executor)
 
-            print()
-
-            for line in eligibility_report_lines(executor):
-                print(line)
-
-            print()
-
-            for line in charging_report_lines(executor):
-                print(line)
-
-        print()
+        return lines
 
     def on_advance(self, delta_sim: float) -> None:
         """Pace one global interval and render it at about 20 Hz."""
@@ -689,15 +991,10 @@ class FleetNode(Node):
         span = end_sim - start_sim
 
         for index in range(1, frames + 1):
-
             fraction = index / frames
 
             if wall_seconds > 0.0:
-                remaining = (
-                    begun
-                    + wall_seconds * fraction
-                    - perf_counter()
-                )
+                remaining = begun + wall_seconds * fraction - perf_counter()
 
                 if remaining > 0.0:
                     sleep(remaining)
@@ -722,7 +1019,6 @@ class FleetNode(Node):
         poses = []
 
         for robot in self.robots:
-
             transit = transits.get(robot.robot_id)
 
             if transit is None:
@@ -738,9 +1034,7 @@ class FleetNode(Node):
                 if span <= 0.0:
                     fraction = 1.0
                 else:
-                    fraction = (
-                        sim_time - float(start)
-                    ) / span
+                    fraction = (sim_time - float(start)) / span
 
                 fraction = min(1.0, max(0.0, fraction))
 
@@ -793,8 +1087,7 @@ class FleetNode(Node):
             self.gazebo_sink.send(poses)
         except (OSError, RuntimeError, ValueError) as error:
             self.get_logger().warn(
-                f"Gazebo fleet playback disabled after transport error: "
-                f"{error}"
+                f"Gazebo fleet playback disabled after transport error: {error}"
             )
             self.gazebo_sink.close()
             self.gazebo_sink = None
@@ -803,12 +1096,21 @@ class FleetNode(Node):
     def on_tick(self, sim_time: float, batch) -> None:
         """Observe the new state. Never advances the clock."""
 
-        self.publish_fleet()
+        # At publish_hz of wall time, not once per event batch: a run
+        # has hundreds of thousands of batches.
+        now = perf_counter()
+
+        if now >= self._next_publish:
+            self._next_publish = now + 1.0 / max(self.publish_hz, 1e-6)
+            self.publish_fleet()
+
+        if not self.verbose:
+            return
+
+        robots = {r.robot_id: r for r in self.robots}
 
         for event in batch:
-            robot = {r.robot_id: r for r in self.robots}[
-                event.robot_id
-            ]
+            robot = robots[event.robot_id]
             print(
                 f"  t={sim_time:8.4f}  {event.robot_id}  "
                 f"{event.kind.value:<17s} cell={robot.cell} "
@@ -827,7 +1129,17 @@ def main(args=None) -> int:
     rclpy.init(args=args)
 
     try:
-        node = FleetNode()
+        try:
+            node = FleetNode()
+        except KeyboardInterrupt:
+            # The workload runs inside the constructor, so Ctrl+C during
+            # a run lands here. Stopping a run is a normal thing to do;
+            # end quietly instead of with a traceback.
+            try:
+                print("\nstopped by Ctrl+C", flush=True)
+            except (OSError, ValueError):
+                pass
+            return 0
 
         try:
             rclpy.spin(node)

@@ -54,7 +54,7 @@ def main() -> None:
         "--map",
         type=Path,
         help="Warehouse XLSX source of truth "
-             "(or give --config and it is read from there)",
+        "(or give --config and it is read from there)",
     )
 
     parser.add_argument(
@@ -76,9 +76,7 @@ def main() -> None:
         parser.error("give --map or --config")
 
     map_path = (
-        args.map
-        if args.map is not None
-        else load_sim_config(args.config).map_path
+        args.map if args.map is not None else load_sim_config(args.config).map_path
     )
 
     warehouse = load_warehouse_xlsx(map_path)
@@ -103,15 +101,11 @@ def main() -> None:
             zone_name_by_cell[cell] = zone.zone_id
 
     # Deterministic vertex numbering.
-    cell_to_index = {
-        cell: index
-        for index, cell in enumerate(free_cells)
-    }
+    cell_to_index = {cell: index for index, cell in enumerate(free_cells)}
 
     vertices = []
 
     for x, y in free_cells:
-
         world_x, world_y = grid_to_world(
             (x, y),
             grid.resolution,
@@ -146,12 +140,10 @@ def main() -> None:
 
     # Only inspect right and up; each direction is decided separately.
     for x, y in free_cells:
-
         for dx, dy in (
             (1, 0),
             (0, 1),
         ):
-
             cell = (x, y)
 
             neighbor = (
@@ -188,28 +180,20 @@ def main() -> None:
                     ]
                 )
 
-            both_terminal = (
-                cell in service_cells
-                and neighbor in service_cells
-            )
+            both_terminal = cell in service_cells and neighbor in service_cells
 
             if forward and reverse:
-
                 if both_terminal:
                     terminal_chain.append((cell, neighbor))
 
                 # Legitimate only where one end is a service cell.
-                elif (
-                    cell in service_cells
-                    or neighbor in service_cells
-                ):
+                elif cell in service_cells or neighbor in service_cells:
                     service_lanes += 1
 
                 else:
                     two_way_core.append((cell, neighbor))
 
             elif forward or reverse:
-
                 if both_terminal:
                     terminal_chain.append((cell, neighbor))
                 else:
@@ -236,9 +220,7 @@ def main() -> None:
     exited = {source for source, _ in allowed_edges}
 
     stranded = sorted(
-        cell
-        for cell in service_cells
-        if cell not in entered or cell not in exited
+        cell for cell in service_cells if cell not in entered or cell not in exited
     )
 
     if stranded:
@@ -270,10 +252,7 @@ def main() -> None:
             sort_keys=False,
         )
 
-    zone_counts = Counter(
-        zone.zone_type.value
-        for zone in warehouse.zones
-    )
+    zone_counts = Counter(zone.zone_type.value for zone in warehouse.zones)
 
     print("RMF navigation graph generated")
     print(f"  grid               : {grid.width} x {grid.height}")

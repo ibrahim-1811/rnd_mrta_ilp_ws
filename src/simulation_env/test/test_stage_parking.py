@@ -24,11 +24,7 @@ from simulation_env.workload_executor import WorkloadExecutor
 from task_management.allocation_strategy import get_batch_strategy
 
 
-CONFIG = (
-    Path(__file__).resolve().parents[1]
-    / "config"
-    / "warehouse_sim.yaml"
-)
+CONFIG = Path(__file__).resolve().parent / "fixtures" / "v2_reference.yaml"
 
 
 # A cell where the two measures disagree loudly. staging_001 is five
@@ -84,10 +80,7 @@ def workload(config, warehouse):
 def ranked_zones(parking, cell):
     """Every bank cell from ``cell``, cheapest legal route first."""
 
-    costs = {
-        zone_id: parking.route_cost(cell, zone_id)
-        for zone_id in parking.cell_of
-    }
+    costs = {zone_id: parking.route_cost(cell, zone_id) for zone_id in parking.cell_of}
 
     return sorted(
         (zone_id for zone_id, cost in costs.items() if cost is not None),
@@ -212,9 +205,7 @@ def test_released_claim_returns_to_the_pool(warehouse):
     assert parking.claim_of("robot_001") is None
     assert parking.holder_of(claimed) is None
 
-    assert parking.assign({"robot_002": DISAGREEING_CELL})["robot_002"] == (
-        claimed
-    )
+    assert parking.assign({"robot_002": DISAGREEING_CELL})["robot_002"] == (claimed)
 
 
 def test_robot_id_only_breaks_an_exact_tie(warehouse):
@@ -255,9 +246,7 @@ def test_robot_does_not_necessarily_return_to_its_spawn_stage(
     claims = workload.parking.claims
 
     moved = [
-        robot_id
-        for robot_id, zone_id in claims.items()
-        if zone_id != spawn[robot_id]
+        robot_id for robot_id, zone_id in claims.items() if zone_id != spawn[robot_id]
     ]
 
     assert moved, (
@@ -289,13 +278,11 @@ def test_parking_never_touches_order_ownership(workload):
     assert not workload.deferred
 
     completions = {
-        record.order_id: record.robot_id
-        for record in workload.result.completions
+        record.order_id: record.robot_id for record in workload.result.completions
     }
 
     dispatches = {
-        record.order_id: record.robot_id
-        for record in workload.result.dispatches
+        record.order_id: record.robot_id for record in workload.result.dispatches
     }
 
     assert completions == dispatches

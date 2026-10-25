@@ -54,10 +54,10 @@ from mrta_core.warehouse_routing import (
 class OrderRoute:
     """The best static route for one robot-order pair."""
 
-    shelf_sequence: tuple[str, ...]   # shelves in visiting order
+    shelf_sequence: tuple[str, ...]  # shelves in visiting order
     dropoff_id: str
-    distance_m: float                 # C_static(r, o)
-    plan: MissionPlan | None = None   # None when unreachable
+    distance_m: float  # C_static(r, o)
+    plan: MissionPlan | None = None  # None when unreachable
 
     @property
     def reachable(self) -> bool:
@@ -100,7 +100,6 @@ def order_route_cost(
     best: OrderRoute | None = None
 
     for candidate in sorted(set(permutations(shelves))):
-
         try:
             plan = plan_from_cell(
                 warehouse,
@@ -135,14 +134,99 @@ def order_route_cost(
     return best
 
 
+# ----------------------------------------------------------------------
+# The deliberately naive alternative: Manhattan
+# ----------------------------------------------------------------------
+#
+# Permitted by the routing rules in exactly one role -- a naive
+# experimental baseline -- and never as a production route cost. It is a
+# RANKING KEY, not a distance: a strategy may use it to decide which
+# robot takes which order, after which the executed route is the same
+# directed A* every other strategy drives.
+#
+# It is wrong on purpose. It ignores racking, walls and lane direction,
+# so in a one-way warehouse where d(a, b) != d(b, a) for 90.9% of shelf
+# pairs it is not even symmetric with the truth it approximates. That
+# error is the experimental point: it is the baseline that shows what
+# grid-awareness is worth.
+
+
+def manhattan(a: Cell, b: Cell) -> int:
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def manhattan_order_cost(
+    warehouse,
+    start_cell: Cell,
+    shelf_ids,
+    dropoff_id: str,
+) -> float:
+    """Manhattan chain: start -> every shelf -> drop-off, best order.
+
+    Mirrors the structure of ``order_route_cost`` -- the same shelf
+    permutations, the same chain, the same end point -- so that the only
+    difference between the two is the metric. A strategy ranking on this
+    differs from one ranking on C_static because of the metric alone,
+    which is what makes the comparison a controlled one.
+
+    Returns ``inf`` when a zone does not exist, matching the
+    unreachable convention of ``order_route_cost``. Nothing here can
+    make a pair *eligible*: eligibility is decided by directed A* and
+    the battery mask, and this function is never consulted for it.
+    """
+
+    try:
+        cells = [_single_cell(warehouse, shelf_id) for shelf_id in shelf_ids]
+        end = _single_cell(warehouse, dropoff_id)
+
+    except (KeyError, ValueError):
+        return inf
+
+    best = inf
+
+    for order in sorted(set(permutations(range(len(cells))))):
+        total = 0
+        here = start_cell
+
+        for index in order:
+            total += manhattan(here, cells[index])
+            here = cells[index]
+
+        total += manhattan(here, end)
+
+        best = min(best, total)
+
+    return float(best)
+
+
+def _single_cell(warehouse, zone_id: str) -> Cell:
+    """The one cell of a service zone.
+
+    Shelf and drop-off zones are single cells on this map. Asserting
+    that here means a multi-cell zone fails loudly rather than silently
+    picking an arbitrary cell and making the baseline irreproducible.
+    """
+
+    zone = warehouse.zone_by_id(zone_id)
+
+    if len(zone.cells) != 1:
+        raise ValueError(
+            f"zone {zone_id!r} has {len(zone.cells)} cells; the Manhattan "
+            "baseline needs one cell per service zone, or the cell it "
+            "measures from becomes arbitrary"
+        )
+
+    return next(iter(zone.cells))
+
+
 @dataclass(frozen=True)
 class OrderCandidate:
     """One (robot, order) pair scored by C_static, ready to rank."""
 
     robot_id: str
     order_id: str
-    fifo_position: int      # FIFO index of the order, for tie-breaking
-    cost: float             # C_static(r, o), metres
+    fifo_position: int  # FIFO index of the order, for tie-breaking
+    cost: float  # C_static(r, o), metres
     route: OrderRoute
 
     # Decision-time battery features. None when the decision was made
@@ -199,9 +283,7 @@ def build_order_candidates(
     candidates: list[OrderCandidate] = []
 
     for robot_id, cell in robots:
-
         for order in orders:
-
             route = order_route_cost(
                 warehouse,
                 cell,

@@ -20,9 +20,7 @@ class GridMap:
     #
     # Keeping this generic means GridMap knows nothing about warehouse
     # highways. Warehouse routing supplies the actual policy.
-    blocked_edges: frozenset[DirectedEdge] = field(
-        default_factory=frozenset
-    )
+    blocked_edges: frozenset[DirectedEdge] = field(default_factory=frozenset)
 
     def in_bounds(self, cell: Cell) -> bool:
         x, y = cell
@@ -44,8 +42,7 @@ class GridMap:
         return [
             candidate
             for candidate in candidates
-            if self.is_free(candidate)
-            and (cell, candidate) not in self.blocked_edges
+            if self.is_free(candidate) and (cell, candidate) not in self.blocked_edges
         ]
 
     def congestion_at(self, cell: Cell) -> float:

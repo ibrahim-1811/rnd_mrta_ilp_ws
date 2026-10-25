@@ -13,7 +13,7 @@ from simulation_env.fleet_engine import (
 from simulation_env.grid_robot import GridRobot
 
 
-CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+CONFIG = "src/simulation_env/test/fixtures/v2_reference.yaml"
 
 config = load_sim_config(CONFIG)
 warehouse = load_warehouse_xlsx(config.map_path)
@@ -25,9 +25,7 @@ shelf_zone = "shelf_001"
 dropoff_zone = "dropoff_001"
 
 
-start_cell = min(
-    warehouse.zone_by_id(start_zone).cells
-)
+start_cell = min(warehouse.zone_by_id(start_zone).cells)
 
 
 plan = plan_from_cell(
@@ -101,28 +99,16 @@ engine.assign_mission(
 engine.run()
 
 
-service_events = [
-    event
-    for event in events
-    if event[2] is EventType.SERVICE_COMPLETE
-]
+service_events = [event for event in events if event[2] is EventType.SERVICE_COMPLETE]
 
-mission_events = [
-    event
-    for event in events
-    if event[2] is EventType.MISSION_COMPLETE
-]
+mission_events = [event for event in events if event[2] is EventType.MISSION_COMPLETE]
 
 
 print()
 print("service completions:")
 
 for sim_time, robot_id, kind, detail in service_events:
-    print(
-        f"  t={sim_time:8.3f}  "
-        f"{robot_id}  "
-        f"{detail}"
-    )
+    print(f"  t={sim_time:8.3f}  {robot_id}  {detail}")
 
 
 print()
@@ -141,21 +127,15 @@ print("  status        :", robot.status.value)
 # ------------------------------------------------------------
 
 assert len(service_events) == 2, (
-    f"expected shelf + dropoff service, "
-    f"got {len(service_events)}"
+    f"expected shelf + dropoff service, got {len(service_events)}"
 )
 
 assert service_events[0][3] == shelf_zone
 assert service_events[1][3] == dropoff_zone
 
-expected_service = (
-    config.shelf_pick_s
-    + config.dropoff_s
-)
+expected_service = config.shelf_pick_s + config.dropoff_s
 
-assert abs(
-    robot.service_time_s - expected_service
-) < 1e-9
+assert abs(robot.service_time_s - expected_service) < 1e-9
 
 # Final segment is the dropoff. Its exit cell is the required
 # one-cell retreat position after service.
@@ -166,12 +146,8 @@ assert robot.cell == final_segment.exit_cell
 
 assert len(mission_events) == 1
 
-assert (
-    service_events[-1][0]
-    < mission_events[0][0]
-), (
-    "dropoff service must finish before the final retreat "
-    "and mission completion"
+assert service_events[-1][0] < mission_events[0][0], (
+    "dropoff service must finish before the final retreat and mission completion"
 )
 
 assert robot.waiting_time_s == 0.0

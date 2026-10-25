@@ -43,6 +43,10 @@ Merged semantic regions:
     DROP ZONE
     COLLECTION ZONE
 
+or single cells, with a full label or a one-letter code:
+    S  shelf          D  drop-off       C  charger
+    H  holding        P  parking (Stage Zone)
+
 Every cell of a merged semantic region becomes its own
 single-cell WarehouseZone, so each shelf, charging bay, drop-off
 point and collection point is individually addressable.
@@ -55,6 +59,28 @@ region order, then by ascending (x, y) within a region:
     charge_queue_001 .. charge_queue_00N
 
 All semantic zone cells remain traversable.
+
+Traffic lanes (optional)
+------------------------
+A floor cell may carry arrows saying which way a robot may leave it:
+
+    >  or  →    toward the next column to the right
+    <  or  ←    toward the previous column to the left
+    ^  or  ↑    toward the row above
+    v  or  ↓    toward the row below
+
+A junction carries several, for example ``>^``. Arrows are read as they
+look on screen and converted through the coordinate labels, so they
+stay correct whichever way the axes are numbered.
+
+If a map carries no arrows at all, it is routed by the built-in V2 lane
+policy, which is how V1 and V2 maps keep working unchanged. If it
+carries any, its arrows are the whole policy: a floor cell without an
+arrow is a dead end, and the topology gate will say so.
+
+Arrows run between floor cells only. Stations are never drawn into:
+a robot enters and leaves any station from a neighbouring road by the
+fixed terminal rules, on every map alike.
 """
 
 from dataclasses import dataclass
@@ -76,13 +102,43 @@ RED_RGB = "FFFF0000"
 ORANGE_RGB = "FFFF9900"
 
 
+# Screen direction of each arrow, as (spreadsheet row step, column step).
+ARROWS = {
+    ">": (0, 1),
+    "→": (0, 1),
+    "<": (0, -1),
+    "←": (0, -1),
+    "^": (-1, 0),
+    "↑": (-1, 0),
+    "v": (1, 0),
+    "V": (1, 0),
+    "↓": (1, 0),
+}
+
+
+def _parse_arrows(value) -> frozenset[tuple[int, int]] | None:
+    """The screen directions in a cell, or None if it is not arrows.
+
+    Spaces and commas between arrows are allowed, so ``> ^`` and
+    ``>,^`` read the same as ``>^``.
+    """
+
+    if value is None or isinstance(value, (bool, int, float)):
+        return None
+
+    text = "".join(str(value).replace(",", " ").split())
+
+    if not text or any(char not in ARROWS for char in text):
+        return None
+
+    return frozenset(ARROWS[char] for char in text)
+
+
 ZONE_ALIASES = {
     "SHELF": ZoneType.SHELF,
     "SHELVES": ZoneType.SHELF,
-
     "CHARGING": ZoneType.CHARGING,
     "CHARGING ZONE": ZoneType.CHARGING,
-
     # Charging holding bank. Not a generic queue: these cells exist
     # only to hold robots that are waiting for, or were preempted
     # from, a charging slot.
@@ -94,24 +150,28 @@ ZONE_ALIASES = {
     "CHARGING QUEUE ZONE": ZoneType.CHARGE_QUEUE,
     "CHARGE HOLDING ZONE": ZoneType.CHARGE_QUEUE,
     "CHARGING HOLDING ZONE": ZoneType.CHARGE_QUEUE,
-
     "DROP ZONE": ZoneType.DROPOFF,
     "DROP OFF": ZoneType.DROPOFF,
     "DROPOFF": ZoneType.DROPOFF,
-
     "COLLECTION": ZoneType.COLLECTION,
     "COLLECTION ZONE": ZoneType.COLLECTION,
-
     "PICKUP": ZoneType.PICKUP,
     "PICKUP ZONE": ZoneType.PICKUP,
-
     "STAGE": ZoneType.STAGING,
     "STAGE ZONE": ZoneType.STAGING,
     "STAGING": ZoneType.STAGING,
     "STAGING ZONE": ZoneType.STAGING,
-
     "WAITING": ZoneType.WAITING,
     "WAITING ZONE": ZoneType.WAITING,
+    # One-letter codes, so a large map stays readable in narrow cells.
+    # Purely additive: before these existed any unknown text was a load
+    # error, so no existing map can contain them by accident. "V" is
+    # deliberately absent -- it is the down arrow.
+    "S": ZoneType.SHELF,
+    "D": ZoneType.DROPOFF,
+    "C": ZoneType.CHARGING,
+    "H": ZoneType.CHARGE_QUEUE,
+    "P": ZoneType.STAGING,
 }
 
 
@@ -132,19 +192,12 @@ def _normalise(value) -> str:
         return ""
 
     return " ".join(
-        str(value)
-        .strip()
-        .replace("_", " ")
-        .replace("-", " ")
-        .upper()
-        .split()
+        str(value).strip().replace("_", " ").replace("-", " ").upper().split()
     )
 
 
 def _zone_type(value):
-    return ZONE_ALIASES.get(
-        _normalise(value)
-    )
+    return ZONE_ALIASES.get(_normalise(value))
 
 
 def _fill_rgb(cell) -> str | None:
@@ -164,19 +217,13 @@ def _fill_rgb(cell) -> str | None:
 def _is_red(cell) -> bool:
     rgb = _fill_rgb(cell)
 
-    return (
-        rgb is not None
-        and rgb.endswith(RED_RGB[2:])
-    )
+    return rgb is not None and rgb.endswith(RED_RGB[2:])
 
 
 def _is_orange(cell) -> bool:
     rgb = _fill_rgb(cell)
 
-    return (
-        rgb is not None
-        and rgb.endswith(ORANGE_RGB[2:])
-    )
+    return rgb is not None and rgb.endswith(ORANGE_RGB[2:])
 
 
 def _coordinate_label(value) -> int | None:
@@ -228,10 +275,7 @@ class XlsxCoordinateFrame:
 
     def contains(self, row: int, col: int) -> bool:
         """Is this spreadsheet cell inside the warehouse interior?"""
-        return (
-            row in self.excel_row_to_y
-            and col in self.excel_col_to_x
-        )
+        return row in self.excel_row_to_y and col in self.excel_col_to_x
 
     def warehouse_coord(
         self,
@@ -289,11 +333,9 @@ def _read_axis_labels(
     labels: dict[int, int] = {}
 
     for index in interior:
-
         found: dict[int, int] = {}
 
         for line in axis_lines:
-
             if along_rows:
                 cell = sheet.cell(row=line, column=index)
             else:
@@ -337,10 +379,7 @@ def _read_axis_labels(
             f"{sorted(labels.values())}"
         )
 
-    ordered = [
-        labels[index]
-        for index in interior
-    ]
+    ordered = [labels[index] for index in interior]
 
     ascending = ordered == sorted(ordered)
     descending = ordered == sorted(ordered, reverse=True)
@@ -383,19 +422,13 @@ def detect_coordinate_frame(sheet) -> XlsxCoordinateFrame:
     axis_rows = [
         row
         for row in range(min_row, max_row + 1)
-        if all(
-            (row, col) in orange
-            for col in range(min_col, max_col + 1)
-        )
+        if all((row, col) in orange for col in range(min_col, max_col + 1))
     ]
 
     axis_cols = [
         col
         for col in range(min_col, max_col + 1)
-        if all(
-            (row, col) in orange
-            for row in range(min_row, max_row + 1)
-        )
+        if all((row, col) in orange for row in range(min_row, max_row + 1))
     ]
 
     if not axis_rows or not axis_cols:
@@ -406,21 +439,15 @@ def detect_coordinate_frame(sheet) -> XlsxCoordinateFrame:
         )
 
     interior_rows = [
-        row
-        for row in range(min_row, max_row + 1)
-        if row not in set(axis_rows)
+        row for row in range(min_row, max_row + 1) if row not in set(axis_rows)
     ]
 
     interior_cols = [
-        col
-        for col in range(min_col, max_col + 1)
-        if col not in set(axis_cols)
+        col for col in range(min_col, max_col + 1) if col not in set(axis_cols)
     ]
 
     if not interior_rows or not interior_cols:
-        raise ValueError(
-            "coordinate border encloses no warehouse cells"
-        )
+        raise ValueError("coordinate border encloses no warehouse cells")
 
     if not _contiguous(interior_rows) or not _contiguous(interior_cols):
         raise ValueError(
@@ -527,15 +554,12 @@ def load_warehouse_xlsx(
             r.max_col,
         ),
     ):
-
         top_left = sheet.cell(
             row=merged.min_row,
             column=merged.min_col,
         )
 
-        zone_type = _zone_type(
-            top_left.value
-        )
+        zone_type = _zone_type(top_left.value)
 
         if zone_type is None:
             continue
@@ -545,18 +569,14 @@ def load_warehouse_xlsx(
             (merged.max_row, merged.max_col),
         ]
 
-        inside = [
-            frame.contains(row, col)
-            for row, col in corners
-        ]
+        inside = [frame.contains(row, col) for row, col in corners]
 
         if not any(inside):
             continue
 
         if not all(inside):
             raise ValueError(
-                f"semantic region {str(merged)!r} "
-                f"crosses the coordinate border"
+                f"semantic region {str(merged)!r} crosses the coordinate border"
             )
 
         semantic_ranges.append(
@@ -586,9 +606,10 @@ def load_warehouse_xlsx(
 
     red_cells_excel = []
 
+    arrow_cells = []
+
     for row in sorted(frame.excel_row_to_y):
         for col in sorted(frame.excel_col_to_x):
-
             cell = sheet.cell(row=row, column=col)
 
             if _is_orange(cell):
@@ -606,12 +627,9 @@ def load_warehouse_xlsx(
             if (row, col) in merged_top_left:
                 continue
 
-            zone_type = _zone_type(
-                cell.value
-            )
+            zone_type = _zone_type(cell.value)
 
             if zone_type is not None:
-
                 semantic_cells.append(
                     (
                         row,
@@ -620,15 +638,25 @@ def load_warehouse_xlsx(
                     )
                 )
 
+            elif (arrows := _parse_arrows(cell.value)) is not None:
+                arrow_cells.append(
+                    (
+                        row,
+                        col,
+                        arrows,
+                    )
+                )
+
             elif _normalise(cell.value):
                 # Refuse to silently drop labelled map content. A
                 # mistyped zone name would otherwise become plain
                 # floor and quietly delete stations.
                 raise ValueError(
-                    f"unrecognised zone label "
+                    f"unrecognised cell text "
                     f"{cell.value!r} at {cell.coordinate}; "
-                    f"known labels: "
-                    f"{', '.join(sorted(ZONE_ALIASES))}"
+                    f"a cell holds a station label "
+                    f"({', '.join(sorted(ZONE_ALIASES))}) "
+                    f"or lane arrows ({' '.join(ARROWS)})"
                 )
 
     # --------------------------------------------------
@@ -640,8 +668,7 @@ def load_warehouse_xlsx(
             row,
             col,
         )
-        for row, col
-        in red_cells_excel
+        for row, col in red_cells_excel
     }
 
     grid = WorldGrid(
@@ -650,9 +677,7 @@ def load_warehouse_xlsx(
         resolution=resolution,
         width=frame.width,
         height=frame.height,
-        obstacles=frozenset(
-            obstacles
-        ),
+        obstacles=frozenset(obstacles),
     )
 
     # --------------------------------------------------
@@ -664,10 +689,7 @@ def load_warehouse_xlsx(
     zones = []
 
     for merged, zone_type in semantic_ranges:
-
-        prefix = ZONE_PREFIX[
-            zone_type
-        ]
+        prefix = ZONE_PREFIX[zone_type]
 
         cells = set()
 
@@ -675,12 +697,10 @@ def load_warehouse_xlsx(
             merged.min_row,
             merged.max_row + 1,
         ):
-
             for col in range(
                 merged.min_col,
                 merged.max_col + 1,
             ):
-
                 cell = frame.to_grid(
                     row,
                     col,
@@ -693,14 +713,11 @@ def load_warehouse_xlsx(
                         f"at grid cell {cell}"
                     )
 
-                cells.add(
-                    cell
-                )
+                cells.add(cell)
 
         # The merge marks one physical area, but every cell in it
         # is a separate station the robot can be sent to.
         for cell in sorted(cells):
-
             counters[zone_type] = (
                 counters.get(
                     zone_type,
@@ -709,18 +726,13 @@ def load_warehouse_xlsx(
                 + 1
             )
 
-            zone_id = (
-                f"{prefix}_"
-                f"{counters[zone_type]:03d}"
-            )
+            zone_id = f"{prefix}_{counters[zone_type]:03d}"
 
             zones.append(
                 WarehouseZone(
                     zone_id=zone_id,
                     zone_type=zone_type,
-                    cells=frozenset(
-                        {cell}
-                    ),
+                    cells=frozenset({cell}),
                 )
             )
 
@@ -731,7 +743,6 @@ def load_warehouse_xlsx(
             item[1],
         ),
     ):
-
         counters[zone_type] = (
             counters.get(
                 zone_type,
@@ -740,14 +751,9 @@ def load_warehouse_xlsx(
             + 1
         )
 
-        prefix = ZONE_PREFIX[
-            zone_type
-        ]
+        prefix = ZONE_PREFIX[zone_type]
 
-        zone_id = (
-            f"{prefix}_"
-            f"{counters[zone_type]:03d}"
-        )
+        zone_id = f"{prefix}_{counters[zone_type]:03d}"
 
         cell = frame.to_grid(
             row,
@@ -755,24 +761,68 @@ def load_warehouse_xlsx(
         )
 
         if cell in obstacles:
-            raise ValueError(
-                f"{zone_id} overlaps "
-                f"a blocked red cell"
-            )
+            raise ValueError(f"{zone_id} overlaps a blocked red cell")
 
         zones.append(
             WarehouseZone(
                 zone_id=zone_id,
                 zone_type=zone_type,
-                cells=frozenset(
-                    {cell}
-                ),
+                cells=frozenset({cell}),
             )
         )
 
+    # --------------------------------------------------
+    # Lane layer, if the map draws one.
+    # --------------------------------------------------
+
+    lane_edges = None
+
+    if arrow_cells:
+        stations = {
+            cell: zone.zone_id
+            for zone in zones
+            for cell in zone.cells
+        }
+
+        edges = set()
+
+        for row, col, arrows in arrow_cells:
+            source = frame.to_grid(row, col)
+            where = sheet.cell(row=row, column=col).coordinate
+
+            for drow, dcol in sorted(arrows):
+                trow = row + drow
+                tcol = col + dcol
+
+                if not frame.contains(trow, tcol):
+                    raise ValueError(
+                        f"the arrow at {where} points off the edge of the "
+                        f"warehouse"
+                    )
+
+                target = frame.to_grid(trow, tcol)
+                into = sheet.cell(row=trow, column=tcol).coordinate
+
+                if target in obstacles:
+                    raise ValueError(
+                        f"the arrow at {where} points into the wall at "
+                        f"{into}"
+                    )
+
+                if target in stations:
+                    raise ValueError(
+                        f"the arrow at {where} points into station "
+                        f"{stations[target]} at {into}. Do not draw "
+                        f"arrows into stations: a robot drives into any "
+                        f"station from a neighbouring road on its own"
+                    )
+
+                edges.add((source, target))
+
+        lane_edges = frozenset(edges)
+
     return WarehouseMap(
         grid=grid,
-        zones=tuple(
-            zones
-        ),
+        zones=tuple(zones),
+        lane_edges=lane_edges,
     )

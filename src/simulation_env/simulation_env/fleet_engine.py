@@ -58,6 +58,12 @@ class EventType(str, Enum):
     YIELD_COMPLETE = "YIELD_COMPLETE"
     REJOIN_COMPLETE = "REJOIN_COMPLETE"
     MISSION_COMPLETE = "MISSION_COMPLETE"
+    # A pure clock wake-up with no effect on any robot. It exists so the
+    # executor can ask to be called again at a chosen instant -- the
+    # dispatch quantum (S0b) -- without the clock running dry first.
+    # Deliberately NOT a WAIT: a robot held for allocation batching is
+    # idle, not blocked by traffic, and must not book waiting time.
+    DISPATCH_WINDOW = "DISPATCH_WINDOW"
 
 
 SERVICE_STATUS = {
@@ -252,6 +258,18 @@ class FleetSimulationEngine:
         heappush(self._queue, (event.time, event.seq, event))
 
         return event
+
+    def schedule_timer(self, delay: Fraction, detail: str = "") -> Event:
+        """Ask to be ticked again in ``delay`` simulated seconds.
+
+        A neutral wake-up: it moves the clock, books the interval the
+        way any other advance does (idle robots drain at the idle rate,
+        which is exactly what they are doing), produces a tick, and
+        changes nothing else. The executor uses it for the dispatch
+        quantum.
+        """
+
+        return self._schedule("", EventType.DISPATCH_WINDOW, delay, detail)
 
     # -- fleet ------------------------------------------
 
@@ -1200,6 +1218,11 @@ class FleetSimulationEngine:
         self._try_moves_batch(requests)
 
     def _handle(self, event: Event) -> None:
+
+        # A timer, not a robot action: it has already done its whole job
+        # by advancing the clock to this instant and producing a tick.
+        if event.kind is EventType.DISPATCH_WINDOW:
+            return
 
         robot = self.robots[event.robot_id]
 

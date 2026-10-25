@@ -5,7 +5,7 @@ from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from mrta_core.warehouse_routing import NON_TRANSIT_TYPES
 
 
-CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+CONFIG = "src/simulation_env/test/fixtures/v2_reference.yaml"
 
 config = load_sim_config(CONFIG)
 warehouse = load_warehouse_xlsx(config.map_path)
@@ -19,10 +19,7 @@ NON_TRANSIT = set(NON_TRANSIT_TYPES)
 def usable(cell):
     x, y = cell
 
-    if not (
-        0 <= x < grid.width
-        and 0 <= y < grid.height
-    ):
+    if not (0 <= x < grid.width and 0 <= y < grid.height):
         return False
 
     if cell in grid.obstacles:
@@ -66,15 +63,9 @@ vertical = []
 # ------------------------------------------------------------
 
 for y in range(grid.height):
-
-    xs = [
-        x
-        for x in range(grid.width)
-        if usable((x, y))
-    ]
+    xs = [x for x in range(grid.width) if usable((x, y))]
 
     for run in contiguous_runs(xs):
-
         if len(run) >= 5:
             horizontal.append(
                 (
@@ -91,15 +82,9 @@ for y in range(grid.height):
 # ------------------------------------------------------------
 
 for x in range(grid.width):
-
-    ys = [
-        y
-        for y in range(grid.height)
-        if usable((x, y))
-    ]
+    ys = [y for y in range(grid.height) if usable((x, y))]
 
     for run in contiguous_runs(ys):
-
         if len(run) >= 5:
             vertical.append(
                 (
@@ -121,9 +106,7 @@ print("REAL WAREHOUSE DIRECTIONAL HIGHWAY DISCOVERY")
 print("=" * 76)
 
 print()
-print(
-    f"grid: {grid.width} x {grid.height}"
-)
+print(f"grid: {grid.width} x {grid.height}")
 
 print()
 print("LONG HORIZONTAL AISLE RUNS")
@@ -131,11 +114,7 @@ print("length   y     x_start -> x_end")
 print("-" * 40)
 
 for length, y, x0, x1 in horizontal:
-    print(
-        f"{length:6d}  "
-        f"{y:3d}     "
-        f"{x0:2d} -> {x1:2d}"
-    )
+    print(f"{length:6d}  {y:3d}     {x0:2d} -> {x1:2d}")
 
 
 print()
@@ -144,11 +123,7 @@ print("length   x     y_start -> y_end")
 print("-" * 40)
 
 for length, x, y0, y1 in vertical:
-    print(
-        f"{length:6d}  "
-        f"{x:3d}     "
-        f"{y0:2d} -> {y1:2d}"
-    )
+    print(f"{length:6d}  {x:3d}     {y0:2d} -> {y1:2d}")
 
 
 # ------------------------------------------------------------
@@ -160,17 +135,9 @@ print("KNOWN STRESS-TEST CONFLICT CORRIDORS")
 print("-" * 40)
 
 for y in (15, 19):
+    cells = [(x, y) for x in range(grid.width) if usable((x, y))]
 
-    cells = [
-        (x, y)
-        for x in range(grid.width)
-        if usable((x, y))
-    ]
-
-    print(
-        f"y={y:2d}: "
-        f"{cells}"
-    )
+    print(f"y={y:2d}: {cells}")
 
 
 print()

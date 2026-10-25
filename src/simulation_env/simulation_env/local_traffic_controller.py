@@ -87,10 +87,7 @@ class LocalTrafficController:
         occupancy = (
             dict(occupied_by)
             if occupied_by is not None
-            else {
-                intent.source: intent.robot_id
-                for intent in intents
-            }
+            else {intent.source: intent.robot_id for intent in intents}
         )
 
         decisions = {
@@ -116,7 +113,6 @@ class LocalTrafficController:
 
         for a in intents:
             for b in intents:
-
                 if a.robot_id == b.robot_id:
                     continue
 
@@ -125,19 +121,12 @@ class LocalTrafficController:
                 if pair in handled_pairs:
                     continue
 
-                if (
-                    a.target == b.source
-                    and b.target == a.source
-                ):
+                if a.target == b.source and b.target == a.source:
                     handled_pairs.add(pair)
 
                     priority_winner = self.winner((a, b))
 
-                    yielder = (
-                        b
-                        if priority_winner.robot_id == a.robot_id
-                        else a
-                    )
+                    yielder = b if priority_winner.robot_id == a.robot_id else a
 
                     decisions[yielder.robot_id] = MovementDecision(
                         robot_id=yielder.robot_id,
@@ -168,10 +157,7 @@ class LocalTrafficController:
         by_target: dict[Cell, list[MovementIntent]] = {}
 
         for intent in intents:
-            if (
-                decisions[intent.robot_id].decision
-                is TrafficDecision.YIELD_REQUIRED
-            ):
+            if decisions[intent.robot_id].decision is TrafficDecision.YIELD_REQUIRED:
                 continue
 
             by_target.setdefault(
@@ -180,31 +166,24 @@ class LocalTrafficController:
             ).append(intent)
 
         for target, contenders in by_target.items():
-
             if len(contenders) <= 1:
                 continue
 
             priority_winner = self.winner(contenders)
 
             for contender in contenders:
-
                 if contender.robot_id == priority_winner.robot_id:
                     decisions[contender.robot_id] = MovementDecision(
                         robot_id=contender.robot_id,
                         decision=TrafficDecision.MOVE,
-                        reason=(
-                            f"won local contention for {target}"
-                        ),
+                        reason=(f"won local contention for {target}"),
                     )
 
                 else:
                     decisions[contender.robot_id] = MovementDecision(
                         robot_id=contender.robot_id,
                         decision=TrafficDecision.WAIT,
-                        reason=(
-                            f"yielded {target} to "
-                            f"{priority_winner.robot_id}"
-                        ),
+                        reason=(f"yielded {target} to {priority_winner.robot_id}"),
                     )
 
         # ------------------------------------------------------------
@@ -222,11 +201,9 @@ class LocalTrafficController:
         changed = True
 
         while changed:
-
             changed = False
 
             for intent in intents:
-
                 current = decisions[intent.robot_id]
 
                 if current.decision is not TrafficDecision.MOVE:
@@ -241,13 +218,11 @@ class LocalTrafficController:
 
                 # Target belongs to a robot outside this movement batch.
                 if holder_decision is None:
-
                     decisions[intent.robot_id] = MovementDecision(
                         robot_id=intent.robot_id,
                         decision=TrafficDecision.WAIT,
                         reason=(
-                            f"target {intent.target} occupied by "
-                            f"stationary {holder}"
+                            f"target {intent.target} occupied by stationary {holder}"
                         ),
                     )
 
@@ -257,14 +232,10 @@ class LocalTrafficController:
                 # Same-direction chaining is allowed only when the
                 # current holder is also approved to leave.
                 if holder_decision.decision is not TrafficDecision.MOVE:
-
                     decisions[intent.robot_id] = MovementDecision(
                         robot_id=intent.robot_id,
                         decision=TrafficDecision.WAIT,
-                        reason=(
-                            f"target {intent.target} remains occupied "
-                            f"by {holder}"
-                        ),
+                        reason=(f"target {intent.target} remains occupied by {holder}"),
                     )
 
                     changed = True

@@ -33,7 +33,6 @@ def home_bank(warehouse: WarehouseMap) -> list:
     """
 
     for zone_type in HOME_TYPES:
-
         zones = warehouse.zones_of_type(zone_type)
 
         if zones:
@@ -47,6 +46,100 @@ def home_bank(warehouse: WarehouseMap) -> list:
 
 # Legacy name, kept so V1-era scripts keep working.
 staging_stations = home_bank
+
+
+# How a fleet smaller than the parking bank is placed at t=0.
+#
+#   home, staging   robot k on the k-th home cell in id order. The
+#                   original rule; every frozen baseline uses it.
+#   spread          robots shared out across every parking bank and
+#                   evenly spaced along each. For fleet-size sweeps on
+#                   one map: without it, 10 robots on a 100-cell bank
+#                   all start bunched in one corner, so the start
+#                   condition would change in kind across the sweep.
+#
+# Either way it is fixed infrastructure: the same cells for every
+# strategy, and only the starting position -- parking at the end is
+# always the nearest free cell (stage_parking).
+SPAWN_MODES = ("home", "staging", "spread")
+
+
+def _banks(stations) -> list[list]:
+    """Home stations grouped into banks of touching cells, in id order."""
+
+    cell_of = {station.zone_id: min(station.cells) for station in stations}
+    by_cell = {cell_of[station.zone_id]: station for station in stations}
+
+    banks = []
+    seen = set()
+
+    for station in stations:
+        if station.zone_id in seen:
+            continue
+
+        bank = []
+        stack = [station]
+        seen.add(station.zone_id)
+
+        while stack:
+            current = stack.pop()
+            bank.append(current)
+            x, y = cell_of[current.zone_id]
+
+            for neighbour in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                other = by_cell.get(neighbour)
+
+                if other is not None and other.zone_id not in seen:
+                    seen.add(other.zone_id)
+                    stack.append(other)
+
+        banks.append(sorted(bank, key=lambda zone: zone.zone_id))
+
+    return banks
+
+
+def _spread(stations, count: int) -> list:
+    """``count`` stations spaced evenly over every bank.
+
+    Robots are shared out across banks in proportion to bank size
+    (largest remainder, ties to the earlier bank), then each bank's
+    share is centred at even intervals along it. A full fleet gets
+    every cell. Returned in id order, so robot_001 takes the first.
+    """
+
+    banks = _banks(stations)
+    total = len(stations)
+
+    exact = [count * len(bank) / total for bank in banks]
+    share = [int(value) for value in exact]
+
+    order = sorted(
+        range(len(banks)),
+        key=lambda index: (-(exact[index] - share[index]), index),
+    )
+
+    for index in order[: count - sum(share)]:
+        share[index] += 1
+
+    picked = []
+
+    for bank, k in zip(banks, share):
+        size = len(bank)
+        picked.extend(bank[((2 * j + 1) * size) // (2 * k)] for j in range(k))
+
+    return sorted(picked, key=lambda zone: zone.zone_id)
+
+
+def spawn_stations(config: SimConfig, warehouse: WarehouseMap) -> list:
+    """The home station each robot starts on, robot_001 first."""
+
+    stations = home_bank(warehouse)
+    count = config.robot_count
+
+    if config.initial_position_mode == "spread" and 0 < count <= len(stations):
+        return _spread(stations, count)
+
+    return stations[:count]
 
 
 def build_fleet(
@@ -70,20 +163,16 @@ def build_fleet(
 
     # "home" is the stable name for this; "staging" is the V1 spelling
     # and keeps existing configs working.
-    if mode not in ("home", "staging"):
+    if mode not in SPAWN_MODES:
         raise ValueError(
             f"unsupported fleet.initial_position_mode {mode!r}; "
-            f"only 'home' (or its legacy alias 'staging') "
-            f"is implemented"
+            f"use 'home' (or its legacy alias 'staging') or 'spread'"
         )
 
     stations = home_bank(warehouse)
 
     if config.robot_count < 1:
-        raise ValueError(
-            f"fleet.robot_count must be >= 1, "
-            f"got {config.robot_count}"
-        )
+        raise ValueError(f"fleet.robot_count must be >= 1, got {config.robot_count}")
 
     if config.robot_count > len(stations):
         raise ValueError(
@@ -97,14 +186,9 @@ def build_fleet(
     # A per-robot SOC override naming a robot this fleet does not have
     # would silently do nothing, so a controlled test would quietly run
     # at the default instead.
-    fleet_ids = {
-        config.robot_id(index)
-        for index in range(config.robot_count)
-    }
+    fleet_ids = {config.robot_id(index) for index in range(config.robot_count)}
 
-    stray = sorted(
-        set(config.battery.initial_soc_overrides) - fleet_ids
-    )
+    stray = sorted(set(config.battery.initial_soc_overrides) - fleet_ids)
 
     if stray:
         raise ValueError(
@@ -119,9 +203,10 @@ def build_fleet(
 
     taken: dict[tuple[int, int], str] = {}
 
-    for index in range(config.robot_count):
+    starts = spawn_stations(config, warehouse)
 
-        station = stations[index]
+    for index in range(config.robot_count):
+        station = starts[index]
 
         cell = min(station.cells)
 
@@ -129,31 +214,25 @@ def build_fleet(
 
         if not grid.in_bounds(cell):
             raise ValueError(
-                f"{robot_id}: {station.zone_id} cell {cell} "
-                f"is out of bounds"
+                f"{robot_id}: {station.zone_id} cell {cell} is out of bounds"
             )
 
         if cell in warehouse.grid.obstacles:
             raise ValueError(
-                f"{robot_id}: {station.zone_id} cell {cell} "
-                f"is a red obstacle"
+                f"{robot_id}: {station.zone_id} cell {cell} is a red obstacle"
             )
 
         if not warehouse.is_traversable(cell):
             raise ValueError(
-                f"{robot_id}: {station.zone_id} cell {cell} "
-                f"is not traversable"
+                f"{robot_id}: {station.zone_id} cell {cell} is not traversable"
             )
 
         if warehouse.zone_type_at(cell) not in HOME_TYPES:
-            raise ValueError(
-                f"{robot_id}: cell {cell} is not a home cell"
-            )
+            raise ValueError(f"{robot_id}: cell {cell} is not a home cell")
 
         if cell in taken:
             raise ValueError(
-                f"{robot_id} and {taken[cell]} would both start "
-                f"on cell {cell}"
+                f"{robot_id} and {taken[cell]} would both start on cell {cell}"
             )
 
         taken[cell] = robot_id
@@ -176,9 +255,9 @@ def home_stations(
 ) -> dict[str, str]:
     """robot_id -> the home station it was deployed at."""
 
-    stations = home_bank(warehouse)
+    starts = spawn_stations(config, warehouse)
 
     return {
-        config.robot_id(index): stations[index].zone_id
+        config.robot_id(index): starts[index].zone_id
         for index in range(config.robot_count)
     }

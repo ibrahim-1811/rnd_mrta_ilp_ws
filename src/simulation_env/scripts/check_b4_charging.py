@@ -55,7 +55,7 @@ from simulation_env.workload_executor import (
 from task_management.allocation_strategy import get_batch_strategy
 
 
-CONFIGS = Path(__file__).resolve().parents[1] / "config"
+CONFIGS = Path(__file__).resolve().parents[1] / "test" / "fixtures"
 
 FULL = Fraction(100)
 
@@ -73,15 +73,32 @@ SCENARIOS = {
         robots=4,
         orders=12,
         chargers=1,
+        # Pinned to the pre-S0 window this scenario was approved under,
+        # and mirrored by test_b4_lifecycle.py. It checks the *direct*
+        # reuse path: the later requester finds the charger already FREE
+        # and departs in the instant it requests. Under the wider S0
+        # default the allocation differs, robot_002 requests while
+        # robot_001 is still charging, and it is correctly routed
+        # through holding and promoted -- the B5 queued path, which
+        # check_b5_queue.py covers.
+        window="legacy",
     ),
     "contested": dict(overrides=low(*range(1, 13)), orders=100),
     "slow": dict(overrides=low(1), robots=1, orders=6, charge_rate=Fraction(1, 10)),
 }
 
 
-def run(name, overrides, robots=None, orders=None, chargers=None, charge_rate=None):
+def run(
+    name,
+    overrides,
+    robots=None,
+    orders=None,
+    chargers=None,
+    charge_rate=None,
+    window="fleet_size",
+):
 
-    cfg = load_sim_config(CONFIGS / "warehouse_sim.yaml")
+    cfg = load_sim_config(CONFIGS / "v2_reference.yaml")
 
     if robots is not None:
         cfg = replace(cfg, robot_count=robots)
@@ -130,6 +147,7 @@ def run(name, overrides, robots=None, orders=None, chargers=None, charge_rate=No
         on_tick=on_tick,
         progress_interval_s=0,
         battery=cfg.battery,
+        window=window,
     )
 
     if chargers is not None:

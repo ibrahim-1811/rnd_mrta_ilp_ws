@@ -1,5 +1,12 @@
 # Map V2 migration
 
+> **Paths in this document are as of when it was written.** Since
+> 2026-10-23 the V2 map, its config (`v2_reference.yaml`, formerly
+> `warehouse_sim.yaml`) and its order lists live in
+> `src/simulation_env/test/fixtures/`, and V1 (`CSV_To_Gazebo.xlsx`) is
+> removed. To run the system today see [START_HERE.md](START_HERE.md).
+
+
 Record of the change from `CSV_To_Gazebo.xlsx` (V1) to
 `CSV_To_Gazebo_v2.xlsx` (V2), which is now the current map.
 

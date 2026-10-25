@@ -45,10 +45,7 @@ class Robot:
 
     @property
     def finished(self):
-        return (
-            not self.in_yield_cell
-            and self.route_index >= len(self.route) - 1
-        )
+        return not self.in_yield_cell and self.route_index >= len(self.route) - 1
 
     @property
     def next_route_position(self):
@@ -109,10 +106,7 @@ def safe(a, b):
 
 
 def render(a: Robot, b: Robot, sim_time: float, event: str):
-    grid = [
-        [" " for _ in range(WIDTH)]
-        for _ in range(HEIGHT)
-    ]
+    grid = [[" " for _ in range(WIDTH)] for _ in range(HEIGHT)]
 
     for x in range(WIDTH):
         grid[CORRIDOR_Y][x] = "."
@@ -131,25 +125,16 @@ def render(a: Robot, b: Robot, sim_time: float, event: str):
         b.position,
     )
 
-    clearance = (
-        separation
-        - 2.0 * ROBOT_RADIUS_M
-    )
+    clearance = separation - 2.0 * ROBOT_RADIUS_M
 
     print("\033[2J\033[H", end="")
 
     print("LOCAL OPPOSITE-TRAFFIC YIELD DEMO")
     print("=" * 62)
 
-    print(
-        f"simulation time       : "
-        f"{sim_time:.3f} s"
-    )
+    print(f"simulation time       : {sim_time:.3f} s")
 
-    print(
-        f"scientific move step  : "
-        f"{DT:.3f} s"
-    )
+    print(f"scientific move step  : {DT:.3f} s")
 
     print()
 
@@ -160,46 +145,23 @@ def render(a: Robot, b: Robot, sim_time: float, event: str):
     print()
 
     for y in reversed(range(HEIGHT)):
-        print(
-            f"{y:2d}  "
-            + " ".join(grid[y])
-        )
+        print(f"{y:2d}  " + " ".join(grid[y]))
 
     print()
 
-    print(
-        "    "
-        + " ".join(
-            str(x)
-            for x in range(WIDTH)
-        )
-    )
+    print("    " + " ".join(str(x) for x in range(WIDTH)))
 
     print()
 
-    print(
-        f"A position={a.position}"
-        f" remaining={a.remaining_distance}"
-        f" busy={a.busy}"
-    )
+    print(f"A position={a.position} remaining={a.remaining_distance} busy={a.busy}")
 
-    print(
-        f"B position={b.position}"
-        f" remaining={b.remaining_distance}"
-        f" busy={b.busy}"
-    )
+    print(f"B position={b.position} remaining={b.remaining_distance} busy={b.busy}")
 
     print()
 
-    print(
-        f"center separation     : "
-        f"{separation:.3f} m"
-    )
+    print(f"center separation     : {separation:.3f} m")
 
-    print(
-        f"surface clearance     : "
-        f"{clearance:.3f} m"
-    )
+    print(f"surface clearance     : {clearance:.3f} m")
 
     print()
 
@@ -261,35 +223,25 @@ def main():
 
     time.sleep(args.delay)
 
-    while not (
-        robot_a.finished
-        and robot_b.finished
-    ):
-
+    while not (robot_a.finished and robot_b.finished):
         # --------------------------------------------------
         # Robot currently waiting in local yield cell.
         # --------------------------------------------------
 
         if yielding_robot is not None:
-
             yielder = yielding_robot
             passer = passing_robot
 
-            corridor_return = (
-                yielder.route_position
-            )
+            corridor_return = yielder.route_position
 
             # The yielder may return as soon as the passer
             # moves away from its original corridor cell.
             passer_next = (
-                passer.next_route_position
-                if not passer.finished
-                else passer.position
+                passer.next_route_position if not passer.finished else passer.position
             )
 
             can_rejoin = (
-                passer.position != corridor_return
-                and passer_next != corridor_return
+                passer.position != corridor_return and passer_next != corridor_return
             )
 
             if not passer.finished:
@@ -317,7 +269,6 @@ def main():
                 )
 
         else:
-
             a_next = (
                 robot_a.next_route_position
                 if not robot_a.finished
@@ -331,9 +282,7 @@ def main():
             )
 
             vertex_conflict = (
-                not robot_a.finished
-                and not robot_b.finished
-                and a_next == b_next
+                not robot_a.finished and not robot_b.finished and a_next == b_next
             )
 
             edge_swap = (
@@ -348,28 +297,19 @@ def main():
             # --------------------------------------------------
 
             if vertex_conflict or edge_swap:
-
                 winner = choose_winner(
                     robot_a,
                     robot_b,
                 )
 
-                loser = (
-                    robot_b
-                    if winner is robot_a
-                    else robot_a
-                )
+                loser = robot_b if winner is robot_a else robot_a
 
                 # This tiny demo provides a local yield
                 # cell beside B's current corridor cell.
                 #
                 # If A loses instead, it has no bay in this
                 # particular toy layout, so it brakes.
-                if (
-                    loser is robot_b
-                    and loser.position == (4, 1)
-                ):
-
+                if loser is robot_b and loser.position == (4, 1):
                     winner.move_route()
                     loser.enter_yield_cell()
 
@@ -397,17 +337,13 @@ def main():
                     )
 
             else:
-
                 if not robot_a.finished:
                     robot_a.move_route()
 
                 if not robot_b.finished:
                     robot_b.move_route()
 
-                event = (
-                    "No local conflict. "
-                    "Both robots move."
-                )
+                event = "No local conflict. Both robots move."
 
         sim_time += DT
 
@@ -416,9 +352,7 @@ def main():
             robot_b.position,
         ):
             raise RuntimeError(
-                "Robot safety violation: "
-                f"A={robot_a.position}, "
-                f"B={robot_b.position}"
+                f"Robot safety violation: A={robot_a.position}, B={robot_b.position}"
             )
 
         render(
@@ -435,30 +369,15 @@ def main():
     print("RESULT")
     print("=" * 62)
 
-    print(
-        f"robot_01 local waiting : "
-        f"{robot_a.wait_ticks * DT:.3f} s"
-    )
+    print(f"robot_01 local waiting : {robot_a.wait_ticks * DT:.3f} s")
 
-    print(
-        f"robot_02 local waiting : "
-        f"{robot_b.wait_ticks * DT:.3f} s"
-    )
+    print(f"robot_02 local waiting : {robot_b.wait_ticks * DT:.3f} s")
 
-    print(
-        f"robot_01 yield moves   : "
-        f"{robot_a.yield_moves}"
-    )
+    print(f"robot_01 yield moves   : {robot_a.yield_moves}")
 
-    print(
-        f"robot_02 yield moves   : "
-        f"{robot_b.yield_moves}"
-    )
+    print(f"robot_02 yield moves   : {robot_b.yield_moves}")
 
-    print(
-        f"completion time        : "
-        f"{sim_time:.3f} s"
-    )
+    print(f"completion time        : {sim_time:.3f} s")
 
     print()
 

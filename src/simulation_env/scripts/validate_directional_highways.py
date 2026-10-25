@@ -35,7 +35,7 @@ from mrta_core.warehouse_routing import (
 )
 
 
-DEFAULT_CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+DEFAULT_CONFIG = "src/simulation_env/test/fixtures/v2_reference.yaml"
 
 _parser = argparse.ArgumentParser(description=__doc__)
 _parser.add_argument("--config", default=DEFAULT_CONFIG)
@@ -57,11 +57,7 @@ terminal_cells_set = non_transit_cells(warehouse)
 def traversable(cell):
     x, y = cell
 
-    return (
-        0 <= x < grid.width
-        and 0 <= y < grid.height
-        and cell not in grid.obstacles
-    )
+    return 0 <= x < grid.width and 0 <= y < grid.height and cell not in grid.obstacles
 
 
 def geometric_neighbors(cell):
@@ -96,8 +92,7 @@ core = {
     (x, y)
     for y in range(grid.height)
     for x in range(grid.width)
-    if traversable((x, y))
-    and (x, y) not in terminal_cells_set
+    if traversable((x, y)) and (x, y) not in terminal_cells_set
 }
 
 
@@ -105,8 +100,7 @@ graph = {
     cell: [
         neighbor
         for neighbor in geometric_neighbors(cell)
-        if neighbor in core
-        and move_allowed(cell, neighbor)
+        if neighbor in core and move_allowed(cell, neighbor)
     ]
     for cell in core
 }
@@ -127,7 +121,6 @@ def reachable(start, adjacency):
         current = queue.popleft()
 
         for neighbor in adjacency[current]:
-
             if neighbor in seen:
                 continue
 
@@ -142,10 +135,7 @@ seed = min(core)
 forward = reachable(seed, graph)
 reverse = reachable(seed, reverse_graph)
 
-strongly_connected = (
-    len(forward) == len(core)
-    and len(reverse) == len(core)
-)
+strongly_connected = len(forward) == len(core) and len(reverse) == len(core)
 
 
 # ============================================================
@@ -157,37 +147,20 @@ terminal_cells = []
 for zone_type_value in TERMINAL_TYPES:
     for zone in warehouse.zones_of_type(zone_type_value):
         for cell in zone.cells:
-            terminal_cells.append(
-                (zone.zone_id, zone_type_value, cell)
-            )
+            terminal_cells.append((zone.zone_id, zone_type_value, cell))
 
 
 bad_terminal_access = []
 
 for zone_id, type_value, cell in terminal_cells:
+    neighbors = [neighbor for neighbor in geometric_neighbors(cell) if neighbor in core]
 
-    neighbors = [
-        neighbor
-        for neighbor in geometric_neighbors(cell)
-        if neighbor in core
-    ]
+    incoming = [neighbor for neighbor in neighbors if move_allowed(neighbor, cell)]
 
-    incoming = [
-        neighbor
-        for neighbor in neighbors
-        if move_allowed(neighbor, cell)
-    ]
-
-    outgoing = [
-        neighbor
-        for neighbor in neighbors
-        if move_allowed(cell, neighbor)
-    ]
+    outgoing = [neighbor for neighbor in neighbors if move_allowed(cell, neighbor)]
 
     if not incoming or not outgoing:
-        bad_terminal_access.append(
-            (zone_id, type_value, cell, incoming, outgoing)
-        )
+        bad_terminal_access.append((zone_id, type_value, cell, incoming, outgoing))
 
 
 # ============================================================
@@ -200,9 +173,7 @@ bidirectional_pairs = []
 one_way_edges = 0
 
 for source, targets in graph.items():
-
     for target in targets:
-
         if source < target and source in graph[target]:
             bidirectional_pairs.append((source, target))
 
@@ -273,7 +244,6 @@ forward_missing = sorted(core - forward)
 reverse_missing = sorted(core - reverse)
 
 if forward_missing or reverse_missing:
-
     print()
     print("UNREACHABLE CORE CELLS")
     print("-" * 40)
@@ -281,7 +251,6 @@ if forward_missing or reverse_missing:
     print("  cannot return to seed   :", reverse_missing)
 
     for cell in sorted(set(forward_missing) | set(reverse_missing)):
-
         print()
         print(f"  CELL {cell}")
 
@@ -302,13 +271,10 @@ print(f"  terminal cells checked  : {len(terminal_cells)}")
 print(f"  bad terminal cells      : {len(bad_terminal_access)}")
 
 if bad_terminal_access:
-
     print()
     print("BAD TERMINALS")
 
-    for zone_id, type_value, cell, incoming, outgoing in (
-        bad_terminal_access[:30]
-    ):
+    for zone_id, type_value, cell, incoming, outgoing in bad_terminal_access[:30]:
         print(
             f"  {zone_id:12s} "
             f"{type_value.value:10s} "
@@ -337,9 +303,7 @@ if uncontrolled_bidirectional:
 # The core is strongly connected, so a terminal with a legal lane in
 # from a core cell and a legal lane back out to one is reachable from
 # everywhere and can return anywhere.
-access_counts = Counter(
-    type_value for _, type_value, _ in terminal_cells
-)
+access_counts = Counter(type_value for _, type_value, _ in terminal_cells)
 
 print("uncontrolled bidi edges  : 0")
 print("core strong connectivity : PASS")

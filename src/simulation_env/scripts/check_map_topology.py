@@ -33,7 +33,7 @@ it.
 Usage
 -----
     python3 src/simulation_env/scripts/check_map_topology.py \\
-        --config src/simulation_env/config/warehouse_sim.yaml
+        --config src/simulation_env/config/warehouse.yaml
 """
 
 from __future__ import annotations
@@ -84,9 +84,7 @@ def main() -> int:
         parser.error("give --map or --config")
 
     map_path = (
-        args.map
-        if args.map is not None
-        else load_sim_config(args.config).map_path
+        args.map if args.map is not None else load_sim_config(args.config).map_path
     )
 
     types = non_transit_types()
@@ -107,11 +105,7 @@ def main() -> int:
         if (x, y) not in grid.obstacles
     ]
 
-    transit = [
-        cell
-        for cell in free_cells
-        if cell not in terminal_cells
-    ]
+    transit = [cell for cell in free_cells if cell not in terminal_cells]
 
     transit_set = set(transit)
 
@@ -121,14 +115,12 @@ def main() -> int:
     directed_edges = 0
 
     for x, y in transit:
-
         for neighbor in (
             (x + 1, y),
             (x - 1, y),
             (x, y + 1),
             (x, y - 1),
         ):
-
             if neighbor not in transit_set:
                 continue
 
@@ -147,8 +139,7 @@ def main() -> int:
         (cell, neighbor)
         for cell in transit
         for neighbor in forward_adj[cell]
-        if cell < neighbor
-        and cell in forward_adj[neighbor]
+        if cell < neighbor and cell in forward_adj[neighbor]
     )
 
     # Seed from interior floor: a bank end is exactly the kind of cell
@@ -164,14 +155,9 @@ def main() -> int:
     forward = _reach(seed, forward_adj)
     reverse = _reach(seed, reverse_adj)
 
-    strongly_connected = (
-        len(forward) == len(transit)
-        and len(reverse) == len(transit)
-    )
+    strongly_connected = len(forward) == len(transit) and len(reverse) == len(transit)
 
-    orphans = sorted(
-        (transit_set - forward) | (transit_set - reverse)
-    )
+    orphans = sorted((transit_set - forward) | (transit_set - reverse))
 
     def plan(start, goal):
         """One mission leg, planned exactly as the executor plans it."""
@@ -198,7 +184,6 @@ def main() -> int:
     access = {}
 
     for zone in zones:
-
         cell = min(zone.cells)
 
         access[zone.zone_id] = (
@@ -228,47 +213,31 @@ def main() -> int:
     off_graph = []
 
     for source, target in itertools.permutations(zones, 2):
-
         start = min(source.cells)
         goal = min(target.cells)
 
         result = plan(start, goal)
 
         if not result.found:
-            unreachable.append(
-                (source.zone_id, target.zone_id)
-            )
+            unreachable.append((source.zone_id, target.zone_id))
             continue
 
         path = result.path
 
         if any(cell in terminal_cells for cell in path[1:-1]):
-            through_terminal.append(
-                (source.zone_id, target.zone_id)
-            )
+            through_terminal.append((source.zone_id, target.zone_id))
 
         for move in zip(path, path[1:]):
-
             if move[0] in terminal_cells and move[1] in terminal_cells:
-                terminal_hop.append(
-                    (source.zone_id, target.zone_id, move)
-                )
+                terminal_hop.append((source.zone_id, target.zone_id, move))
 
             if move not in lane_edges:
-                off_graph.append(
-                    (source.zone_id, target.zone_id, move)
-                )
+                off_graph.append((source.zone_id, target.zone_id, move))
 
-    zone_counts = Counter(
-        zone.zone_type.value
-        for zone in warehouse.zones
-    )
+    zone_counts = Counter(zone.zone_type.value for zone in warehouse.zones)
 
     def cells_of(zone_type):
-        return sorted(
-            min(zone.cells)
-            for zone in warehouse.zones_of_type(zone_type)
-        )
+        return sorted(min(zone.cells) for zone in warehouse.zones_of_type(zone_type))
 
     print()
     print("=" * 72)
@@ -280,8 +249,7 @@ def main() -> int:
     print(f"  blocked cells            : {len(grid.obstacles)}")
     print(f"  semantic zones           : {dict(sorted(zone_counts.items()))}")
     print()
-    print(f"  non-transit policy       : "
-          f"{', '.join(t.value for t in types)}")
+    print(f"  non-transit policy       : {', '.join(t.value for t in types)}")
     print()
     print(f"  chargers                 : {cells_of(ZoneType.CHARGING)}")
     print(f"  charge-queue holding     : {cells_of(ZoneType.CHARGE_QUEUE)}")
@@ -301,7 +269,6 @@ def main() -> int:
     print("  terminal access (enter from core AND leave to core)")
 
     for zone_type in types:
-
         total = zone_counts.get(zone_type.value, 0)
 
         if total:
@@ -311,8 +278,7 @@ def main() -> int:
             )
 
     print()
-    print(f"  station legs             : "
-          f"{len(zones) * (len(zones) - 1)}")
+    print(f"  station legs             : {len(zones) * (len(zones) - 1)}")
     print(f"  unreachable legs         : {len(unreachable)}")
     print(f"  legs through a terminal  : {len(through_terminal)}")
     print(f"  terminal->terminal moves : {len(terminal_hop)}")
@@ -331,8 +297,10 @@ def main() -> int:
             no_entry = not reverse_adj[cell]
 
             reason = (
-                "no legal exit" if no_exit
-                else "no legal entry" if no_entry
+                "no legal exit"
+                if no_exit
+                else "no legal entry"
+                if no_entry
                 else "cut off from the core"
             )
 
@@ -343,10 +311,11 @@ def main() -> int:
         print("TERMINALS THAT CANNOT BE BOTH ENTERED AND LEFT")
 
         for zone_id, zone_type, cell, entered, left in bad_access:
-
             reason = (
-                "isolated" if not entered and not left
-                else "enter-only trap" if entered
+                "isolated"
+                if not entered and not left
+                else "enter-only trap"
+                if entered
                 else "unreachable"
             )
 

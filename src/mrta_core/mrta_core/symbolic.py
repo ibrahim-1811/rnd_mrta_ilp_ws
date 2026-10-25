@@ -22,7 +22,9 @@ class PredicateThresholds:
     min_battery_after_task: float = 0.20
 
 
-def robot_state_predicates(robot: RobotState, thresholds: PredicateThresholds) -> list[str]:
+def robot_state_predicates(
+    robot: RobotState, thresholds: PredicateThresholds
+) -> list[str]:
     predicates: list[str] = []
 
     if robot.status == RobotStatus.IDLE:

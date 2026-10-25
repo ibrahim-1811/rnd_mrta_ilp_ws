@@ -42,8 +42,8 @@ def test_straight_time_triangular_when_short():
 
 def test_turn_adds_time():
     m = RobotModel()
-    l_path = [(0, 0), (1, 0), (1, 1)]           # one turn
-    straight = [(0, 0), (1, 0), (2, 0)]          # no turn, same length
+    l_path = [(0, 0), (1, 0), (1, 1)]  # one turn
+    straight = [(0, 0), (1, 0), (2, 0)]  # no turn, same length
     assert path_time(l_path, 1.0, m) > path_time(straight, 1.0, m)
 
 
@@ -56,8 +56,9 @@ def test_energy_percent_is_meaningful_but_bounded():
 
 def test_longer_path_costs_more_energy():
     m = RobotModel()
-    assert path_energy_percent(straight_path(8), 1.0, m) < \
-        path_energy_percent(straight_path(24), 1.0, m)
+    assert path_energy_percent(straight_path(8), 1.0, m) < path_energy_percent(
+        straight_path(24), 1.0, m
+    )
 
 
 def test_turn_time_default_is_quarter_turn():

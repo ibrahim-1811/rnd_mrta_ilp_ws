@@ -40,7 +40,7 @@ from simulation_env.fleet import build_fleet, home_stations
 from simulation_env.fleet_engine import FleetSimulationEngine
 
 
-CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+CONFIG = "src/simulation_env/test/fixtures/v2_reference.yaml"
 
 config = load_sim_config(CONFIG)
 warehouse = load_warehouse_xlsx(config.map_path)
@@ -60,6 +60,7 @@ print("=" * 72)
 # 1. No transit edge is legal in both directions.
 # ------------------------------------------------------------
 
+
 def transit(cell):
     x, y = cell
 
@@ -75,7 +76,6 @@ two_way = []
 
 for y in range(grid.height):
     for x in range(grid.width):
-
         source = (x, y)
 
         if not transit(source):
@@ -85,14 +85,13 @@ for y in range(grid.height):
             (x + 1, y),
             (x, y + 1),
         ):
-
             if not transit(target):
                 continue
 
-            if (
-                (source, target) not in blocked_edges
-                and (target, source) not in blocked_edges
-            ):
+            if (source, target) not in blocked_edges and (
+                target,
+                source,
+            ) not in blocked_edges:
                 two_way.append((source, target))
 
 
@@ -100,8 +99,7 @@ print()
 print(f"two-way transit edges: {len(two_way)}")
 
 assert not two_way, (
-    f"core is not one-way, {len(two_way)} two-way edges "
-    f"such as {two_way[:3]}"
+    f"core is not one-way, {len(two_way)} two-way edges such as {two_way[:3]}"
 )
 
 
@@ -119,9 +117,7 @@ print()
 print(f"  {SOUTH} -> {NORTH}: {'legal' if northbound else 'blocked'}")
 print(f"  {NORTH} -> {SOUTH}: {'legal' if southbound else 'blocked'}")
 
-assert northbound != southbound, (
-    "the (10,15)/(10,16) edge is still two-way"
-)
+assert northbound != southbound, "the (10,15)/(10,16) edge is still two-way"
 
 
 # ------------------------------------------------------------
@@ -156,12 +152,7 @@ engine = FleetSimulationEngine(
 missions = {}
 
 for robot_id, shelf, park_zone in pairs:
-
-    robot = next(
-        candidate
-        for candidate in robots
-        if candidate.robot_id == robot_id
-    )
+    robot = next(candidate for candidate in robots if candidate.robot_id == robot_id)
 
     engine.add_robot(robot)
 
@@ -187,9 +178,7 @@ def audited_begin_move(robot_id, source, target, now, duration):
     if (source, target) in blocked_edges:
         illegal.append((robot_id, source, target))
 
-    return original_begin_move(
-        robot_id, source, target, now, duration
-    )
+    return original_begin_move(robot_id, source, target, now, duration)
 
 
 def audited_begin_batch(moves, now, duration):
@@ -209,16 +198,13 @@ engine.reservations.begin_moves_batch = audited_begin_batch
 
 while engine.step_once():
     if engine.time > 2000:
-        raise RuntimeError(
-            "engine did not settle; suspected deadlock"
-        )
+        raise RuntimeError("engine did not settle; suspected deadlock")
 
 
 print()
 print(f"simulated time      : {float(engine.time):.3f} s")
 
 for robot_id, _shelf, _park in pairs:
-
     robot = engine.robots[robot_id]
 
     print(
@@ -235,9 +221,7 @@ print(f"unfinished waits      : {len(engine._waiting)}")
 
 
 for robot_id, _shelf, _park in pairs:
-    assert engine.robots[robot_id].finished, (
-        f"{robot_id} did not finish its mission"
-    )
+    assert engine.robots[robot_id].finished, f"{robot_id} did not finish its mission"
 
 assert not illegal, illegal
 assert not engine._yielding, engine._yielding

@@ -38,7 +38,7 @@ class CellInterval:
     cell: Cell
     robot_id: str
     start: Fraction
-    end: Fraction | None = None   # None = still held
+    end: Fraction | None = None  # None = still held
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,6 @@ class EdgeInterval:
 
 @dataclass
 class ReservationTable:
-
     # Live ownership: cell -> robot currently entitled to it.
     _owner: dict = field(default_factory=dict)
     _since: dict = field(default_factory=dict)
@@ -71,9 +70,7 @@ class ReservationTable:
 
     def held_cells(self, robot_id: str) -> list:
         return sorted(
-            cell
-            for cell, holder in self._owner.items()
-            if holder == robot_id
+            cell for cell, holder in self._owner.items() if holder == robot_id
         )
 
     def transits(self) -> dict:
@@ -95,9 +92,7 @@ class ReservationTable:
         """
 
         return frozenset(
-            cell
-            for cell, holder in self._owner.items()
-            if holder != robot_id
+            cell for cell, holder in self._owner.items() if holder != robot_id
         )
 
     def check_move(
@@ -115,7 +110,6 @@ class ReservationTable:
 
         # A head-on swap: someone is already driving target -> source.
         for other, (o_src, o_tgt, _, _) in self._transit.items():
-
             if other == robot_id:
                 continue
 
@@ -138,8 +132,7 @@ class ReservationTable:
 
         if existing is not None and existing != robot_id:
             raise ValueError(
-                f"{robot_id} cannot start on {cell}: "
-                f"already held by {existing}"
+                f"{robot_id} cannot start on {cell}: already held by {existing}"
             )
 
         self._owner[cell] = robot_id
@@ -163,9 +156,7 @@ class ReservationTable:
                 f"({conflict}); check_move first"
             )
 
-        already_held = (
-            self._owner.get(target) == robot_id
-        )
+        already_held = self._owner.get(target) == robot_id
 
         self._owner[target] = robot_id
 
@@ -205,40 +196,25 @@ class ReservationTable:
         if not moves:
             return
 
-        robot_ids = [
-            robot_id
-            for robot_id, _, _ in moves
-        ]
+        robot_ids = [robot_id for robot_id, _, _ in moves]
 
         if len(set(robot_ids)) != len(robot_ids):
-            raise ValueError(
-                "duplicate robot in simultaneous move batch"
-            )
+            raise ValueError("duplicate robot in simultaneous move batch")
 
-        sources = {
-            robot_id: source
-            for robot_id, source, _ in moves
-        }
+        sources = {robot_id: source for robot_id, source, _ in moves}
 
-        targets = {
-            robot_id: target
-            for robot_id, _, target in moves
-        }
+        targets = {robot_id: target for robot_id, _, target in moves}
 
         if len(set(targets.values())) != len(targets):
-            raise ValueError(
-                "simultaneous move batch has duplicate target cells"
-            )
+            raise ValueError("simultaneous move batch has duplicate target cells")
 
         # Every robot must actually own its source before the move.
         for robot_id, source, _ in moves:
-
             holder = self._owner.get(source)
 
             if holder != robot_id:
                 raise RuntimeError(
-                    f"{robot_id} cannot leave {source}: "
-                    f"owned by {holder!r}"
+                    f"{robot_id} cannot leave {source}: owned by {holder!r}"
                 )
 
         moving = set(robot_ids)
@@ -246,7 +222,6 @@ class ReservationTable:
         # A target must either be free or currently owned by another
         # robot that is approved to vacate it in this same batch.
         for robot_id, _, target in moves:
-
             holder = self._owner.get(target)
 
             if holder is None or holder == robot_id:
@@ -266,16 +241,11 @@ class ReservationTable:
 
         # Never permit a direct A->B / B->A exchange.
         for robot_id, source, target in moves:
-
             for other_id, other_source, other_target in moves:
-
                 if other_id <= robot_id:
                     continue
 
-                if (
-                    source == other_target
-                    and target == other_source
-                ):
+                if source == other_target and target == other_source:
                     raise RuntimeError(
                         f"head-on edge swap rejected: "
                         f"{robot_id} {source}->{target} against "
@@ -285,16 +255,11 @@ class ReservationTable:
         # Check against a traversal that was already in progress before
         # this batch began.
         for robot_id, source, target in moves:
-
             for other, (o_src, o_tgt, _, _) in self._transit.items():
-
                 if other == robot_id:
                     continue
 
-                if (
-                    o_src == target
-                    and o_tgt == source
-                ):
+                if o_src == target and o_tgt == source:
                     raise RuntimeError(
                         f"{robot_id} {source}->{target} conflicts "
                         f"with live reverse traversal by {other}"
@@ -311,7 +276,6 @@ class ReservationTable:
 
         # Phase 2. Everyone claims the destination and begins transit.
         for robot_id, source, target in moves:
-
             if target in self._owner:
                 raise RuntimeError(
                     f"batch target {target} unexpectedly still occupied "
@@ -407,7 +371,15 @@ class ReservationTable:
     # -- auditing ---------------------------------------
 
     def audit(self) -> list:
-        """Re-derive the guarantees from the logged intervals."""
+        """Re-derive the guarantees from the logged intervals.
+
+        Only intervals that can conflict are compared: two holds of one
+        cell, and two moves over one pair of cells in opposite
+        directions. Comparing every logged move with every other move
+        took hours after a 100-robot, 2000-order run, and the run's
+        final report waited on it. The problems found, and their order,
+        are exactly those of that all-pairs scan.
+        """
 
         problems = []
 
@@ -431,26 +403,64 @@ class ReservationTable:
             by_cell.setdefault(interval.cell, []).append(interval)
 
         for cell, intervals in by_cell.items():
-            for i, first in enumerate(intervals):
-                for second in intervals[i + 1:]:
+            # Sweep in start order: once a later hold starts at or after
+            # this one ends, no hold after it can overlap this one.
+            order = sorted(range(len(intervals)), key=lambda k: intervals[k].start)
+            pairs = []
 
-                    if first.robot_id == second.robot_id:
-                        continue
+            for position, k in enumerate(order):
+                held = intervals[k]
 
-                    if overlaps(
-                        first.start, first.end,
-                        second.start, second.end,
+                for later in range(position + 1, len(order)):
+                    q = order[later]
+                    other = intervals[q]
+
+                    if held.end is not None and held.end <= other.start:
+                        break
+
+                    if held.robot_id != other.robot_id and overlaps(
+                        held.start,
+                        held.end,
+                        other.start,
+                        other.end,
                     ):
-                        problems.append(
-                            f"cell {cell} held by {first.robot_id} "
-                            f"[{float(first.start):.4f}, "
-                            f"{first.end}) and {second.robot_id} "
-                            f"[{float(second.start):.4f}, "
-                            f"{second.end})"
-                        )
+                        pairs.append((min(k, q), max(k, q)))
 
-        for i, first in enumerate(self.edge_log):
-            for second in self.edge_log[i + 1:]:
+            for i, j in sorted(pairs):
+                first, second = intervals[i], intervals[j]
+
+                problems.append(
+                    f"cell {cell} held by {first.robot_id} "
+                    f"[{float(first.start):.4f}, "
+                    f"{first.end}) and {second.robot_id} "
+                    f"[{float(second.start):.4f}, "
+                    f"{second.end})"
+                )
+
+        # A swap needs one move each way over the same two cells, so
+        # moves are grouped by their unordered cell pair and only the
+        # two directions are compared. A move that stays on its cell is
+        # both directions at once and is compared with its own group.
+        by_edge: dict = {}
+
+        for index, move in enumerate(self.edge_log):
+            key = tuple(sorted((move.source, move.target)))
+            ways = by_edge.setdefault(key, ([], []))
+            ways[move.source != key[0]].append(index)
+
+        pairs = []
+
+        for key, (forward, backward) in by_edge.items():
+            if key[0] == key[1]:
+                candidates = [
+                    (x, y) for n, x in enumerate(forward) for y in forward[n + 1 :]
+                ]
+            else:
+                candidates = [(x, y) for x in forward for y in backward]
+
+            for x, y in candidates:
+                i, j = min(x, y), max(x, y)
+                first, second = self.edge_log[i], self.edge_log[j]
 
                 if first.robot_id == second.robot_id:
                     continue
@@ -459,14 +469,21 @@ class ReservationTable:
                     first.source == second.target
                     and first.target == second.source
                     and overlaps(
-                        first.start, first.end,
-                        second.start, second.end,
+                        first.start,
+                        first.end,
+                        second.start,
+                        second.end,
                     )
                 ):
-                    problems.append(
-                        f"edge swap {first.source}->{first.target} "
-                        f"by {first.robot_id} against "
-                        f"{second.robot_id}"
-                    )
+                    pairs.append((i, j))
+
+        for i, j in sorted(pairs):
+            first, second = self.edge_log[i], self.edge_log[j]
+
+            problems.append(
+                f"edge swap {first.source}->{first.target} "
+                f"by {first.robot_id} against "
+                f"{second.robot_id}"
+            )
 
         return problems

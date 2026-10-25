@@ -10,11 +10,9 @@ from simulation_env.local_yield_selector import (
 
 
 # Follow the configured map rather than pinning a version.
-CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+CONFIG = "src/simulation_env/test/fixtures/v2_reference.yaml"
 
-warehouse = load_warehouse_xlsx(
-    load_sim_config(CONFIG).map_path
-)
+warehouse = load_warehouse_xlsx(load_sim_config(CONFIG).map_path)
 
 grid = warehouse.grid
 
@@ -39,12 +37,9 @@ def neighbors(cell):
 
 
 def acceptable_traffic_cell(cell):
-    return (
-        warehouse.zone_type_at(cell)
-        not in (
-            ZoneType.SHELF,
-            ZoneType.DROPOFF,
-        )
+    return warehouse.zone_type_at(cell) not in (
+        ZoneType.SHELF,
+        ZoneType.DROPOFF,
     )
 
 
@@ -61,7 +56,6 @@ found = None
 
 for y in range(grid.height):
     for x in range(grid.width):
-
         a = (x, y)
 
         if a in grid.obstacles:
@@ -71,7 +65,6 @@ for y in range(grid.height):
             continue
 
         for b in neighbors(a):
-
             if not acceptable_traffic_cell(b):
                 continue
 
@@ -106,8 +99,7 @@ for y in range(grid.height):
 
 if found is None:
     raise RuntimeError(
-        "No valid one-cell local yield configuration "
-        "found in the real warehouse."
+        "No valid one-cell local yield configuration found in the real warehouse."
     )
 
 
@@ -123,10 +115,7 @@ print(f"higher-priority robot cell : {winner_cell}")
 print(f"yielding robot cell        : {yielder_cell}")
 print(f"selected local yield cell  : {yield_cell}")
 
-distance = (
-    abs(yield_cell[0] - yielder_cell[0])
-    + abs(yield_cell[1] - yielder_cell[1])
-)
+distance = abs(yield_cell[0] - yielder_cell[0]) + abs(yield_cell[1] - yielder_cell[1])
 
 print()
 print(f"yield displacement         : {distance} grid cell")
@@ -135,9 +124,7 @@ assert distance == 1
 assert yield_cell not in grid.obstacles
 assert yield_cell not in {winner_cell, yielder_cell}
 
-assert warehouse.zone_type_at(
-    yield_cell
-) not in (
+assert warehouse.zone_type_at(yield_cell) not in (
     ZoneType.SHELF,
     ZoneType.DROPOFF,
 )

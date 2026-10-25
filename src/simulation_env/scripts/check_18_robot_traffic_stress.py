@@ -18,7 +18,7 @@ from simulation_env.fleet_engine import (
 )
 
 
-CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+CONFIG = "src/simulation_env/test/fixtures/v2_reference.yaml"
 
 
 def synchronous_conflict_score(plans):
@@ -33,39 +33,26 @@ def synchronous_conflict_score(plans):
     The real FleetSimulationEngine remains the authority.
     """
 
-    paths = {
-        robot_id: list(plan.path)
-        for robot_id, plan in plans.items()
-    }
+    paths = {robot_id: list(plan.path) for robot_id, plan in plans.items()}
 
-    horizon = max(
-        len(path)
-        for path in paths.values()
-    )
+    horizon = max(len(path) for path in paths.values())
 
     vertex = 0
     edge = 0
 
     for tick in range(1, horizon):
-
         previous = {}
         current = {}
 
         for robot_id, path in paths.items():
+            previous[robot_id] = path[min(tick - 1, len(path) - 1)]
 
-            previous[robot_id] = path[
-                min(tick - 1, len(path) - 1)
-            ]
-
-            current[robot_id] = path[
-                min(tick, len(path) - 1)
-            ]
+            current[robot_id] = path[min(tick, len(path) - 1)]
 
         for a, b in combinations(
             sorted(paths),
             2,
         ):
-
             if current[a] == current[b]:
                 vertex += 1
 
@@ -91,8 +78,7 @@ FLEET_SIZE = len(home_bank(warehouse))
 
 if FLEET_SIZE < 2:
     raise RuntimeError(
-        f"traffic stress needs at least 2 home cells, "
-        f"map provides {FLEET_SIZE}"
+        f"traffic stress needs at least 2 home cells, map provides {FLEET_SIZE}"
     )
 
 robots = build_fleet(
@@ -105,15 +91,9 @@ homes = home_stations(
     warehouse,
 )
 
-robot_ids = sorted(
-    robot.robot_id
-    for robot in robots
-)
+robot_ids = sorted(robot.robot_id for robot in robots)
 
-home_zones = [
-    homes[robot_id]
-    for robot_id in robot_ids
-]
+home_zones = [homes[robot_id] for robot_id in robot_ids]
 
 
 # -----------------------------------------------------------------
@@ -138,14 +118,11 @@ for shift in (
     permutations.append(
         (
             f"rotate_{shift}",
-            home_zones[shift:]
-            + home_zones[:shift],
+            home_zones[shift:] + home_zones[:shift],
         )
     )
 
-reversed_homes = list(
-    reversed(home_zones)
-)
+reversed_homes = list(reversed(home_zones))
 
 permutations.append(
     (
@@ -159,10 +136,7 @@ for shift in (
     3,
     5,
 ):
-    targets = (
-        reversed_homes[shift:]
-        + reversed_homes[:shift]
-    )
+    targets = reversed_homes[shift:] + reversed_homes[:shift]
 
     permutations.append(
         (
@@ -176,10 +150,7 @@ for shift in (
 #
 # A stride that is coprime with the shelf count spreads the robots
 # over the whole racking instead of clustering them in one aisle.
-SHELF_IDS = [
-    zone.zone_id
-    for zone in warehouse.zones_of_type(ZoneType.SHELF)
-]
+SHELF_IDS = [zone.zone_id for zone in warehouse.zones_of_type(ZoneType.SHELF)]
 
 SHELF_STRIDE = 23
 
@@ -188,7 +159,6 @@ best = None
 
 
 for name, targets in permutations:
-
     missions = {}
     valid = True
 
@@ -198,12 +168,7 @@ for name, targets in permutations:
             targets,
         )
     ):
-
-        robot = next(
-            robot
-            for robot in robots
-            if robot.robot_id == robot_id
-        )
+        robot = next(robot for robot in robots if robot.robot_id == robot_id)
 
         if target_zone == homes[robot_id]:
             valid = False
@@ -214,12 +179,9 @@ for name, targets in permutations:
         # the same way and never met. A pick leg in the middle of the
         # warehouse puts them back across each other's routes, which is
         # what this test exists to stress.
-        cross_shelf = SHELF_IDS[
-            (index * SHELF_STRIDE) % len(SHELF_IDS)
-        ]
+        cross_shelf = SHELF_IDS[(index * SHELF_STRIDE) % len(SHELF_IDS)]
 
         try:
-
             missions[robot_id] = plan_from_cell(
                 warehouse,
                 robot.cell,
@@ -228,18 +190,13 @@ for name, targets in permutations:
             )
 
         except (RuntimeError, ValueError):
-
             valid = False
             break
 
     if not valid:
         continue
 
-    score, vertex, edge = (
-        synchronous_conflict_score(
-            missions
-        )
-    )
+    score, vertex, edge = synchronous_conflict_score(missions)
 
     candidate = (
         score,
@@ -290,7 +247,6 @@ for robot_id, target_zone in zip(
     robot_ids,
     targets,
 ):
-
     plan = missions[robot_id]
 
     print(
@@ -315,12 +271,9 @@ engine = FleetSimulationEngine(
 
 
 for robot in robots:
-
     robot.speed_mps = config.speed_mps
 
-    engine.add_robot(
-        robot
-    )
+    engine.add_robot(robot)
 
 
 started = engine.assign_missions_batch(
@@ -335,11 +288,9 @@ print("initially blocked/yielding   :", FLEET_SIZE - len(started))
 
 
 try:
-
     engine.run()
 
 except Exception as exc:
-
     print()
     print("STRESS TEST FAILED DURING EXECUTION")
     print(type(exc).__name__, ":", exc)
@@ -348,7 +299,6 @@ except Exception as exc:
     print("robot states:")
 
     for robot_id in robot_ids:
-
         robot = engine.robots[robot_id]
 
         print(
@@ -371,23 +321,16 @@ except Exception as exc:
     wait_for = {}
 
     for robot_id in sorted(engine._waiting):
-
         robot = engine.robots[robot_id]
 
         if robot.finished:
             target = None
             holder = None
         else:
-            target = robot.path[
-                robot.path_index + 1
-            ]
-            holder = engine.reservations.owner(
-                target
-            )
+            target = robot.path[robot.path_index + 1]
+            holder = engine.reservations.owner(target)
 
-        kind, detail, since = engine._waiting[
-            robot_id
-        ]
+        kind, detail, since = engine._waiting[robot_id]
 
         wait_for[robot_id] = holder
 
@@ -407,23 +350,15 @@ except Exception as exc:
         print("  none")
 
     for robot_id in sorted(engine._yielding):
-
         state = engine._yielding[robot_id]
 
         robot = engine.robots[robot_id]
-        winner = engine.robots.get(
-            state.winner_id
-        )
+        winner = engine.robots.get(state.winner_id)
 
         winner_next = None
 
-        if (
-            winner is not None
-            and not winner.finished
-        ):
-            winner_next = winner.path[
-                winner.path_index + 1
-            ]
+        if winner is not None and not winner.finished:
+            winner_next = winner.path[winner.path_index + 1]
 
         print(
             f"  {robot_id} "
@@ -439,13 +374,9 @@ except Exception as exc:
     print("WAIT-FOR EDGES")
 
     for robot_id in sorted(wait_for):
-
         holder = wait_for[robot_id]
 
-        print(
-            f"  {robot_id} -> "
-            f"{holder if holder is not None else 'FREE'}"
-        )
+        print(f"  {robot_id} -> {holder if holder is not None else 'FREE'}")
 
     # ---------------------------------------------------------
     # Detect closed cycles among robots currently in _waiting.
@@ -455,27 +386,18 @@ except Exception as exc:
     canonical = set()
 
     for start_robot in sorted(wait_for):
-
         order = []
         positions = {}
 
         current = start_robot
 
         while current is not None:
-
             if current in positions:
-
-                cycle = order[
-                    positions[current]:
-                ]
+                cycle = order[positions[current] :]
 
                 if cycle:
                     rotations = [
-                        tuple(
-                            cycle[i:]
-                            + cycle[:i]
-                        )
-                        for i in range(len(cycle))
+                        tuple(cycle[i:] + cycle[:i]) for i in range(len(cycle))
                     ]
 
                     key = min(rotations)
@@ -504,23 +426,12 @@ except Exception as exc:
         cycles,
         start=1,
     ):
-        print(
-            f"  cycle {index}: "
-            + " -> ".join(
-                cycle + [cycle[0]]
-            )
-        )
+        print(f"  cycle {index}: " + " -> ".join(cycle + [cycle[0]]))
 
     print()
-    print(
-        f"_waiting count  : "
-        f"{len(engine._waiting)}"
-    )
+    print(f"_waiting count  : {len(engine._waiting)}")
 
-    print(
-        f"_yielding count : "
-        f"{len(engine._yielding)}"
-    )
+    print(f"_yielding count : {len(engine._yielding)}")
 
     raise
 
@@ -529,34 +440,17 @@ except Exception as exc:
 # Results.
 # -----------------------------------------------------------------
 
-total_wait = sum(
-    robot.waiting_time_s
-    for robot in robots
-)
+total_wait = sum(robot.waiting_time_s for robot in robots)
 
-wait_events = sum(
-    robot.wait_event_count
-    for robot in robots
-)
+wait_events = sum(robot.wait_event_count for robot in robots)
 
-vertex_conflicts = sum(
-    robot.vertex_conflict_count
-    for robot in robots
-)
+vertex_conflicts = sum(robot.vertex_conflict_count for robot in robots)
 
-edge_conflicts = sum(
-    robot.edge_conflict_count
-    for robot in robots
-)
+edge_conflicts = sum(robot.edge_conflict_count for robot in robots)
 
-distance = sum(
-    robot.distance_m
-    for robot in robots
-)
+distance = sum(robot.distance_m for robot in robots)
 
-parked = len(
-    engine.park_completion
-)
+parked = len(engine.park_completion)
 
 problems = engine.reservations.audit()
 
@@ -582,36 +476,22 @@ print(f"unfinished wait states   : {len(engine._waiting)}")
 # Acceptance checks.
 # -----------------------------------------------------------------
 
-assert parked == FLEET_SIZE, (
-    f"only {parked}/{FLEET_SIZE} missions completed"
-)
+assert parked == FLEET_SIZE, f"only {parked}/{FLEET_SIZE} missions completed"
 
 assert problems == [], problems
 
-assert not engine._yielding, (
-    f"unfinished yields: {engine._yielding}"
-)
+assert not engine._yielding, f"unfinished yields: {engine._yielding}"
 
-assert not engine._waiting, (
-    f"unfinished waiting robots: {engine._waiting}"
-)
+assert not engine._waiting, f"unfinished waiting robots: {engine._waiting}"
 
-final_cells = [
-    robot.cell
-    for robot in robots
-]
+final_cells = [robot.cell for robot in robots]
 
-assert len(set(final_cells)) == FLEET_SIZE, (
-    "two robots finished on the same cell"
-)
+assert len(set(final_cells)) == FLEET_SIZE, "two robots finished on the same cell"
 
 
 # This is intended as a traffic stress test. A scenario with no actual
 # interaction is not useful even if every mission technically succeeds.
-assert (
-    wait_events > 0
-    or vertex_conflicts > 0
-), (
+assert wait_events > 0 or vertex_conflicts > 0, (
     "scenario completed without exercising local traffic arbitration"
 )
 

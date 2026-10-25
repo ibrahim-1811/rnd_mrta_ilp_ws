@@ -5,15 +5,20 @@ there is nothing to gate on a clock. What the workload decides is
 narrower and purely structural: *which* orders an allocator is allowed
 to look at right now.
 
-The rule is FIFO on the CSV sequence. With N available robots and M
+The rule is FIFO on the CSV sequence. Given a window width W and M
 orders still PENDING::
 
-    eligible_count = min(N, M)
+    eligible_count = min(W, M)
 
 and the eligible set is exactly the next ``eligible_count`` PENDING
 orders in CSV sequence. Nothing later is ever skipped: an order can
 only leave the queue by leaving PENDING, which happens when an
 allocator claims it.
+
+Choosing W is the caller's decision, not this layer's. It used to be
+the number of available robots, which collapsed almost every decision
+to one robot and one order; it is now set from the configured
+allocation window (docs/DECISIONS.md, "Allocation Candidate Window").
 
 Deliberately absent: allocation. This layer says *which orders are on
 the table*; deciding which available robot takes which of them is the
@@ -42,11 +47,8 @@ class OrderQueue:
         self._index = {}
 
         for position, order in enumerate(self._orders):
-
             if order.order_id in self._index:
-                raise ValueError(
-                    f"duplicate order_id {order.order_id!r}"
-                )
+                raise ValueError(f"duplicate order_id {order.order_id!r}")
 
             self._index[order.order_id] = position
 
@@ -100,29 +102,29 @@ class OrderQueue:
         """
 
         return tuple(
-            order
-            for order in self._orders
-            if order.status is OrderStatus.PENDING
+            order for order in self._orders if order.status is OrderStatus.PENDING
         )
 
-    def eligible(self, available_robots: int) -> tuple[Order, ...]:
-        """The next ``min(available_robots, pending)`` FIFO orders.
+    def eligible(self, count: int) -> tuple[Order, ...]:
+        """The next ``min(count, pending)`` FIFO orders.
 
-        This is the allocator's candidate set for one decision. It is a
+        The prefix primitive the candidate window is built from. It is a
         prefix of :meth:`pending`, so a later order is never offered
         while an earlier one is still waiting.
+
+        ``count`` is a window width, not a robot count. The executor may
+        widen it past the width it first asked for when the prefix holds
+        no assignable pair at all -- see the FIFO liveness rule -- but
+        the result is always still a prefix.
         """
 
-        if available_robots < 0:
-            raise ValueError(
-                f"available_robots must be >= 0, "
-                f"got {available_robots}"
-            )
+        if count < 0:
+            raise ValueError(f"count must be >= 0, got {count}")
 
-        if available_robots == 0:
+        if count == 0:
             return ()
 
-        return self.pending()[:available_robots]
+        return self.pending()[:count]
 
     def reset(self) -> None:
         """Return every order to PENDING and clear its assignment."""

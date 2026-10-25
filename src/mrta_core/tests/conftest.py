@@ -26,7 +26,8 @@ STAGING_COUNT = 18
 WORKLOAD_CSV = (
     Path(__file__).resolve().parents[2]
     / "simulation_env"
-    / "config"
+    / "test"
+    / "fixtures"
     / "orders.csv"
 )
 

@@ -31,16 +31,16 @@ GRAVITY = 9.81
 @dataclass(frozen=True)
 class RobotModel:
     # kinematics
-    v_max: float = 2.0          # m/s cruise speed (matches simulator robot_speed_ms)
-    a_max: float = 0.8          # m/s^2 linear acceleration
-    omega_max: float = 2.84     # rad/s angular speed (TurtleBot3-class)
+    v_max: float = 2.0  # m/s cruise speed (matches simulator robot_speed_ms)
+    a_max: float = 0.8  # m/s^2 linear acceleration
+    omega_max: float = 2.84  # rad/s angular speed (TurtleBot3-class)
     # mass / resistance
-    mass: float = 60.0          # kg, robot chassis
-    payload: float = 20.0       # kg, carried load
-    rolling_resistance: float = 0.08   # effective coefficient (wheels + drivetrain)
+    mass: float = 60.0  # kg, robot chassis
+    payload: float = 20.0  # kg, carried load
+    rolling_resistance: float = 0.08  # effective coefficient (wheels + drivetrain)
     # power / energy
-    idle_power: float = 30.0    # W, electronics + sensors baseline
-    turn_power: float = 40.0    # W, drawn while rotating in place
+    idle_power: float = 30.0  # W, electronics + sensors baseline
+    turn_power: float = 40.0  # W, drawn while rotating in place
     drivetrain_efficiency: float = 0.75
     battery_capacity_wh: float = 10.0  # Wh usable
 
@@ -115,7 +115,9 @@ def path_energy_wh(path: list[Cell], resolution: float, model: RobotModel) -> fl
     return path_energy_j(path, resolution, model) / 3600.0
 
 
-def path_energy_percent(path: list[Cell], resolution: float, model: RobotModel) -> float:
+def path_energy_percent(
+    path: list[Cell], resolution: float, model: RobotModel
+) -> float:
     if model.battery_capacity_wh <= 0.0:
         return 0.0
     return 100.0 * path_energy_wh(path, resolution, model) / model.battery_capacity_wh

@@ -42,11 +42,9 @@ from simulation_env.local_yield_selector import (
 
 
 # Follow the configured map rather than pinning a version.
-CONFIG = "src/simulation_env/config/warehouse_sim.yaml"
+CONFIG = "src/simulation_env/test/fixtures/v2_reference.yaml"
 
-warehouse = load_warehouse_xlsx(
-    load_sim_config(CONFIG).map_path
-)
+warehouse = load_warehouse_xlsx(load_sim_config(CONFIG).map_path)
 controller = LocalTrafficController()
 
 blocked_edges = directional_blocked_edges(warehouse)
@@ -64,10 +62,7 @@ def resolve(label, intents, positions):
     print(label)
     print("=" * 72)
 
-    occupied = {
-        cell: robot_id
-        for robot_id, cell in positions.items()
-    }
+    occupied = {cell: robot_id for robot_id, cell in positions.items()}
 
     decisions = controller.resolve(
         intents,
@@ -119,8 +114,7 @@ core_head_on = [
                 for y in range(warehouse.grid.height)
                 for x in range(warehouse.grid.width)
             ]
-            if cell not in warehouse.grid.obstacles
-            and cell not in service_cells
+            if cell not in warehouse.grid.obstacles and cell not in service_cells
         )
         for b in (
             (a[0] + 1, a[1]),
@@ -134,9 +128,7 @@ core_head_on = [
     and (target, source) not in blocked_edges
 ]
 
-assert not core_head_on, (
-    f"core is not fully one-way: {core_head_on[:5]}"
-)
+assert not core_head_on, f"core is not fully one-way: {core_head_on[:5]}"
 
 print()
 print("invariant: no two-way core edge remains")
@@ -186,15 +178,9 @@ decisions = resolve(
     positions,
 )
 
-assert (
-    decisions["robot_001"].decision
-    is TrafficDecision.WAIT
-)
+assert decisions["robot_001"].decision is TrafficDecision.WAIT
 
-assert (
-    decisions["robot_002"].decision
-    is TrafficDecision.YIELD_REQUIRED
-)
+assert decisions["robot_002"].decision is TrafficDecision.YIELD_REQUIRED
 
 
 yield_cell = select_local_yield_cell(
@@ -207,17 +193,12 @@ yield_cell = select_local_yield_cell(
 )
 
 if yield_cell is None:
-    raise RuntimeError(
-        "Expected one-cell local yield position but none was found."
-    )
+    raise RuntimeError("Expected one-cell local yield position but none was found.")
 
 assert yield_cell == FAR_AISLE, yield_cell
 
 print()
-print(
-    f"robot_002 selected yield cell: "
-    f"{positions['robot_002']} -> {yield_cell}"
-)
+print(f"robot_002 selected yield cell: {positions['robot_002']} -> {yield_cell}")
 
 positions["robot_002"] = yield_cell
 
@@ -249,10 +230,7 @@ decisions = resolve(
     positions,
 )
 
-assert (
-    decisions["robot_001"].decision
-    is TrafficDecision.MOVE
-)
+assert decisions["robot_001"].decision is TrafficDecision.MOVE
 
 positions["robot_001"] = SHELF
 
@@ -298,15 +276,9 @@ decisions = resolve(
     positions,
 )
 
-assert (
-    decisions["robot_001"].decision
-    is TrafficDecision.MOVE
-)
+assert decisions["robot_001"].decision is TrafficDecision.MOVE
 
-assert (
-    decisions["robot_002"].decision
-    is TrafficDecision.MOVE
-)
+assert decisions["robot_002"].decision is TrafficDecision.MOVE
 
 positions["robot_001"] = NEAR_AISLE
 positions["robot_002"] = (3, 11)
@@ -339,10 +311,7 @@ decisions = resolve(
     positions,
 )
 
-assert (
-    decisions["robot_001"].decision
-    is TrafficDecision.MOVE
-)
+assert decisions["robot_001"].decision is TrafficDecision.MOVE
 
 positions["robot_001"] = (5, 9)
 
@@ -353,11 +322,7 @@ positions["robot_001"] = (5, 9)
 
 assert positions["robot_001"] != positions["robot_002"]
 
-assert (
-    abs(yield_cell[0] - SHELF[0])
-    + abs(yield_cell[1] - SHELF[1])
-    == 1
-)
+assert abs(yield_cell[0] - SHELF[0]) + abs(yield_cell[1] - SHELF[1]) == 1
 
 # Every move this scenario performed had to be legal on the directed
 # graph, not merely collision-free.

@@ -1,7 +1,3 @@
-# CONTROLLED TEST CONFIG -- Battery V1 B3 visual acceptance: robot_001..012 start at 9%; 8 take the chargers, 4 go to holding cells.
-# Identical to warehouse_sim.yaml except battery.initial_soc_overrides.
-# Never use for scientific runs.
-#
 # Central warehouse simulation configuration.
 #
 # Authoritative for map, fleet, battery, service durations, orders and
@@ -49,19 +45,6 @@ battery:
   charging_percent_per_second: 1.0
   reserve_percent: 10.0
   charge_due_percent: 10.0
-  initial_soc_overrides:
-    robot_001: 9.0
-    robot_002: 9.0
-    robot_003: 9.0
-    robot_004: 9.0
-    robot_005: 9.0
-    robot_006: 9.0
-    robot_007: 9.0
-    robot_008: 9.0
-    robot_009: 9.0
-    robot_010: 9.0
-    robot_011: 9.0
-    robot_012: 9.0
 
 # Scientific service durations, used exactly as written. Nothing in
 # the visualization layer may modify these.
@@ -72,12 +55,40 @@ service:
 # Order input layer. The workload is deterministic and fully known at
 # startup: every row is loaded at t=0 and every logical order starts
 # PENDING. Which orders an allocator may see is decided by FIFO on the
-# CSV sequence -- min(available_robots, pending_orders) at a time --
-# never by a clock. There is deliberately no priority, release_time or
-# deadline column.
+# CSV sequence -- see the allocation section below -- never by a clock.
+# There is deliberately no priority, release_time or deadline column.
 orders:
   file: orders.csv
   mode: replay
+
+# Allocation candidate window (S0). Fixed infrastructure: the same
+# window is offered to every strategy, and no strategy may widen,
+# narrow or reorder it. See docs/DECISIONS.md, "Allocation Candidate
+# Window" and "Dispatch Batching".
+#
+#   window   fleet_size  W = robot_count. The frozen default: a free
+#                        robot chooses among as many orders as the
+#                        fleet has robots, however few are free.
+#            legacy      the pre-S0 min(available_robots, pending),
+#                        with no FIFO liveness extension. Kept only to
+#                        reproduce the pre-S0 frozen baselines; it
+#                        collapses 62 of 71 decisions on the 100-order
+#                        workload to one robot and one order, which no
+#                        strategy comparison can survive.
+#            <integer>   an explicit width, for controlled scenarios.
+#
+#   dispatch_quantum_s   0 = continuous dispatch (allocate whenever a
+#                        robot is free). A positive value holds a freed
+#                        robot that long so several are allocated in one
+#                        decision, which is what the batch-assignment
+#                        strategies (Hungarian, MILP) need to be
+#                        distinguishable. Continuous dispatch is the
+#                        headline configuration; for the batched
+#                        scenario run with --quantum 3.0
+#                        (3.0 s, measured), not this file.
+allocation:
+  window: fleet_size
+  dispatch_quantum_s: 0.0
 
 # Parking is fixed infrastructure and has no configuration.
 #

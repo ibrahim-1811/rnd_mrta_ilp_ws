@@ -56,10 +56,7 @@ def bank_warehouse():
             width=3,
             height=16,
             obstacles=frozenset(
-                (x, y)
-                for x in range(3)
-                for y in range(16)
-                if y not in rows
+                (x, y) for x in range(3) for y in range(16) if y not in rows
             ),
         ),
         zones=zones,
@@ -152,7 +149,6 @@ def test_transit_lanes_are_left_alone():
 
     for y in range(grid.height):
         for x in range(grid.width):
-
             source = (x, y)
 
             if source in grid.obstacles:
@@ -164,22 +160,15 @@ def test_transit_lanes_are_left_alone():
                 (x, y + 1),
                 (x, y - 1),
             ):
-
                 if (
-                    not (
-                        0 <= target[0] < grid.width
-                        and 0 <= target[1] < grid.height
-                    )
+                    not (0 <= target[0] < grid.width and 0 <= target[1] < grid.height)
                     or target in grid.obstacles
                 ):
                     continue
 
                 permitted = (source, target) not in blocked
 
-                both_terminal = (
-                    source in terminals
-                    and target in terminals
-                )
+                both_terminal = source in terminals and target in terminals
 
                 assert ((source, target) in edges) == (
                     permitted and not both_terminal
@@ -199,9 +188,7 @@ def test_chargers_and_holding_cells_are_terminals():
 
     zones = (
         WarehouseZone("charging_001", ZoneType.CHARGING, frozenset({(4, 2)})),
-        WarehouseZone(
-            "charge_queue_001", ZoneType.CHARGE_QUEUE, frozenset({(5, 2)})
-        ),
+        WarehouseZone("charge_queue_001", ZoneType.CHARGE_QUEUE, frozenset({(5, 2)})),
     )
 
     warehouse = WarehouseMap(

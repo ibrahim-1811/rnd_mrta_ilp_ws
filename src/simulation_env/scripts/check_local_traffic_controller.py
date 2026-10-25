@@ -28,10 +28,7 @@ def show(title, intents, expected):
             f"{result.reason}"
         )
 
-    actual = {
-        robot_id: result.decision
-        for robot_id, result in decisions.items()
-    }
+    actual = {robot_id: result.decision for robot_id, result in decisions.items()}
 
     if actual != expected:
         print()

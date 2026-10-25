@@ -3,8 +3,8 @@
 > **Superseded in part.** The component table below is as of
 > 2026-08-29, commit `ec6ecd6`. The simulator and traffic layer were
 > frozen on 2026-09-03 on branch `traffic/rmf-integration`; for that
-> state see [00_RUNBOOK.md §7](00_RUNBOOK.md) and
-> [18_TRAFFIC_TOPOLOGY.md](18_TRAFFIC_TOPOLOGY.md).
+> state see [00_RUNBOOK.md §7](../00_RUNBOOK.md) and
+> [18_TRAFFIC_TOPOLOGY.md](../18_TRAFFIC_TOPOLOGY.md).
 
 ## Frozen simulator baseline (2026-09-03)
 
@@ -29,7 +29,7 @@ run had reported 0 conflicts, 0 replans and 0 space-time expansions.
 
 Not yet simulated: **charging**. The map defines 16 charging cells and
 they are parsed and rendered, but battery is never decremented and no
-robot ever routes to a charger. See [00_RUNBOOK.md §8.2](00_RUNBOOK.md).
+robot ever routes to a charger. See [00_RUNBOOK.md §8.2](../00_RUNBOOK.md).
 
 ## Component status as of 2026-08-29, branch `main`, commit `ec6ecd6`
 

@@ -35,6 +35,7 @@ from mrta_core.battery import (
     BatteryDecisionContext,
     EnergyRequirement,
     charge_seconds_to_full,
+    travel_energy,
 )
 from mrta_core.order_queue import OrderQueue
 from mrta_core.orders import OrderStatus
@@ -48,12 +49,14 @@ from simulation_env.charging import (
     PREEMPT_RECORD_SOC,
     SETTLED_STATES,
     TRAVEL_STATES,
+    WAITING_STATES,
     ChargeRecord,
     ChargeState,
     ChargingSaturationError,
     ResourceState,
     TerminalBank,
 )
+from simulation_env.dataset import exact
 from simulation_env.fleet_engine import EventType, FleetSimulationEngine
 from simulation_env.grid_robot import GridRobotStatus
 from simulation_env.stage_parking import StageParking
@@ -264,6 +267,25 @@ class WorkloadResult:
     worst_dispatch_s: float = 0.0
     static_route_reuses: int = 0
 
+    # Decision shape (S0). Reporting only, but the whole point of the
+    # candidate window: a decision with robots x orders == 1 is forced,
+    # and every strategy returns the same pair on it.
+    decisions: int = 0
+    choice_bearing: int = 0
+    window_extensions: int = 0
+    # Dispatch quantum (S0b): dispatch attempts deferred to batch more
+    # robots. Dispatch is attempted on every engine tick, so this counts
+    # ticks refused inside an open window, not decisions -- several per
+    # window, and always more than `decisions`.
+    quantum_holds: int = 0
+    # (free robots, window orders) -> how many decisions had that shape.
+    decision_shapes: dict = field(default_factory=dict)
+    # (sim_time, free robots, window orders) per decision, in order.
+    # Reporting and S0b sizing: the gaps between consecutive decisions
+    # are the free-robot arrival distribution a dispatch quantum would
+    # have to bridge.
+    decision_log: list = field(default_factory=list)
+
     # Battery eligibility, decision time. Reporting only.
     battery_events: list = field(default_factory=list)
     candidate_pairs: int = 0  # scored by the allocator
@@ -282,6 +304,8 @@ class WorkloadResult:
 
     # Queue promotion and preemption (B5). Reporting only.
     promotions: int = 0
+    # Of those, robots promoted off a fallback Stage Zone.
+    stage_promotions: int = 0
     preemptions: int = 0
     # Preempted robots that were energy-eligible and went straight back
     # to work, and those that had to wait in a holding cell instead.
@@ -312,11 +336,48 @@ class WorkloadExecutor:
         on_perf=None,
         battery=None,
         on_battery_event=None,
+        window: str | int = "fleet_size",
+        dispatch_quantum_s: float = 0.0,
+        recorder=None,
+        strategy_name: str = "",
     ) -> None:
 
         self.warehouse = warehouse
         self.queue = queue
         self.allocator = allocator
+
+        # The allocation candidate window (S0). ``fleet_size`` is the
+        # frozen default; ``legacy`` is the pre-S0
+        # ``min(available_robots, pending)`` rule, kept only so the
+        # pre-S0 baselines stay reproducible. Infrastructure: the same
+        # width is offered to every strategy.
+        self.window = window
+        self._window_width = self.resolve_window(window, len(robots))
+
+        # The dispatch quantum (S0b). 0 is continuous dispatch: allocate
+        # the instant a robot is free. A positive value holds a freed
+        # robot up to that long so several are allocated in one decision,
+        # which is what the batch-assignment strategies need in order to
+        # differ from greedy at all. Fixed infrastructure: the same
+        # quantum applies to every strategy.
+        if dispatch_quantum_s < 0:
+            raise ValueError(
+                f"dispatch_quantum_s must be >= 0, got {dispatch_quantum_s}"
+            )
+
+        self.dispatch_quantum = Fraction(str(dispatch_quantum_s))
+
+        # robot_id -> the instant it was first seen free, so a window is
+        # measured from the robot that has waited longest, not from the
+        # latest arrival (which could postpone a decision indefinitely).
+        self._free_since: dict[str, Fraction] = {}
+        self._quantum_armed: Fraction | None = None
+
+        # Phase 8 dataset. A RunRecorder, or None to record nothing.
+        # Recording is observation only: it must never change a
+        # simulated outcome, which test_dataset.py asserts directly.
+        self.recorder = recorder
+        self.strategy_name = strategy_name or getattr(allocator, "name", "")
 
         # Stage Zone cells are a shared fleet resource, claimed on the
         # way in. A robot's spawn cell gives it no title to anything.
@@ -951,15 +1012,18 @@ class WorkloadExecutor:
         """Give every FREE charger to the robot that has waited best for it.
 
         One idempotent pass per dispatch, so it fires both when a
-        charger is released and when a waiting robot arrives in holding.
-        The pair (FREE charger, HOLDING robot) therefore never survives
-        a tick, which is what stops a robot sitting in a holding cell
-        while a charger stands empty.
+        charger is released and when a robot starts waiting. The pair
+        (FREE reachable charger, waiting robot) therefore never survives
+        a tick, which is what stops a robot sitting in holding, or on a
+        Stage Zone, while a charger stands empty.
 
-        Robot priority is the frozen queue discipline. The cell each
-        promoted robot gets is its cheapest FREE charger by directed A*
-        from the aisle cell it will really set off from -- never
-        Manhattan. Returns how many robots were promoted.
+        A waiting robot is one in holding or, after saturation, on a
+        Stage Zone; both wait in one queue (docs/DECISIONS.md, "Stage
+        Zone Promotion"). Robot priority is the frozen queue discipline.
+        The cell each promoted robot gets is its cheapest FREE charger
+        by directed A* from the cell it will really set off from --
+        never Manhattan -- among the chargers it can reach on the SOC it
+        has now. Returns how many robots were promoted.
         """
 
         self._expire_promises()
@@ -967,17 +1031,18 @@ class WorkloadExecutor:
         waiting = [
             robot_id
             for robot_id, record in self.charge.items()
-            if record.state is ChargeState.HOLDING
+            if record.state in WAITING_STATES
         ]
 
         if not waiting:
             return 0
 
         # Bank cells a robot is standing on are not free to give away.
-        # A waiting robot stands on its holding cell, never on a
-        # charger, so no candidate excludes itself here.
+        # A waiting robot stands on its holding cell or Stage Zone,
+        # never on a charger, so no candidate excludes itself here.
         blocked = frozenset(robot.cell for robot in self.engine.robots.values())
 
+        now = self.engine.time
         promoted = 0
 
         for robot_id in self._queue_order(waiting):
@@ -1001,21 +1066,36 @@ class WorkloadExecutor:
                 break
 
             record = self.charge[robot_id]
+            start, exit_m = self._promotion_start(robot_id, record)
+            soc = self.battery.soc(robot_id, now)
 
-            # A holding cell is non-transit, so no route starts on one:
-            # the robot leaves by reversing into its access cell, and
-            # that is where its charger route begins.
             costs = {}
 
             for zone_id in candidates:
-                cost = self.chargers.route_cost(
-                    record.access_cell, zone_id, self.routes
-                )
+                cost = self.chargers.route_cost(start, zone_id, self.routes)
 
-                if cost is not None:
-                    costs[zone_id] = cost
+                if cost is None:
+                    continue
+
+                # Battery reachability: the robot must reach the charger
+                # with charge left, by the route it would really drive.
+                if travel_energy(self.battery.config, exit_m + cost) > soc:
+                    continue
+
+                costs[zone_id] = cost
 
             if not costs:
+                if record.charger_out_of_reach_at is None:
+                    record.charger_out_of_reach_at = now
+
+                    self._battery_event(
+                        robot_id,
+                        "OUT_OF_REACH",
+                        record.reason,
+                        f"no free charger within {float(soc):.4f}% from "
+                        f"{record.kind} {record.zone_id}; keeps waiting",
+                    )
+
                 continue
 
             zone_id = min(costs, key=lambda candidate: (costs[candidate], candidate))
@@ -1030,16 +1110,38 @@ class WorkloadExecutor:
 
         return promoted
 
+    def _promotion_start(self, robot_id, record):
+        """Where a waiting robot's charger route begins, and the metres before it.
+
+        A holding cell is non-transit and is left by reversing into its
+        access cell, so the charger route starts there, one cell away. A
+        Stage Zone is left the way every robot leaves one for its first
+        order: by the directed A* route from the Stage Zone cell itself.
+        """
+
+        if record.kind == "holding":
+            return record.access_cell, self.warehouse.grid.resolution
+
+        return self.engine.robots[robot_id].cell, 0
+
     def _expire_promises(self) -> None:
         """Drop a preemption promise its robot can no longer collect.
 
         A promise is owed to a robot on its way to, or already in, a
-        holding cell. If it ended up somewhere else -- a Stage Zone
-        under saturation, or back in the fleet -- the charger goes back
-        on general offer rather than standing empty for nobody.
+        holding cell or a fallback Stage Zone. If it ended up somewhere
+        else -- back in the fleet, or already on a charger -- the charger
+        goes back on general offer rather than standing empty for
+        nobody.
         """
 
-        owed = frozenset({ChargeState.TO_HOLDING, ChargeState.HOLDING})
+        owed = frozenset(
+            {
+                ChargeState.TO_HOLDING,
+                ChargeState.HOLDING,
+                ChargeState.TO_STAGE_FALLBACK,
+                ChargeState.STAGE_FALLBACK,
+            }
+        )
 
         for zone_id, slot in self.chargers.slots.items():
             if slot.promised_to is None:
@@ -1053,21 +1155,24 @@ class WorkloadExecutor:
     def _grant_charger(self, robot_id, record, zone_id, cost) -> None:
         """Reserve a FREE charger for a waiting robot and start it leaving.
 
-        The holding slot goes OCCUPIED -> VACATING before the robot
-        moves and is released only once it physically stands on its
-        access cell, exactly as a charger is. So an entering and a
-        leaving robot can never meet on a terminal access edge, and no
+        From holding, the holding slot goes OCCUPIED -> VACATING before
+        the robot moves and is released only once it physically stands
+        on its access cell, exactly as a charger is. So an entering and
+        a leaving robot can never meet on a terminal access edge, and no
         second robot can be promoted into the cell being vacated.
+
+        From a Stage Zone, the robot drives straight off by its charger
+        route, and its Stage Zone claim is handed back. Nobody can be
+        given that cell while the robot is still on it: a bank cell a
+        robot stands on is never free (StageParking.free_zones).
         """
 
         now = self.engine.time
 
-        # Raises rather than double-booking if either side is already
-        # held: one robot, one charger, one holding cell.
+        # Raises rather than double-booking if the charger is already
+        # held: one robot, one charger.
         self.chargers.reserve(zone_id, robot_id, now, cost)
-        self.holding.vacate(record.zone_id, robot_id)
 
-        record.state = ChargeState.LEAVING_HOLDING
         record.promoted_at = now
 
         self.result.promotions += 1
@@ -1076,21 +1181,31 @@ class WorkloadExecutor:
             robot_id,
             "PROMOTE",
             record.reason,
-            f"holding {record.zone_id} -> charger {zone_id}, "
+            f"{record.kind} {record.zone_id} -> charger {zone_id}, "
             f"directed A* {cost:.1f} m",
         )
 
-        self._reverse_off_terminal(robot_id, record)
+        if record.kind == "holding":
+            # Raises rather than double-booking: one holding cell.
+            self.holding.vacate(record.zone_id, robot_id)
+
+            record.state = ChargeState.LEAVING_HOLDING
+
+            self._reverse_off_terminal(robot_id, record)
+            return
+
+        self.result.stage_promotions += 1
+
+        self.parking.release(robot_id)
+
+        record.state = ChargeState.PROMOTED
+
+        self.charge_history.append(record)
+
+        self._drive_to_charger(robot_id, record, zone_id)
 
     def _leave_holding(self, robot_id) -> None:
-        """A promoted robot is clear of holding: drive to its charger.
-
-        The holding trip ends here and the charger trip is a new
-        record, so every record still describes exactly one terminal.
-        The original charge request is carried over rather than
-        restarted, which is what keeps the queue discipline and the
-        reporting honest about how long the robot really waited.
-        """
+        """A promoted robot is clear of holding: drive to its charger."""
 
         record = self.charge[robot_id]
         now = self.engine.time
@@ -1116,6 +1231,19 @@ class WorkloadExecutor:
 
         self.charge_history.append(record)
 
+        self._drive_to_charger(robot_id, record, zone_id)
+
+    def _drive_to_charger(self, robot_id, record, zone_id) -> None:
+        """Start the charger trip of a robot promoted out of waiting.
+
+        The waiting trip has ended and the charger trip is a new record,
+        so every record still describes exactly one terminal. The
+        original charge request is carried over rather than restarted,
+        which is what keeps the queue discipline and the reporting
+        honest about how long the robot really waited.
+        """
+
+        now = self.engine.time
         slot = self.chargers.slots[zone_id]
 
         trip = ChargeRecord(
@@ -1131,6 +1259,7 @@ class WorkloadExecutor:
             route_cost_m=slot.route_cost_m,
             departed_at=now,
             promoted_from=record.zone_id,
+            promoted_from_kind=record.kind,
         )
 
         # The same production router and non-transit view the promotion
@@ -1613,6 +1742,403 @@ class WorkloadExecutor:
 
         return self._perf.stage(name)
 
+    @staticmethod
+    def resolve_window(window, fleet_size: int) -> int | None:
+        """Width of the candidate window, or None for the legacy rule.
+
+        A scientific parameter, so an unrecognised value is an error
+        rather than a silent fallback to a default that would change
+        every measured result.
+        """
+
+        if window == "legacy":
+            return None
+
+        if window == "fleet_size":
+            return fleet_size
+
+        width = int(window)
+
+        if width < 1:
+            raise ValueError(f"allocation window must be >= 1, got {width}")
+
+        return width
+
+    def _assignable(self, free, orders) -> bool:
+        """Does any (free robot, order) pair in here stand up?
+
+        Assignable means reachable and, with a battery, battery-eligible
+        -- scored through the allocator's shared ``score()`` so the route
+        and energy are exactly what allocation would use. This is a
+        feasibility probe, not a decision: it asks whether a choice
+        exists, never which one to take, so the answer is the same for
+        every strategy.
+        """
+
+        context = None if self.battery is None else self._battery_context(free)
+
+        candidates = self.allocator.score(
+            self.warehouse,
+            [(robot_id, self.engine.robots[robot_id].cell) for robot_id in free],
+            list(orders),
+            self.fifo_position,
+            self.routes,
+            battery=context,
+        )
+
+        if context is not None:
+            self.result.availability_pairs += context.evaluated
+
+        return any(candidate.eligible for candidate in candidates)
+
+    def _candidate_window(self, free, pending) -> tuple:
+        """The orders this allocation decision may choose from.
+
+        Width is the configured window (S0), not the number of free
+        robots: a lone free robot still chooses among the whole window,
+        which is what gives a strategy anything to decide. The result is
+        always a FIFO prefix of ``pending``.
+
+        The FIFO liveness rule. A strict prefix can hold nothing any
+        free robot can take -- a dear order at the head with the fleet
+        low on charge -- while a feasible order sits just behind it. The
+        allocator then returns nothing, recovery parks the robots
+        because they owe no work, and the run stalls with orders
+        outstanding. So when the prefix offers no assignable pair at
+        all, the window is extended down the FIFO sequence until one
+        appears, or the queue is exhausted.
+
+        This is liveness, not priority. It widens the choice; it never
+        reorders the queue, and it runs only when the choice would
+        otherwise be empty, so FIFO preference is untouched. It is
+        computed from routing and energy alone, so every strategy is
+        handed the same window.
+
+        See docs/DECISIONS.md, "Allocation Candidate Window" and "FIFO
+        Liveness Rule".
+        """
+
+        if self._window_width is None:
+            # Legacy: the pre-S0 rule exactly -- a strict prefix sized
+            # by the free robots, with no liveness extension. Extending
+            # it here would move the frozen baselines this mode exists
+            # to reproduce, so legacy can still stall. That is the point
+            # of keeping it: the stall stays reproducible.
+            return self.queue.eligible(min(len(free), len(pending)))
+
+        window = self.queue.eligible(min(self._window_width, len(pending)))
+
+        if len(window) >= len(pending) or self._assignable(free, window):
+            return window
+
+        # Nothing in the prefix can be taken. Walk on down the sequence.
+        for extra in range(len(window) + 1, len(pending) + 1):
+            self.result.window_extensions += 1
+
+            window = self.queue.eligible(extra)
+
+            if self._assignable(free, window[-1:]):
+                break
+
+        return window
+
+    def _quantum_hold(self, free, pending) -> bool:
+        """Should this decision wait for more robots to come free?
+
+        The dispatch quantum (S0b). The candidate window fixes the
+        *order* side of a decision; this fixes the *robot* side. Under
+        continuous dispatch robots come free one at a time -- the
+        measured median gap on the 100-order workload is 2.0 s -- so
+        almost every decision offers a single robot, and Hungarian and
+        MILP reduce to argmin and collapse onto greedy nearest. Holding
+        a freed robot briefly lets several be allocated together.
+
+        The window is measured from the robot that has been free
+        longest, so a steady trickle of arrivals cannot postpone a
+        decision indefinitely: every robot is dispatched within one
+        quantum of becoming free, whatever happens around it.
+
+        Nothing is held when holding cannot pay:
+
+          * no quantum configured, or nothing free
+          * the window has already been open a full quantum
+          * there are no more orders than robots already in hand
+          * no robot is in flight on an order, so none can come free
+
+        Infrastructure, not policy: the hold is computed from the clock
+        and the free pool alone, identically for every strategy, and it
+        never touches which robot gets which order.
+
+        See docs/DECISIONS.md, "Dispatch Batching".
+        """
+
+        if not self.dispatch_quantum or not free:
+            return False
+
+        now = self.engine.time
+
+        for robot_id in free:
+            self._free_since.setdefault(robot_id, now)
+
+        for robot_id in [r for r in self._free_since if r not in free]:
+            del self._free_since[robot_id]
+
+        if now - min(self._free_since[r] for r in free) >= self.dispatch_quantum:
+            return False
+
+        if len(free) >= len(pending):
+            return False
+
+        if not self.active:
+            # Nothing is running, so no further robot can come free and
+            # waiting would buy nothing but idle drain.
+            return False
+
+        self._arm_quantum(min(self._free_since[r] for r in free))
+
+        return True
+
+    def _arm_quantum(self, opened_at) -> None:
+        """Ask the engine to tick again when this window closes."""
+
+        closes_at = opened_at + self.dispatch_quantum
+
+        if self._quantum_armed == closes_at:
+            # Already armed for exactly this instant; a second timer
+            # would only duplicate the tick.
+            return
+
+        self._quantum_armed = closes_at
+
+        self.engine.schedule_timer(
+            closes_at - self.engine.time, detail="dispatch quantum"
+        )
+
+    def _record_candidates(self, free, window, battery, assignments) -> None:
+        """Write one dataset row per scored (robot, order) pair.
+
+        The candidate set is scored *here*, by the executor, through the
+        allocator's shared ``score()`` -- not reported by the strategy.
+        A strategy therefore cannot under-report what it was offered,
+        and the logged candidate set is identical for every strategy on
+        the same state, which is what makes two strategies comparable at
+        all.
+
+        Every row is finalized before any mission is planned and never
+        revisited, so nothing realized can reach it. Only ``selected``
+        depends on the allocator, and a selection is a decision, not an
+        outcome.
+
+        See docs/DECISIONS.md, "Dataset Granularity and Labels" and
+        "No-Leakage Enforcement".
+        """
+
+        now = self.engine.time
+
+        candidates = self.allocator.score(
+            self.warehouse,
+            [(robot_id, self.engine.robots[robot_id].cell) for robot_id in free],
+            list(window),
+            self.fifo_position,
+            self.routes,
+            battery=battery,
+        )
+
+        chosen = {
+            (assignment.robot_id, assignment.order_id)
+            for assignment in (assignments or ())
+        }
+
+        decision_id = self.result.decisions - 1
+
+        shared = {
+            "run_id": self.recorder.run_id,
+            "decision_id": decision_id,
+            "sim_time": float(now),
+            "sim_time_exact": exact(now),
+            "strategy": self.strategy_name,
+            "window": str(self.window),
+            "window_width": self._window_width,
+            "dispatch_quantum_s": float(self.dispatch_quantum),
+            "free_robots": len(free),
+            "window_orders": len(window),
+            "choice_bearing": len(free) * len(window) > 1,
+            "pending_orders": len(self.queue.pending()),
+            "robots_busy": len(self.active),
+            "robots_charging": len(self.charge),
+        }
+
+        for candidate in candidates:
+            robot = self.engine.robots[candidate.robot_id]
+            order = self.queue.order(candidate.order_id)
+            energy = candidate.energy
+
+            soc = None if self.battery is None else self.battery.soc(robot.robot_id, now)
+
+            plan = candidate.route.plan
+
+            row = dict(shared)
+            row.update(
+                {
+                    "robot_id": candidate.robot_id,
+                    "order_id": candidate.order_id,
+                    "robot_x": int(robot.cell[0]),
+                    "robot_y": int(robot.cell[1]),
+                    "robot_soc_percent": None if soc is None else float(soc),
+                    "robot_soc_exact": exact(soc),
+                    "fifo_position": int(candidate.fifo_position),
+                    "order_shelf_count": len(order.shelf_ids),
+                    "order_dropoff_id": order.dropoff_id,
+                    "c_static_m": float(candidate.cost),
+                    "route_reachable": candidate.reachable,
+                    "route_cells": 0 if plan is None else len(plan.path),
+                    "battery_eligible": candidate.battery_eligible,
+                    "eligible": candidate.eligible,
+                    "selected": (candidate.robot_id, candidate.order_id) in chosen,
+                }
+            )
+
+            if energy is not None:
+                row.update(
+                    {
+                        "predicted_travel_energy_percent": float(
+                            energy.predicted_order_travel_energy_percent
+                        ),
+                        "predicted_service_energy_percent": float(
+                            energy.predicted_service_energy_percent
+                        ),
+                        "predicted_charger_distance_m": float(
+                            energy.predicted_nearest_charger_distance_m
+                        ),
+                        "predicted_charger_energy_percent": float(
+                            energy.predicted_charger_energy_percent
+                        ),
+                        "reserve_percent": float(energy.reserve_percent),
+                        "required_soc_percent": float(energy.required_soc_percent),
+                        "required_soc_exact": exact(energy.required_soc_percent),
+                        "energy_margin_percent": float(energy.energy_margin_percent),
+                        "energy_margin_exact": exact(energy.energy_margin_percent),
+                        "nearest_charger_id": energy.nearest_charger_id,
+                    }
+                )
+
+            self.recorder.decision(row)
+
+    def _record_launch(self, assignment, record) -> None:
+        """Snapshot the robot's counters as one order's mission starts.
+
+        Per-order realized cost is the difference between this snapshot
+        and the one taken at completion. The robot's own counters are
+        cumulative totals, so differencing is what attributes them to a
+        single order. Sound because a robot runs one order at a time and
+        never charges mid-order, and because travel to a charger or a
+        Stage Zone falls between orders rather than inside one.
+
+        See docs/DECISIONS.md, "Phase 8 Schema Gaps To Close".
+        """
+
+        now = self.engine.time
+        robot = self.engine.robots[assignment.robot_id]
+
+        self.recorder.launched(
+            assignment.order_id,
+            {
+                "decision_id": self.result.decisions - 1,
+                "robot_id": assignment.robot_id,
+                "launched_at": now,
+                "distance_m": robot.distance_m,
+                "travel_time_s": robot.travel_time_s,
+                "waiting_time_s": robot.waiting_time_s,
+                "service_time_s": robot.service_time_s,
+                "soc": None if self.battery is None else self.battery.soc(
+                    assignment.robot_id, now
+                ),
+                "charge_sessions": self.result.charge_sessions,
+                "yield_events": self.result.yield_events,
+                "predicted_distance_m": record.planned_distance_m,
+            },
+        )
+
+    def _record_outcome(self, order_id: str, robot_id: str) -> None:
+        """Write one order's realized outcome, by counter difference."""
+
+        start = self.recorder.snapshot_of(order_id)
+
+        if start is None:
+            # No launch snapshot: the order never ran under this
+            # recorder, so there is nothing realized to report.
+            return
+
+        # The order was fulfilled at its drop-off; the clock has since
+        # moved on by the retreat. Completion time is the drop-off, the
+        # realized costs are the whole mission.
+        now = self.engine.time
+        completed_at = start.get("completed_at", now)
+
+        robot = self.engine.robots[robot_id]
+
+        soc = None if self.battery is None else self.battery.soc(robot_id, now)
+
+        consumed = (
+            None
+            if soc is None or start["soc"] is None
+            else start["soc"] - soc
+        )
+
+        self.recorder.outcome(
+            {
+                "run_id": self.recorder.run_id,
+                "order_id": order_id,
+                "decision_id": start["decision_id"],
+                "robot_id": robot_id,
+                "launched_at": float(start["launched_at"]),
+                "launched_at_exact": exact(start["launched_at"]),
+                "completed_at": float(completed_at),
+                "completed_at_exact": exact(completed_at),
+                "realized_distance_m": robot.distance_m - start["distance_m"],
+                "realized_travel_time_s": robot.travel_time_s
+                - start["travel_time_s"],
+                "realized_waiting_s": robot.waiting_time_s - start["waiting_time_s"],
+                "realized_service_s": robot.service_time_s - start["service_time_s"],
+                "realized_duration_s": float(completed_at - start["launched_at"]),
+                "retreat_finished_at": float(now),
+                "energy_consumed_percent": (
+                    None if consumed is None else float(consumed)
+                ),
+                "energy_consumed_exact": exact(consumed),
+                "soc_at_launch_percent": (
+                    None if start["soc"] is None else float(start["soc"])
+                ),
+                "soc_at_completion_percent": None if soc is None else float(soc),
+                "charge_sessions_before": start["charge_sessions"],
+                "yield_events_during": self.result.yield_events
+                - start["yield_events"],
+                "predicted_distance_m": start["predicted_distance_m"],
+                "success": True,
+            }
+        )
+
+    def _record_decision(self, free, window) -> None:
+        """Record the shape of one allocation decision.
+
+        ``robots x orders == 1`` is a *forced* decision: there is one
+        pair and every strategy returns it. Only choice-bearing
+        decisions can distinguish one strategy from another, so they are
+        counted separately and are the denominator the distinctness gate
+        uses (docs/DECISIONS.md, "Strategy Distinctness Gate").
+        """
+
+        shape = (len(free), len(window))
+
+        self.result.decision_log.append((self.engine.time, shape[0], shape[1]))
+        self.result.decisions += 1
+        self.result.decision_shapes[shape] = (
+            self.result.decision_shapes.get(shape, 0) + 1
+        )
+
+        if shape[0] * shape[1] > 1:
+            self.result.choice_bearing += 1
+
     def _dispatch(self) -> int:
 
         started = self.retry_deferred()
@@ -1657,8 +2183,14 @@ class WorkloadExecutor:
         if self.battery is not None:
             battery = self._battery_context(free)
 
+        if self._quantum_hold(free, pending):
+            self.result.quantum_holds += 1
+            return started
+
         # FIFO decides the candidate set; the allocator decides pairing.
-        eligible = self.queue.eligible(len(free))
+        eligible = self._candidate_window(free, pending)
+
+        self._record_decision(free, eligible)
 
         with self._stage("allocator"):
             assignments = self.allocator.assign(
@@ -1677,6 +2209,14 @@ class WorkloadExecutor:
             # Before any order changes state: an ineligible pair stops
             # the run here rather than being executed or re-routed.
             self._check_battery_feasibility(assignments, battery)
+
+        # Dataset row per scored pair, built before launch_batch plans
+        # anything or any robot moves. A deferral is still a decision and
+        # is still recorded: "nothing was assignable" is a fact about the
+        # state, and dropping it would bias the dataset towards decisions
+        # that happened to succeed.
+        if self.recorder is not None:
+            self._record_candidates(free, eligible, battery, assignments)
 
         if not assignments:
             self.result.deferrals += 1
@@ -1831,6 +2371,9 @@ class WorkloadExecutor:
 
             self.result.dispatches.append(record)
 
+            if self.recorder is not None:
+                self._record_launch(assignment, record)
+
             if self.on_dispatch is not None:
                 self.on_dispatch(record)
 
@@ -1975,6 +2518,19 @@ class WorkloadExecutor:
             )
         )
 
+        if self.recorder is not None:
+            # The order is *fulfilled* here, at the drop-off service, so
+            # this is its completion instant. Its realized cost is not
+            # final yet: the robot still has the post-drop-off retreat
+            # to drive, and C_static includes that retreat (the energy
+            # equation requires it). Writing the row now would make
+            # realized distance one cell short of predicted on every
+            # single order. The row is written at retirement instead.
+            snapshot = self.recorder.snapshot_of(order_id)
+
+            if snapshot is not None:
+                snapshot["completed_at"] = self.engine.time
+
     def _retire(self, robot_id: str) -> None:
         """Retire one finished mission.
 
@@ -2070,8 +2626,14 @@ class WorkloadExecutor:
 
             if robot_id in self.active:
                 # Retreat done; the order was completed at drop-off.
-                self.active.pop(robot_id)
+                finished = self.active.pop(robot_id)
                 self._services_left.pop(robot_id, None)
+
+                if self.recorder is not None:
+                    # Now the whole mission is driven, retreat included,
+                    # so realized and predicted cover the same route.
+                    self._record_outcome(finished, robot_id)
+
                 self._retire(robot_id)
 
                 if self.battery is not None:
@@ -2138,8 +2700,10 @@ class WorkloadExecutor:
         )
 
     def finished(self) -> bool:
-        # A robot on a holding cell or fallback Stage Zone stays there
-        # (promotion is B5), so those count as settled. A robot that is
+        # A robot in holding or on a fallback Stage Zone is settled
+        # while no FREE charger is within its reach: promotion moves it
+        # the instant one is (B5), so the run cannot end with a waiting
+        # robot beside a charger it could take. A robot that is
         # in REQUEST, driving to a terminal, charging, or reversing off
         # a charger is NOT finished: its charge will complete and it
         # will rejoin the fleet. Every other robot must be parked.
@@ -2271,6 +2835,69 @@ def battery_event_line(event: BatteryEvent) -> str:
     )
 
 
+def decision_report_lines(executor) -> list[str]:
+    """What shape the allocation decisions had (S0).
+
+    The one number that decides whether a strategy comparison means
+    anything: a decision offering a single robot a single order is
+    answered identically by every strategy, so only the choice-bearing
+    ones can tell two strategies apart.
+
+    See docs/DECISIONS.md, "Allocation Candidate Window" and "Strategy
+    Distinctness Gate".
+    """
+
+    result = executor.result
+
+    total = result.decisions
+
+    forced = sum(
+        count
+        for shape, count in result.decision_shapes.items()
+        if shape[0] * shape[1] == 1
+    )
+
+    def share(count: int) -> str:
+        return "n/a" if not total else f"{100.0 * count / total:.1f} %"
+
+    width = executor._window_width
+
+    lines = [
+        "ALLOCATION DECISIONS (candidate window; same for every strategy)",
+        f"  window           : {executor.window} "
+        + ("(W = available robots)" if width is None else f"(W = {width})"),
+        f"  decisions        : {total}",
+        f"  choice-bearing   : {result.choice_bearing} ({share(result.choice_bearing)})"
+        f"  -- robots x orders > 1",
+        f"  forced 1x1       : {forced} ({share(forced)})"
+        f"  -- every strategy agrees on these",
+        f"  window extensions: {result.window_extensions} "
+        f"(FIFO liveness: prefix held no assignable pair)",
+        f"  dispatch quantum : {float(executor.dispatch_quantum):.4f} s"
+        + (
+            " (continuous dispatch)"
+            if not executor.dispatch_quantum
+            else (
+                f", {result.quantum_holds} dispatch attempt(s) held "
+                f"to batch robots"
+            )
+        ),
+    ]
+
+    shapes = sorted(result.decision_shapes.items(), key=lambda kv: (-kv[1], kv[0]))
+
+    if shapes:
+        lines.append("  shapes (robots x orders -> decisions):")
+
+        for (robots, orders), count in shapes[:8]:
+            lines.append(f"    {robots:>3} x {orders:<3} : {count}")
+
+        if len(shapes) > 8:
+            lines.append(f"    ... {len(shapes) - 8} further shape(s)")
+
+    return lines
+
+
 def eligibility_report_lines(executor: "WorkloadExecutor") -> list[str]:
     """Battery eligibility at decision time, for any front end."""
 
@@ -2366,6 +2993,11 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
 
     result = executor.result
 
+    # A record can be both current and in the history; count it once.
+    trips = {id(r): r for r in (*executor.charge_history, *records)}.values()
+
+    out_of_reach = sum(1 for r in trips if r.charger_out_of_reach_at is not None)
+
     lines = [
         "CHARGING (B4: charge to 100%, leave, rejoin; B5: promotion and "
         "preemption)",
@@ -2381,8 +3013,11 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
         f"{count(ChargeState.REQUEST)}",
         f"  charge sessions   : {result.charge_sessions} started, "
         f"{result.rejoins} robot(s) back in the fleet",
-        f"  promotions        : {result.promotions} out of holding onto a "
-        f"freed charger (lowest SOC first)",
+        f"  promotions        : {result.promotions} onto a freed charger, "
+        f"lowest SOC first ({result.promotions - result.stage_promotions} "
+        f"from holding, {result.stage_promotions} from a Stage Zone)",
+        f"  out of reach      : {out_of_reach} waiting robot(s) passed over "
+        f"for a free charger they could not reach on their SOC",
         f"  preemptions       : {result.preemptions} charge(s) cut short "
         f"({result.preempt_rejoins} victim(s) rejoined, "
         f"{result.preempt_to_holding} went to holding)",
@@ -2471,8 +3106,9 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
 
     # The B3 invariant: a requester leaves the aisle at the instant it
     # asks, so this must stay 0. A promoted robot is deliberately not
-    # counted here -- it departs when its holding cell is clear, and it
-    # waited on a terminal, never in an aisle. Its wait is the queue
+    # counted here -- it departs when its holding cell is clear or as it
+    # is promoted off a Stage Zone, and it waited on a terminal, never
+    # in an aisle. Its wait is the queue
     # wait below, which is a B5 outcome rather than an invariant.
     waited = [
         record.departed_at - record.requested_at
@@ -2482,7 +3118,7 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
 
     queued = [
         record.departed_at - record.requested_at
-        for record in (*executor.charge_history, *records)
+        for record in trips
         if record.departed_at is not None and record.promoted_from is not None
     ]
 
@@ -2495,7 +3131,8 @@ def charging_report_lines(executor: "WorkloadExecutor") -> list[str]:
     if queued:
         lines.append(
             f"  request -> charger   : max "
-            f"{float(max(queued)):.4f} s waited in holding over "
+            f"{float(max(queued)):.4f} s waited in holding or on a Stage "
+            f"Zone over "
             f"{len(queued)} promoted trip(s)"
         )
 

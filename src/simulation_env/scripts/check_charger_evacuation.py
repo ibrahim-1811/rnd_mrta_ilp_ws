@@ -53,7 +53,7 @@ from simulation_env.workload_executor import (
 from task_management.allocation_strategy import get_batch_strategy
 
 
-CONFIGS = Path(__file__).resolve().parents[1] / "config"
+CONFIGS = Path(__file__).resolve().parents[1] / "test" / "fixtures"
 
 
 def low(*numbers, soc=9):
@@ -81,7 +81,7 @@ SCENARIOS = {
 }
 
 
-def run(name, config="warehouse_sim.yaml", overrides=None, holding=None):
+def run(name, config="v2_reference.yaml", overrides=None, holding=None):
 
     cfg = load_sim_config(CONFIGS / config)
 
@@ -225,16 +225,32 @@ def check(ex, moves, soc_rose):
 
         elif record.state is ChargeState.PROMOTED:
             # B5: a waiting robot given a freed charger. It may only
-            # have left its holding cell because it was promoted, and
-            # the cell must be released rather than left occupied.
-            if record.kind != "holding":
+            # have left its holding cell or Stage Zone because it was
+            # promoted, and the cell must be released rather than left
+            # occupied.
+            if record.kind not in ("holding", "stage"):
                 problems.append(f"{robot_id} was promoted out of {record.kind}")
 
-            if record.promoted_at is None or record.left_holding_at is None:
-                problems.append(f"{robot_id} left holding without a promotion")
+            if record.promoted_at is None:
+                problems.append(f"{robot_id} left {record.kind} without a promotion")
 
-            if ex.holding.slots[record.zone_id].robot_id == robot_id:
-                problems.append(f"{record.zone_id} was not released")
+            if record.kind == "holding":
+                if record.left_holding_at is None:
+                    problems.append(f"{robot_id} left holding without a promotion")
+
+                if ex.holding.slots[record.zone_id].robot_id == robot_id:
+                    problems.append(f"{record.zone_id} was not released")
+
+            follow = [
+                r
+                for r in trips
+                if r.robot_id == robot_id
+                and r.kind == "charger"
+                and r.promoted_from == record.zone_id
+            ]
+
+            if not follow:
+                problems.append(f"{robot_id} was promoted onto no charger")
 
             if record.charge_started_at is not None:
                 problems.append(f"{robot_id} charged in a {record.kind} cell")

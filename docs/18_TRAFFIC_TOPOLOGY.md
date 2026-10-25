@@ -1,5 +1,12 @@
 # 18 — Directed warehouse traffic topology
 
+> **Paths in this document are as of when it was written.** Since
+> 2026-10-23 the V2 map, its config (`v2_reference.yaml`, formerly
+> `warehouse_sim.yaml`) and its order lists live in
+> `src/simulation_env/test/fixtures/`, and V1 (`CSV_To_Gazebo.xlsx`) is
+> removed. To run the system today see [START_HERE.md](START_HERE.md).
+
+
 Why the aisles are one-way, and what must stay true about them.
 
 Authoritative source: `src/mrta_core/mrta_core/warehouse_routing.py`.

@@ -6,12 +6,13 @@ terminal and drives there by the production directed A* route (B3). On a
 charger it then charges to 100%, reverses into the access aisle cell and
 rejoins the fleet (B4).
 
-A robot that reached a *holding* cell is a waiting robot. When a charger
-becomes FREE it is promoted out of holding onto that charger (B5), and a
-CHARGE_DUE robot that finds every charger occupied may preempt the
-highest-SOC charging robot (B5). Both are frozen policy; see
-docs/DECISIONS.md, "Charger Saturation and Preemption", "Charger Queue
-Discipline" and "Preempted Robot".
+A robot that reached a *holding* cell, or a Stage Zone under
+saturation, is a waiting robot. When a charger becomes FREE the waiting
+robot first in the queue is promoted onto it (B5), and a CHARGE_DUE
+robot that finds every charger occupied may preempt the highest-SOC
+charging robot (B5). Both are frozen policy; see docs/DECISIONS.md,
+"Charger Saturation and Preemption", "Charger Queue Discipline",
+"Stage Zone Promotion" and "Preempted Robot".
 
 Resource states
 ---------------
@@ -108,8 +109,11 @@ class ChargeState(str, Enum):
     # cell into its access aisle cell (B5). The charger trip itself is a
     # new record, so this state ends the holding trip.
     LEAVING_HOLDING = "LEAVING_HOLDING"
+    # The waiting trip ended in a granted charger: off holding, or
+    # driving off a Stage Zone (B5).
     PROMOTED = "PROMOTED"
-    # Saturation: every charger and holding cell is taken.
+    # Saturation: every charger and holding cell is taken. The robot
+    # waits on the Stage Zone and is promoted like a holding robot.
     TO_STAGE_FALLBACK = "TO_STAGE_FALLBACK"
     STAGE_FALLBACK = "STAGE_FALLBACK"
 
@@ -147,13 +151,16 @@ LEAVING_CHARGER_STATES = frozenset(
 # In flight either way: the robot is not a stationary obstacle.
 MOVING_STATES = TRAVEL_STATES | LEAVING_STATES
 
+# Waiting for a charger, in the queue the promotion pass serves.
+WAITING_STATES = frozenset({ChargeState.HOLDING, ChargeState.STAGE_FALLBACK})
+
 # Standing still on a reserved non-transit terminal, with nothing
 # scheduled to move it. A charging robot is NOT settled -- its charge
 # will finish and it will rejoin -- so the run must not be considered
-# over while it charges. A HOLDING robot is settled only for as long as
-# every charger is taken: since B5 it is promoted in the same instant
-# one becomes FREE, so the pair (FREE charger, HOLDING robot) never
-# survives a tick.
+# over while it charges. A HOLDING or STAGE_FALLBACK robot is settled
+# only for as long as no FREE charger is within its reach: since B5 it
+# is promoted in the same instant one becomes FREE, so the pair (FREE
+# reachable charger, waiting robot) never survives a tick.
 SETTLED_STATES = frozenset(
     {
         ChargeState.OCCUPIED_CHARGER,
@@ -262,13 +269,20 @@ class ChargeRecord:
 
     # -- promotion (B5) ------------------------------------------------
     #
-    # A holding trip ends when its robot is granted a charger. The
-    # charger trip that follows is a separate record, so each record
-    # still describes exactly one terminal.
+    # A holding or Stage Zone trip ends when its robot is granted a
+    # charger. The charger trip that follows is a separate record, so
+    # each record still describes exactly one terminal. A holding robot
+    # first reverses off its cell (left_holding_at); a Stage Zone robot
+    # drives off in the instant it is promoted.
     promoted_at: Fraction | None = None
     left_holding_at: Fraction | None = None
-    # On the charger trip: the holding zone the robot was promoted from.
+    # The first instant a charger was FREE but none was within this
+    # waiting robot's SOC. Reporting only.
+    charger_out_of_reach_at: Fraction | None = None
+    # On the charger trip: the holding zone or Stage Zone the robot was
+    # promoted from, and which of the two it was.
     promoted_from: str | None = None
+    promoted_from_kind: str | None = None
 
 
 class TerminalBank:

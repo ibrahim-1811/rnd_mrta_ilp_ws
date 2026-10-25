@@ -36,7 +36,8 @@ from simulation_env.workload_executor import WorkloadExecutor
 from task_management.allocation_strategy import get_batch_strategy
 
 
-CONFIGS = Path(__file__).resolve().parents[1] / "config"
+CONFIGS = Path(__file__).resolve().parent / "fixtures"
+ONE_CONFIG = Path(__file__).resolve().parents[1] / "config" / "warehouse.yaml"
 
 BATTERY = BatteryConfig()
 
@@ -46,7 +47,7 @@ MOVE_S = Fraction(2, 3)
 
 @pytest.fixture(scope="module")
 def config():
-    return load_sim_config(CONFIGS / "warehouse_sim.yaml")
+    return load_sim_config(CONFIGS / "v2_reference.yaml")
 
 
 @pytest.fixture(scope="module")
@@ -457,15 +458,15 @@ def test_override_for_a_robot_outside_the_fleet_is_refused(config, warehouse):
 
 
 @pytest.mark.parametrize(
-    "name",
+    "path",
     [
-        "warehouse_sim.yaml",
-        "warehouse_sim_10.yaml",
-        "warehouse_sim_500.yaml",
+        CONFIGS / "v2_reference.yaml",
+        ONE_CONFIG,
     ],
+    ids=["v2_reference", "warehouse"],
 )
-def test_scientific_configs_carry_no_overrides(name):
-    battery = load_sim_config(CONFIGS / name).battery
+def test_scientific_configs_carry_no_overrides(path):
+    battery = load_sim_config(path).battery
 
     assert battery == BatteryConfig()
 

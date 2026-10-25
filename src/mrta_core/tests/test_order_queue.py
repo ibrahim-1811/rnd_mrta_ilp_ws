@@ -30,9 +30,7 @@ def claim(orders, robot_ids=()):
 
     for index, order in enumerate(orders):
         order.status = OrderStatus.ASSIGNED
-        order.assigned_robot = (
-            robot_ids[index] if index < len(robot_ids) else ""
-        )
+        order.assigned_robot = robot_ids[index] if index < len(robot_ids) else ""
 
 
 # -- loading ------------------------------------------------
@@ -41,15 +39,11 @@ def claim(orders, robot_ids=()):
 def test_the_queue_holds_one_hundred_pending_orders(queue):
     assert len(queue) == 100
     assert len(queue.pending()) == 100
-    assert queue.line_item_count == sum(
-        len(order.items) for order in queue
-    )
+    assert queue.line_item_count == sum(len(order.items) for order in queue)
 
 
 def test_first_twenty_five_fifo_order_ids(queue):
-    assert list(queue.order_ids[:25]) == [
-        f"O{n:04d}" for n in range(1, 26)
-    ]
+    assert list(queue.order_ids[:25]) == [f"O{n:04d}" for n in range(1, 26)]
 
 
 def test_a_duplicate_order_id_is_rejected(warehouse):
@@ -72,9 +66,7 @@ def test_eighteen_robots_make_the_first_eighteen_orders_eligible(
 ):
     eligible = queue.eligible(ROBOTS)
 
-    assert [order.order_id for order in eligible] == [
-        f"O{n:04d}" for n in range(1, 19)
-    ]
+    assert [order.order_id for order in eligible] == [f"O{n:04d}" for n in range(1, 19)]
 
 
 def test_the_queue_head_after_the_first_batch_is_o0019(queue):
@@ -98,9 +90,7 @@ def test_three_freed_robots_get_o0019_o0020_o0021(queue):
 
     # The batch of three is taken from the head, in FIFO sequence.
     assert [
-        order.order_id
-        for order in queue.orders
-        if order.status is OrderStatus.ASSIGNED
+        order.order_id for order in queue.orders if order.status is OrderStatus.ASSIGNED
     ][18:] == ["O0019", "O0020", "O0021"]
 
 
@@ -110,7 +100,6 @@ def test_no_later_order_is_ever_skipped(queue):
     taken = []
 
     for batch in (18, 1, 3, 7, 2, 40, 11, 5, 13):
-
         eligible = queue.eligible(batch)
         taken.extend(order.order_id for order in eligible)
         claim(eligible)
@@ -155,9 +144,7 @@ def test_eligibility_is_read_only_until_an_allocator_claims(queue):
     first = queue.eligible(ROBOTS)
     second = queue.eligible(ROBOTS)
 
-    assert [order.order_id for order in first] == [
-        order.order_id for order in second
-    ]
+    assert [order.order_id for order in first] == [order.order_id for order in second]
     assert len(queue.pending()) == 100
 
 
@@ -186,7 +173,6 @@ def test_two_independent_queues_agree_on_every_batch(warehouse):
     right = OrderQueue.from_csv(WORKLOAD_CSV, warehouse)
 
     for batch in (ROBOTS, 1, 3, 12):
-
         chosen_left = left.eligible(batch)
         chosen_right = right.eligible(batch)
 

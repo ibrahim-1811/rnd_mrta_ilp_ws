@@ -88,15 +88,11 @@ def render(a, b, sim_time, event):
     print()
 
     print(
-        f"A position={a.position} "
-        f"remaining={a.remaining_distance} "
-        f"wait={a.wait_ticks}"
+        f"A position={a.position} remaining={a.remaining_distance} wait={a.wait_ticks}"
     )
 
     print(
-        f"B position={b.position} "
-        f"remaining={b.remaining_distance} "
-        f"wait={b.wait_ticks}"
+        f"B position={b.position} remaining={b.remaining_distance} wait={b.wait_ticks}"
     )
 
     print()
@@ -160,7 +156,6 @@ def main():
     time.sleep(args.delay)
 
     while not (robot_a.finished and robot_b.finished):
-
         a_next = robot_a.next_position
         b_next = robot_b.next_position
 
@@ -169,17 +164,11 @@ def main():
 
         vertex_conflict = a_next == b_next
 
-        edge_swap = (
-            a_next == robot_b.position
-            and b_next == robot_a.position
-        )
+        edge_swap = a_next == robot_b.position and b_next == robot_a.position
 
-        unsafe_distance = (
-            predicted_distance < MIN_CENTER_DISTANCE_M
-        )
+        unsafe_distance = predicted_distance < MIN_CENTER_DISTANCE_M
 
         if vertex_conflict or edge_swap or unsafe_distance:
-
             # In this demo B is the trailing robot.
             # It brakes only if simultaneous motion would be unsafe.
             if not robot_a.finished:
@@ -199,10 +188,7 @@ def main():
             if not robot_b.finished:
                 robot_b.move()
 
-            event = (
-                "Safe same-direction headway. "
-                "Both robots move simultaneously."
-            )
+            event = "Safe same-direction headway. Both robots move simultaneously."
 
         sim_time += DT
 
@@ -213,9 +199,7 @@ def main():
         )
 
         if actual_distance < MIN_CENTER_DISTANCE_M:
-            raise RuntimeError(
-                f"Safety violation: distance={actual_distance:.3f} m"
-            )
+            raise RuntimeError(f"Safety violation: distance={actual_distance:.3f} m")
 
         render(
             robot_a,

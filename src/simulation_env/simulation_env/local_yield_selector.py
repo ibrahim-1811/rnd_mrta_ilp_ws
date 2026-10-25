@@ -66,20 +66,14 @@ def select_local_yield_cell(
 
     # Use exactly the same fixed directed-road policy as normal
     # warehouse routing.
-    blocked_edges = directional_blocked_edges(
-        warehouse
-    )
+    blocked_edges = directional_blocked_edges(warehouse)
 
     candidates = []
 
     for cell in _neighbors(source):
-
         x, y = cell
 
-        if not (
-            0 <= x < grid.width
-            and 0 <= y < grid.height
-        ):
+        if not (0 <= x < grid.width and 0 <= y < grid.height):
             continue
 
         if cell in grid.obstacles:
@@ -112,11 +106,7 @@ def select_local_yield_cell(
         # A robot standing in a one-way aisle has no bay and simply
         # waits. That is safe rather than deadlocking, because two
         # robots can no longer face each other in an aisle at all.
-        if (
-            (source, cell) in blocked_edges
-            or
-            (cell, source) in blocked_edges
-        ):
+        if (source, cell) in blocked_edges or (cell, source) in blocked_edges:
             continue
 
         zone_type = warehouse.zone_type_at(cell)

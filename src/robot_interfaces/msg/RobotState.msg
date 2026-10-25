@@ -8,6 +8,8 @@
 #
 # status is one of:
 #   IDLE MOVING PICKING DROPPING CHARGING WAITING FAILED
+#
+# current_order is the order the robot is working on, empty when none.
 
 string robot_id
 
@@ -27,3 +29,8 @@ string current_order
 float64 battery_percent
 float64 speed_mps
 float64 distance_m
+
+# Where the robot is in the charging workflow, empty when it is not in
+# it: REQUEST TO_CHARGER CHARGING LEAVING_CHARGER TO_HOLDING HOLDING
+# TO_STAGE_FALLBACK STAGE_FALLBACK ...
+string charge_state

@@ -46,7 +46,7 @@ from task_management.allocation_strategy import (
 from task_management.features import order_route_cost, route_energy
 
 
-CONFIGS = Path(__file__).resolve().parents[1] / "config"
+CONFIGS = Path(__file__).resolve().parent / "fixtures"
 
 # Measured on the V2 map from robot_001's spawn cell (0, 12):
 SHORT = "O0053"  # the cheapest order to reach and finish
@@ -56,7 +56,7 @@ FAR = "O0001"  # ends at (14, 29): 28 m to a charger by A*, 4 by Manhattan
 
 @pytest.fixture(scope="module")
 def config():
-    return load_sim_config(CONFIGS / "warehouse_sim.yaml")
+    return load_sim_config(CONFIGS / "v2_reference.yaml")
 
 
 @pytest.fixture(scope="module")
@@ -85,7 +85,9 @@ def controlled(config, *, robots=None, overrides=None, reserve=None):
     )
 
 
-def executor_for(config, warehouse, orders, allocator=None, events=None):
+def executor_for(
+    config, warehouse, orders, allocator=None, events=None, window="fleet_size"
+):
     # Orders carry their own lifecycle status, so every executor gets
     # fresh copies; a shared Order completed by one test would otherwise
     # silently vanish from the next test's pending queue.
@@ -108,6 +110,7 @@ def executor_for(config, warehouse, orders, allocator=None, events=None):
         progress_interval_s=0,
         battery=config.battery,
         on_battery_event=None if events is None else events.append,
+        window=window,
     )
 
 
@@ -486,8 +489,23 @@ def test_busy_robot_crossing_ten_percent_finishes_its_order(
 
 
 def test_charge_needed_scans_all_pending_orders(config, warehouse, all_orders):
-    """Only the long order is in the one-robot batch; the short one is
-    further down the queue. That short order keeps the robot available.
+    """CHARGE_NEEDED is judged over every pending order, not the batch.
+
+    robot_001 can afford SHORT but not LONG, and LONG sits at the head
+    of the queue. It must therefore stay available: an order it can take
+    exists, so it is not CHARGE_NEEDED.
+
+    Retargeted for S0. This test used to assert that the robot then got
+    *nothing* -- ``dispatches == []`` -- because the batch was the FIFO
+    head alone and its only pair was refused. That standstill is the
+    stall the FIFO liveness rule removes, so the assertion is now the
+    opposite: the window is extended past the unaffordable head and the
+    robot is given the order it can actually run. The B2 behaviour under
+    test, that the CHARGE_NEEDED scan covers all pending orders rather
+    than the batch, is unchanged.
+
+    See docs/DECISIONS.md, "FIFO Liveness Rule", and
+    test_s0_window.py for the stall itself.
     """
 
     probe = executor_for(controlled(config, robots=1), warehouse, [all_orders[LONG]])
@@ -500,11 +518,23 @@ def test_charge_needed_scans_all_pending_orders(config, warehouse, all_orders):
     both = executor_for(between, warehouse, [all_orders[LONG], all_orders[SHORT]])
     both.dispatch()
 
+    # The head is still the head: liveness widens the window, it never
+    # reorders the queue.
     assert both.queue.eligible(1)[0].order_id == LONG
     assert "robot_001" not in both.requesting
-    assert both.result.availability_pairs == 2
-    assert both.result.dispatches == []  # its batch pair is refused
+
+    # Four pair scans, none of them an allocation: two by the
+    # CHARGE_NEEDED gate walking the pending queue, then two by the
+    # liveness probe -- the head, which fails, and the order behind it,
+    # which succeeds and closes the window.
+    assert both.result.availability_pairs == 4
+    assert both.result.window_extensions == 1
+
+    # LONG was offered and refused by the mask; SHORT was dispatched.
     assert both.result.ineligible_pairs == 1
+    assert [(d.robot_id, d.order_id) for d in both.result.dispatches] == [
+        ("robot_001", SHORT)
+    ]
 
 
 def test_one_eligible_order_prevents_charge_needed(config, warehouse, all_orders):
@@ -533,7 +563,14 @@ def test_one_eligible_order_prevents_charge_needed(config, warehouse, all_orders
 
 
 class _MaskBlindAllocator(NearestAStarAllocator):
-    """Scores with battery features but assigns on reachability alone."""
+    """Scores with battery features but assigns on reachability alone.
+
+    It takes the *dearest* reachable pair, which is the shape a
+    mask-unaware allocator fails in: with a wide candidate window
+    (S0) the cheapest pair is usually affordable anyway, so a
+    cheapest-first blind allocator would accidentally behave itself
+    and never exercise the executor's refusal.
+    """
 
     name = "mask_blind"
 
@@ -548,7 +585,7 @@ class _MaskBlindAllocator(NearestAStarAllocator):
                 )
                 if c.reachable
             ),
-            key=lambda c: (c.cost, c.fifo_position, c.robot_id),
+            key=lambda c: (-c.cost, c.fifo_position, c.robot_id),
         )
         from task_management.allocation_strategy import OrderAssignment
 

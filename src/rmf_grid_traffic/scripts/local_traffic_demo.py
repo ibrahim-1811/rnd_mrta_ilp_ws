@@ -69,10 +69,7 @@ def choose_winner(a: Robot, b: Robot):
 
 
 def render(a: Robot, b: Robot, sim_time: float, event: str):
-    grid = [
-        [" " for _ in range(WIDTH)]
-        for _ in range(HEIGHT)
-    ]
+    grid = [[" " for _ in range(WIDTH)] for _ in range(HEIGHT)]
 
     # Show the two intended routes.
     for x, y in a.route:
@@ -108,10 +105,7 @@ def render(a: Robot, b: Robot, sim_time: float, event: str):
     print()
 
     for y in reversed(range(HEIGHT)):
-        print(
-            f"{y:2d}  "
-            + " ".join(grid[y])
-        )
+        print(f"{y:2d}  " + " ".join(grid[y]))
 
     print()
     print("    " + " ".join(str(x) for x in range(WIDTH)))
@@ -187,7 +181,6 @@ def main():
     time.sleep(args.delay)
 
     while not (robot_a.finished and robot_b.finished):
-
         a_next = robot_a.next_position
         b_next = robot_b.next_position
 
@@ -198,21 +191,13 @@ def main():
         # Only that local cell needs arbitration.
         # --------------------------------------------------
 
-        if (
-            not robot_a.finished
-            and not robot_b.finished
-            and a_next == b_next
-        ):
+        if not robot_a.finished and not robot_b.finished and a_next == b_next:
             winner = choose_winner(
                 robot_a,
                 robot_b,
             )
 
-            loser = (
-                robot_b
-                if winner is robot_a
-                else robot_a
-            )
+            loser = robot_b if winner is robot_a else robot_a
 
             winner.move()
             loser.wait()

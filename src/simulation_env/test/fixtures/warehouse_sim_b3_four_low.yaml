@@ -1,3 +1,7 @@
+# CONTROLLED TEST CONFIG -- Battery V1 B3 visual acceptance: robot_001..004 start at 9% and drive to four distinct chargers.
+# Identical to v2_reference.yaml except battery.initial_soc_overrides.
+# Never use for scientific runs.
+#
 # Central warehouse simulation configuration.
 #
 # Authoritative for map, fleet, battery, service durations, orders and
@@ -14,13 +18,13 @@ warehouse:
   resolution_m: 1.0
 
 fleet:
-  robot_count: 10
+  robot_count: 22
   robot_prefix: robot_
   # Robots are deployed onto the map's home bank in id order:
   # robot_001 -> the first home station, and so on. V1 maps label
   # that bank staging_001..; V2 may label it collection_001..
   initial_position_mode: staging
-  speed_mps: 1.0
+  speed_mps: 1.5
 
 # Battery V1: a normalized, deterministic SOC model. Fixed
 # infrastructure, identical for every MRTA strategy (docs/DECISIONS.md).
@@ -45,6 +49,11 @@ battery:
   charging_percent_per_second: 1.0
   reserve_percent: 10.0
   charge_due_percent: 10.0
+  initial_soc_overrides:
+    robot_001: 9.0
+    robot_002: 9.0
+    robot_003: 9.0
+    robot_004: 9.0
 
 # Scientific service durations, used exactly as written. Nothing in
 # the visualization layer may modify these.
@@ -97,4 +106,4 @@ ros:
 
 gazebo:
   enabled: true
-  world_name: warehouse_10
+  world_name: warehouse_grid

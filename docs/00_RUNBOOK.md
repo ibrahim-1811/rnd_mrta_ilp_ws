@@ -7,6 +7,17 @@ numbers quoted are real output, not estimates.
 This is the operational document. For *why* the aisles are one-way see
 [18_TRAFFIC_TOPOLOGY.md](18_TRAFFIC_TOPOLOGY.md).
 
+> **Since 2026-10-23: one map, one config, one world.** To run the
+> system, follow [START_HERE.md](START_HERE.md). The default config is
+> now `src/simulation_env/config/warehouse.yaml` (the current map, W100),
+> and the one Gazebo world is `worlds/warehouse.world`.
+>
+> This runbook documents the **V2 reference scenario**, on which every
+> frozen baseline and most tests are measured. Its config, map and order
+> lists moved to `src/simulation_env/test/fixtures/`. The numbers below
+> are V2 numbers: where a `run_workload.py` command has no `--config`,
+> add `--config src/simulation_env/test/fixtures/v2_reference.yaml` to reproduce them.
+
 ---
 
 ## 0. Shell setup
@@ -53,10 +64,15 @@ source /opt/ros/jazzy/setup.bash
 
 colcon build --packages-select \
     mrta_core task_management simulation_env rmf_grid_traffic \
-    robot_interfaces gazebo_fleet_pose_transport
+    robot_interfaces gazebo_fleet_pose_transport \
+    --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
 
 source install/setup.bash
 ```
+
+Keep `--cmake-args`: on a fresh build CMake otherwise finds
+`~/.local/bin/python3.10`, which lacks `catkin_pkg`, and
+`rmf_grid_traffic` fails.
 
 Do **not** mix `--symlink-install` into a tree that was built without
 it. It leaves `share/simulation_env/worlds/` empty, and `gz sim` then
@@ -78,7 +94,7 @@ artefact is derived:
 ```
 warehouse_sim*.yaml            <- the one thing you edit
    │
-   ├── warehouse.map ────────► CSV_To_Gazebo_v2.xlsx (hand-authored)
+   ├── warehouse.map ────────► W100.xlsx (hand-authored)
    │                                │
    │                                ├─► worlds/<gazebo.world_name>.world
    │                                │      geometry + exactly
@@ -90,67 +106,46 @@ warehouse_sim*.yaml            <- the one thing you edit
    └── orders.file ──────────► orders*.csv
 ```
 
-### 2.1 Build a scenario
-
-Change the config, then run one command. It regenerates the world and
-the nav graph and then runs both topology gates, so a scenario can
-never be half-updated:
+### 2.1 Build: one command for config, orders and world
 
 ```bash
 PYTHONPATH=$PP $PY src/simulation_env/scripts/build_scenario.py \
-    --config src/simulation_env/config/warehouse_sim.yaml
-
-colcon build --packages-select simulation_env rmf_grid_traffic
-source install/setup.bash
+    --map src/simulation_env/maps/W100.xlsx
 ```
 
-It refuses to generate anything if `fleet.robot_count` exceeds the
-home cells the map provides, rather than writing a world the fleet
-cannot be placed in.
+It checks the map, rewrites `warehouse.map` and `fleet.robot_count` in
+the one config, regenerates `config/orders.csv` from the map's stations,
+builds the one world `worlds/warehouse.world` (warehouse only) and the
+nav graph, and verifies the graph. Tested step by step in
+[START_HERE.md](START_HERE.md), step 3.
 
-### 2.2 Worked example — a 10-robot scenario
+### 2.2 Fleet size needs no scenario of its own
+
+Until 2026-10-23 the world baked in `robot_count` robots, so every fleet
+size needed its own config and world (`warehouse_sim_10.yaml`,
+`warehouse_10.world`, ...). Now the world is the warehouse only, and
+the fleet node creates exactly the robots a run uses:
 
 ```bash
-sed -e 's/^  robot_count: 22$/  robot_count: 10/' \
-    -e 's/^  world_name: warehouse_grid$/  world_name: warehouse_10/' \
-    src/simulation_env/config/warehouse_sim.yaml \
-    > src/simulation_env/config/warehouse_sim_10.yaml
-
-PYTHONPATH=$PP $PY src/simulation_env/scripts/build_scenario.py \
-    --config src/simulation_env/config/warehouse_sim_10.yaml
-
-colcon build --packages-select simulation_env rmf_grid_traffic
-source install/setup.bash
-
-ros2 launch simulation_env warehouse_sim.launch.py \
-    config_file:=$PWD/src/simulation_env/config/warehouse_sim_10.yaml \
-    orders:=true
+ros2 launch simulation_env warehouse_sim.launch.py orders:=true robots:=10
 ```
 
-Verified: the world gets **10** robot models, the launch resolves
-`warehouse_10.world` on its own, and the run reports
-`10 robot poses pushed to Gazebo world 'warehouse_10'`,
-`100/100 orders`, `10/10` home, makespan `512.0 s`.
+```text
+[OK] Gazebo fleet set to 10 robot(s): 10 created, 0 removed
+```
 
-**Always give each scenario its own `gazebo.world_name`.** The launch
-derives the world path from it. Reuse a name and you overwrite the
-other scenario's world; the fleet size and the rendered world then
-disagree.
+Re-running with fewer robots removes the extras from the same world.
 
 ### 2.3 What to change, and what it forces
 
-| Change in config | Rebuild needed |
+| Change | Do |
 |---|---|
-| `fleet.robot_count` | `build_scenario.py` — the world bakes in one model per robot |
-| `warehouse.map` | `build_scenario.py` — world **and** nav graph, plus the topology gate |
-| `gazebo.world_name` | `build_scenario.py` — writes a new world file |
-| `orders.file` | nothing; read at runtime |
-| `fleet.speed_mps` | nothing; read at runtime |
-| `battery.*` | nothing; read at runtime |
-| `service.*`, `mission.*`, `visualization.*` | nothing |
-
-Changing the lane policy in `warehouse_routing.py` also requires
-`build_scenario.py`, because the RMF nav graph is derived from it.
+| the map | `build_scenario.py --map X.xlsx` |
+| an edit to the current map | `build_scenario.py --map` with the same file |
+| robot count | nothing: `--robots N` headless, `robots:=N` in Gazebo |
+| order count | nothing: `--orders N` takes the first N |
+| `battery.*`, `fleet.speed_mps`, `service.*` | nothing; read at run time |
+| the lane policy code | `build_scenario.py` again (the nav graph derives from it) |
 
 ### 2.4 Naming in Gazebo
 
@@ -215,22 +210,24 @@ in isolation.
 
 ```bash
 # Gazebo world
+# Always for the current map: the world and the nav graph are single
+# files, and building them from any other config overwrites them.
 PYTHONPATH=$PP $PY src/simulation_env/scripts/generate_gazebo_grid_world.py \
-    --config src/simulation_env/config/warehouse_sim.yaml
+    --config src/simulation_env/config/warehouse.yaml
 
 # RMF nav graph (--config, or --map for a bare XLSX)
 PYTHONPATH=$PP $PY src/rmf_grid_traffic/scripts/generate_nav_graph.py \
-    --config src/simulation_env/config/warehouse_sim.yaml \
+    --config src/simulation_env/config/warehouse.yaml \
     --output src/rmf_grid_traffic/config/warehouse_nav_graph.yaml
 
 PYTHONPATH=$PP $PY src/rmf_grid_traffic/scripts/verify_nav_graph.py \
-    --config src/simulation_env/config/warehouse_sim.yaml \
+    --config src/simulation_env/config/warehouse.yaml \
     --graph src/rmf_grid_traffic/config/warehouse_nav_graph.yaml
 ```
 
 ### 2.7 The map
 
-`src/simulation_env/maps/CSV_To_Gazebo_v2.xlsx` is edited by hand; there
+`src/simulation_env/test/fixtures/CSV_To_Gazebo_v2.xlsx` (V2) is edited by hand; there
 is no generator. Cell colours carry meaning:
 
 | Colour | Meaning |
@@ -264,7 +261,7 @@ current map:
 
 ```bash
 PYTHONPATH=$PP $PY src/simulation_env/scripts/check_map_topology.py \
-    --config src/simulation_env/config/warehouse_sim.yaml
+    --config src/simulation_env/test/fixtures/v2_reference.yaml
 # -> 309 transit cells, 485 directed edges, 0 two-way core,
 #    309/309 strongly connected,
 #    terminal access: shelf 72/72, dropoff 36/36, staging 22/22,
@@ -330,7 +327,7 @@ Seeded and deterministic — same seed in, byte-identical file out.
 # 500 orders, written alongside the committed 100-order baseline
 $PY src/simulation_env/scripts/generate_orders.py \
     --orders 500 --seed 42 \
-    --output src/simulation_env/config/orders_500.csv
+    --output src/simulation_env/test/fixtures/orders_500.csv
 ```
 
 > ⚠️ With no `--output` it **overwrites** `config/orders.csv`, the
@@ -359,7 +356,7 @@ PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py [options]
 | `--speed M` | `0` = config value | m/s |
 | `--strategy NAME` | `nearest_astar` | allocation policy |
 | `--progress S` | `10.0` | simulated seconds between progress lines; `0` = off |
-| `--config PATH` | `config/warehouse_sim.yaml` | which config |
+| `--config PATH` | `config/warehouse.yaml` (the one config) | which config |
 | `--quiet` | off | suppress per-dispatch lines |
 
 ### Examples
@@ -411,7 +408,7 @@ anything, so every other number in the run is unchanged by it.
 
 ## 4. Configuration
 
-`src/simulation_env/config/warehouse_sim.yaml` is authoritative. The
+`src/simulation_env/test/fixtures/v2_reference.yaml` is authoritative. The
 CLI flags above override it for one run only.
 
 | Key | Current | Notes |
@@ -488,18 +485,472 @@ cannot change makespan, waiting, or any recorded outcome.
 
 ### 4.1 Running a different order file
 
-`run_workload.py` has no `--orders-file`. Copy the config and edit one
-line:
+Use `--orders-file`. A bare name is looked for next to the config:
 
 ```bash
-sed 's/^  file: orders\.csv$/  file: orders_500.csv/' \
-    src/simulation_env/config/warehouse_sim.yaml \
-    > src/simulation_env/config/warehouse_sim_500.yaml
-
 PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
-    --config src/simulation_env/config/warehouse_sim_500.yaml \
-    --orders 500 --progress 25
+    --config src/simulation_env/test/fixtures/v2_reference.yaml \
+    --orders-file orders_500.csv --progress 25
 ```
+
+The run header names the file used, and a recorded dataset hashes it.
+There is no separate config per order file any more.
+
+---
+
+## 4b. S0 allocation candidate window
+
+The window is a scientific parameter. It is printed in the run header
+and in an `ALLOCATION DECISIONS` block, so a result can never be read
+without knowing which window produced it.
+
+```bash
+# the new default, W = fleet_size (22)
+pixi run python src/simulation_env/scripts/run_workload.py
+
+# the pre-S0 rule, for the frozen baseline comparison
+pixi run python src/simulation_env/scripts/run_workload.py --window legacy
+
+# an explicit width, for a controlled scenario
+pixi run python src/simulation_env/scripts/run_workload.py --window 4
+
+# 500 orders
+pixi run python src/simulation_env/scripts/run_workload.py \
+    --config src/simulation_env/test/fixtures/v2_reference.yaml --orders-file orders_500.csv
+```
+
+What to look for:
+
+```text
+  window           : fleet_size (W = 22)
+  decisions        : 64
+  choice-bearing   : 63 (98.4 %)  -- robots x orders > 1
+  forced 1x1       : 1 (1.6 %)  -- every strategy agrees on these
+  window extensions: 0
+```
+
+`--window legacy` must print `forced 1x1 : 62 (87.3 %)` and reproduce
+the pre-S0 baseline exactly: makespan 282.0000 s, 6430.0 m, waiting
+264.6667 s, 0 violations. If it does not, something other than the
+window has changed.
+
+### Dispatch quantum (S0b)
+
+Continuous dispatch is the default and the headline configuration. The
+batched scenario exists only so the batch-assignment strategies
+(Hungarian, MILP) face decisions with more than one robot in them.
+
+```bash
+# the measured batched scenario, T = 3.0 s
+pixi run python src/simulation_env/scripts/run_workload.py --quantum 3.0
+
+# sweep T against the default config
+pixi run python src/simulation_env/scripts/run_workload.py --quantum 5
+```
+
+The batched scenario must report `33 decisions, 33 choice-bearing
+(100.0 %), 0 forced` and `makespan 264.6667 s, 5716.0 m`. A larger T
+batches harder but costs makespan: 10.0 s is +9% makespan and +75%
+waiting, so do not treat T as a value to maximise.
+
+In Gazebo, pass it as a launch argument:
+
+```bash
+ros2 launch simulation_env warehouse_sim.launch.py \
+    start_gazebo:=false orders:=true window:=legacy
+```
+
+An empty `window:=` keeps `allocation.window` from the YAML, which is
+authoritative for it.
+
+## 4bb. Allocation strategies
+
+Three are registered. The allocation policy is the research variable;
+everything else is identical between them.
+
+```bash
+PYTHONPATH=$PP $PY -c \
+  "from task_management.allocation_strategy import BATCH_STRATEGIES; \
+   print(sorted(BATCH_STRATEGIES))"
+```
+
+```text
+['nearest_astar', 'nearest_manhattan', 'random']
+```
+
+| Strategy | Ranks pairs by | Role |
+|---|---|---|
+| `nearest_astar` | `C_static`, the legal directed route | the grid-aware baseline |
+| `nearest_manhattan` | Manhattan chain, ignoring walls and lanes | the deliberately naive control |
+| `random` | a seeded shuffle | the lower bound |
+
+Run all three on the shipped workload:
+
+```bash
+for s in nearest_astar nearest_manhattan random; do
+    echo "### $s"
+    PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+        --quiet --progress 0 --strategy $s \
+        | grep -E "completed |makespan|total distance|total waiting"
+done
+```
+
+Expected (22 robots, 100 orders, seed 42):
+
+```text
+nearest_astar       268.6667 s   5798.0 m   305.3333 s
+nearest_manhattan   265.3333 s   5974.0 m   325.3333 s
+random              266.6667 s   6488.0 m   258.0000 s
+```
+
+All three complete 100/100. **Read the distance column, not the
+makespan column.** Distance is where the allocation policy shows up
+cleanly and it orders as theory predicts: grid-aware < naive < none.
+The printed makespan includes end-of-work recovery and is set by
+whichever robot happens to finish last after traffic, so on a single
+seed it is a noisy signal — `nearest_manhattan` finishes earlier here
+while driving 176 m further.
+
+### Stochastic strategies and the seed
+
+```bash
+PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+    --quiet --progress 0 --strategy random --seed 7
+```
+
+The seed defaults to `simulation.seed` (42) and is printed in the
+header. Same seed, same bytes:
+
+```bash
+for i in 1 2; do
+    PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+        --quiet --progress 0 --strategy random --dataset runs/rnd$i
+done
+cmp runs/rnd1/decisions.parquet runs/rnd2/decisions.parquet && echo identical
+```
+
+### The distinctness gate
+
+A new strategy is accepted only when it is shown distinct from every
+accepted one. Comparing two independent runs would not show that: after
+the first decision where they differ the fleets are in different
+states, so their decision N is not the same decision. The gate measures
+a counterfactual instead — one strategy drives, and every rival is
+asked the same question at every decision.
+
+```bash
+PYTHONPATH=$PP $PY src/simulation_env/scripts/check_strategy_distinctness.py
+```
+
+```text
+driving with nearest_astar      vs nearest_manhattan   76.2 %
+                                vs random              90.5 %
+driving with nearest_manhattan  vs nearest_astar       60.3 %
+                                vs random              97.1 %
+driving with random             vs nearest_astar       93.8 %
+                                vs nearest_manhattan   95.3 %
+
+threshold 5.0 %          status: OK
+```
+
+Exits non-zero if any pair falls below the threshold. Run it on a
+smaller scenario with `--orders 40` while developing a new strategy.
+
+---
+
+## 4c. Recording the decision and outcome dataset
+
+Off by default. Recording is observation only -- it changes no
+simulated result, which `test_dataset.py` asserts -- but it is not
+free, so a run opts in.
+
+```bash
+python3 src/simulation_env/scripts/run_workload.py \
+    --quiet --progress 0 --dataset runs/astar
+```
+
+Writes into `runs/astar/`:
+
+```text
+decisions.parquet   one row per scored (robot, order) candidate pair
+outcomes.parquet    one row per order
+run.json            provenance and the run_id
+```
+
+Expected on the shipped workload:
+
+```text
+decision rows    : 1973
+outcome rows     : 100
+makespan         : 268.6667 s
+total distance   : 5798.0 m
+```
+
+The makespan and distance must match a run made without `--dataset`.
+If they do not, recording is perturbing the simulation and the dataset
+describes a different system than the baseline does.
+
+The header prints the `run_id` and warns on a dirty tree:
+
+```text
+  dataset    : runs/astar
+  run_id     : 4e44e2ede5cab045
+  git        : DIRTY TREE -- this run is not reproducible
+```
+
+A dirty-tree run is still useful, but it cannot be reproduced, so the
+warning is not cosmetic. Commit before recording a run you intend to
+cite.
+
+### Recording a live run
+
+The ROS node records through the same recorder, so the live path and the
+headless path produce the same dataset:
+
+```bash
+ros2 launch simulation_env warehouse_sim.launch.py \
+    orders:=true dataset:=runs/live
+
+# headless, no Gazebo
+ros2 run simulation_env fleet_node --ros-args \
+    -p run_workload:=true -p load_orders:=true -p use_gazebo:=false \
+    -p progress_interval_s:=0.0 -p dataset:=runs/live
+```
+
+The node logs the run_id up front and the row counts at the end:
+
+```text
+[INFO] recording dataset: runs/live (run_id 4e44e2ede5cab045)
+[WARN] dirty tree: this run is not reproducible
+[INFO] dataset written: runs/live (1973 decision rows, 100 outcome rows)
+```
+
+The two paths must agree. On the shipped workload they are
+byte-identical:
+
+```bash
+cmp runs/live/decisions.csv runs/astar/decisions.csv
+```
+
+The node runs on the system interpreter under `/opt/ros/jazzy`, not in
+the pixi environment, so pyarrow is usually absent there and the live
+run writes CSV instead of Parquet. That is expected, not a failure. The
+manifest says which:
+
+```bash
+grep '"format"' runs/live/run.json      # "csv"
+grep '"format"' runs/astar/run.json     # "parquet"
+```
+
+Both are lossless -- the exact columns are already
+`"numerator/denominator"` strings -- and `read_run` reads either.
+
+The launch file also exposes the dispatch quantum, so a live run can use
+the batched scenario:
+
+```bash
+ros2 launch simulation_env warehouse_sim.launch.py \
+    orders:=true quantum:=3.0 dataset:=runs/live_batched
+```
+
+A negative `quantum` (the default) keeps `allocation.dispatch_quantum_s`
+from the config, so `quantum:=0.0` stays a real override meaning
+continuous dispatch.
+
+### Reading it back out
+
+Parquet is not readable with `less`. Add `--export` to also write text
+beside the tables:
+
+```bash
+python3 src/simulation_env/scripts/run_workload.py \
+    --quiet --progress 0 --dataset runs/astar --export
+```
+
+```text
+decisions.csv   both tables as text, for grepping and diffing
+outcomes.csv
+bk.pl           ground facts: one run's decision-time state
+exs.pl          pos(assign(D, R, O)) for the chosen pair,
+                neg(...) for each eligible pair passed over
+```
+
+Sanity check on the shipped workload:
+
+```bash
+grep -c '^pos(' runs/astar/exs.pl    # 100, one per order
+grep -c '^neg(' runs/astar/exs.pl    # 1873
+```
+
+Storage sizes show why Parquet is stored and text is exported:
+
+```text
+decisions.parquet     56 KB
+decisions.csv        530 KB
+bk.pl                981 KB
+```
+
+`bk.pl` and `exs.pl` are ILP *input*, not a configured learner. No mode
+or bias declarations are generated: the hypothesis space is the
+experiment and belongs to the ILP phase.
+
+### Comparing predicted against realized
+
+```bash
+PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management \
+    python3 -c "
+from simulation_env.dataset_export import read_run
+
+decisions, outcomes, manifest = read_run('runs/astar')
+
+print(manifest['run_id'], manifest['strategy'])
+
+for row in outcomes[:5]:
+    print(
+        row['order_id'],
+        row['predicted_distance_m'],
+        row['realized_distance_m'],
+        row['realized_waiting_s'],
+    )
+"
+```
+
+Predicted and realized distance agree exactly, because `C_static` and
+the realized counter cover the same route including the post-drop-off
+retreat. Waiting is where the two legitimately diverge: it is an
+uncertain realized outcome and is never a decision-time feature.
+
+## 4d. Long runs: verifying battery, charging and liveness
+
+The shipped 100-order workload **never charges a robot**. 22 robots
+drain about 13% of SOC over it, so nothing reaches the 10% charge-due
+threshold and the whole B3/B4/B5 workflow sits idle. To verify
+charging you need a workload long enough to drain the fleet several
+times over.
+
+### Generate a long workload
+
+The generator is seeded, so this is reproducible byte for byte:
+
+```bash
+PYTHONPATH=$PP $PY src/simulation_env/scripts/generate_orders.py \
+    --orders 2000 --seed 42 \
+    --config src/simulation_env/test/fixtures/v2_reference.yaml \
+    --output src/simulation_env/test/fixtures/orders_2000.csv
+```
+
+### Run the soak
+
+```bash
+PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+    --config src/simulation_env/test/fixtures/v2_reference.yaml --orders-file orders_2000.csv \
+    --progress 250 --strategy nearest_astar \
+    --dataset runs/soak_astar
+```
+
+About 40 s of wall clock for 4296 s of simulated time. Drop `--quiet`
+(the default here) to watch every battery event as it happens:
+`CHARGE_DUE`, `RESERVE`, `CHARGE_START`, `CHARGE_FULL`, `REJOIN`,
+`PROMOTE`.
+
+Expected (22 robots, 2000 orders, seed 42, `nearest_astar`):
+
+```text
+completed            2000/2000
+parked at stage      22/22
+makespan             4296.2591 s
+total distance       107306.0 m
+reservation viol.    0
+plan deferrals       0
+
+charge sessions      44 started, 44 robot(s) back in the fleet
+promotions           18 out of holding onto a freed charger
+preemptions          0
+saturation events    0
+
+final SOC            min 16.6448  mean 26.9711  max 37.6824
+lowest minimum SOC   7.9263
+below 0 % SOC        none
+SOC identity         exact (rational arithmetic)
+battery-ineligible   4452 of 47052 pairs (9.5 %)
+```
+
+### What to check, and what not to be alarmed by
+
+**`lowest minimum SOC 7.9263` is below the 10% reserve, and that is
+correct.** The reserve is a *decision-time* guarantee: a robot is only
+given a new order if it can finish it and still reach a charger on 10%.
+It may legitimately dip below while finishing an order it already owns
+and driving to the charger. The invariant that must hold is:
+
+```text
+below 0 % SOC    : none
+SOC identity     : exact
+```
+
+**Preemption stays at 0 even here.** 8 chargers served 44 sessions
+without saturating, so B5 preemption is not exercised by order volume.
+Exercising it needs more robots or fewer chargers, not more orders:
+
+```bash
+PYTHONPATH=$PP $PY src/simulation_env/scripts/check_b5_queue.py
+PYTHONPATH=$PP $PY src/simulation_env/scripts/check_charger_evacuation.py
+```
+
+### ⚠️ Known: `random` deadlocks at sustained load
+
+```bash
+PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+    --config src/simulation_env/test/fixtures/v2_reference.yaml --orders-file orders_500.csv \
+    --quiet --progress 0 --strategy random --seed 42
+```
+
+Exits 1 with `STALLED` and a cycle:
+
+```text
+CYCLES  robot_007 -> robot_019 -> robot_005 -> robot_016 -> robot_007
+```
+
+This is a **cyclic wait**, not the head-on deadlock the one-way policy
+removes -- every robot is moving in a legal direction. It is
+load- and policy-dependent: `random` completes on seeds 1, 7 and 99 at
+500 orders and stalls on 42, while both nearest policies complete at
+500 and at 2000.
+
+It is a traffic-layer gap, not a strategy defect, and it is
+pre-existing: a strategy only chooses which robot takes which order,
+and keeping any legal assignment set live is the traffic layer's job.
+`random` is just the first strategy that scatters work across the hall.
+
+Tracked in
+`.scratch/traffic-liveness/issues/01-cyclic-deadlock-under-scattered-allocation.md`.
+**Do not build a high-load throughput table until it is resolved**: the
+deadlock is likelier under scattering policies, so such a table would
+flatter the grid-aware strategy for a traffic reason rather than an
+allocation reason.
+
+### Compare strategies at scale
+
+```bash
+for s in nearest_astar nearest_manhattan; do
+    PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+        --config src/simulation_env/test/fixtures/v2_reference.yaml --orders-file orders_2000.csv \
+        --quiet --progress 0 --strategy $s \
+        | grep -E "completed |makespan|total distance"
+done
+```
+
+```text
+nearest_astar       2000/2000   4296.2591 s   107306.0 m
+nearest_manhattan   2000/2000   4294.6516 s   107406.0 m
+```
+
+At this scale the two nearest policies converge: 0.09% apart on
+distance. The gap that was visible at 100 orders (+3.0%) washes out
+once every robot is saturated with work and the binding constraint is
+traffic and charging rather than pairing quality. That is itself a
+result worth reporting, and it is the argument for comparing
+strategies across *several* load points rather than one.
 
 ---
 
@@ -509,101 +960,50 @@ Gazebo is a **mirror**, never a planner. The engine owns all state;
 `fleet_node` pushes poses out over gz-transport and never reads back.
 A Gazebo run reproduces the headless numbers exactly.
 
+**The tested, step-by-step Gazebo procedure is [START_HERE.md](START_HERE.md),
+step 9**, including the build flag CMake needs on this machine and a
+table of every failure seen. In short:
+
 ```bash
 source /opt/ros/jazzy/setup.bash && source install/setup.bash
 
-# watch the 100-order workload
-ros2 launch simulation_env warehouse_sim.launch.py orders:=true
+# one command
+ros2 launch simulation_env warehouse_sim.launch.py orders:=true robots:=20
 
-# slower, so one-way lane direction is visible to the eye
-ros2 launch simulation_env warehouse_sim.launch.py orders:=true speed:=0.4
-
-# deploy the fleet only, no orders
-ros2 launch simulation_env warehouse_sim.launch.py
-
-# no GUI (CI, or a headless box)
-ros2 launch simulation_env warehouse_sim.launch.py headless:=true orders:=true
-```
-
-### 5.1 Two terminals: Gazebo once, orders many times
-
-This is the workflow to use day to day. Gazebo stays open; you re-run
-the workload as often as you like and the robots start moving each
-time.
-
-**Terminal 1 — Gazebo only.** Leave this running.
-
-```bash
-cd ~/rnd_mrta_ilp_ws
-source /opt/ros/jazzy/setup.bash && source install/setup.bash
-
-gz sim -r $(ros2 pkg prefix simulation_env)/share/simulation_env/worlds/warehouse_grid.world
-```
-
-The warehouse appears with no robots in it. That is correct — robots
-are spawned by the world file and only *placed* once the fleet node
-connects.
-
-**Terminal 2 — fleet and orders.** Run this whenever you want a run;
-`start_gazebo:=false` attaches to the server already running in
-terminal 1 instead of starting a second one.
-
-```bash
-cd ~/rnd_mrta_ilp_ws
-source /opt/ros/jazzy/setup.bash && source install/setup.bash
-
+# or two terminals: Gazebo once, runs many times
+ros2 launch simulation_env gazebo.launch.py robots:=30          # terminal 1
 ros2 launch simulation_env warehouse_sim.launch.py \
-    start_gazebo:=false orders:=true
+    start_gazebo:=false orders:=true robots:=30                  # terminal 2
 ```
 
-Robots snap to their home cells, then start moving. Wait for this
-line before expecting motion:
-
-```
-[OK] 22 robot poses pushed to Gazebo world 'warehouse_grid' as one persistent fleet stream
-```
-
-When the run finishes, terminal 2 exits and Gazebo stays up. Re-run
-terminal 2 to replay — no need to restart Gazebo.
-
-Variations for terminal 2:
-
-```bash
-# slow enough to see lane direction
-ros2 launch simulation_env warehouse_sim.launch.py \
-    start_gazebo:=false orders:=true speed:=0.4
-
-# place the fleet, no orders
-ros2 launch simulation_env warehouse_sim.launch.py start_gazebo:=false
-```
-
-> If terminal 2 prints `set_pose_vector not found; continuing without
-> Gazebo`, terminal 1 is not up yet. It waits 60 s
-> (`wait_for_gazebo`), so start Gazebo first and let the world finish
-> loading.
+The world file holds no robots. `gazebo.launch.py` stops any Gazebo
+already running this world, writes a temporary copy of the world with
+the robots parked on their start cells (`/tmp/mrta_gazebo_<uid>/`) and
+starts Gazebo on it, so the robots load with the warehouse. Terminal 2
+prints `[OK] Gazebo already shows these 30 robot(s)`, then
+`[OK] 30 robot poses pushed to Gazebo world 'warehouse'`.
 
 ### 5.2 Launch arguments
 
 | Launch arg | Default | Meaning |
 |---|---|---|
-| `orders` | `false` | run the workload; naming a `strategy` implies true |
+| `orders` | `false` | run the workload; without it the fleet is placed and stands still, even if a `strategy` is named |
 | `strategy` | `nearest_astar` | allocation policy |
 | `speed` | `0.0` = config | m/s override |
 | `headless` | `false` | `gz sim -s`, no GUI |
-| `start_gazebo` | `true` | set false to attach to a server you started |
-| `config_file` | installed `warehouse_sim.yaml` | drives map, fleet size, order file, world name |
+| `start_gazebo` | `true` | include `gazebo.launch.py`; set false to attach to a Gazebo started in terminal 1 |
+| `config_file` | the source tree's `config/warehouse.yaml` | drives map, fleet size, order file, world name |
+| `robots` | `0` = config | number of robots; Gazebo is given exactly this many |
 | `world_file` | *derived from the config* | override only to force a specific `.world` |
 
 ### ⚠️ Exactly one server
 
 Two `gz sim` servers both advertise `set_pose_vector` for the same
 world. gz-transport hands each request to one of them, poses get
-split, and robots appear to stall mid-aisle. Before relaunching after
-a crash:
-
-```bash
-pkill -f "gz sim"
-```
+split, and robots appear to stall mid-aisle. The fleet node refuses to
+draw when it sees two. `gazebo.launch.py` (and the one-command launch,
+which includes it) first stops every `gz sim` of this world on the same
+`GZ_PARTITION`, so starting Gazebo that way always leaves exactly one.
 
 ### Checking robots really move
 
@@ -633,7 +1033,7 @@ watch -n 1 "ros2 topic echo --once /mrta/robot_states \
     | grep -E 'robot_id|battery_percent' | paste - -"
 ```
 
-SOC falls continuously and never rises (there is no charging yet). A
+SOC falls while a robot works and rises while it charges (Battery V1 B4). A
 value read mid-move or mid-service lags the final booking by at most
 one move's or one service's drain. After the run the node keeps
 publishing the final SOC, which matches the headless `BATTERY` table.
@@ -656,7 +1056,7 @@ PYTHONPATH=$PP $PY -m pytest \
 # map topology: strongly connected, no orphans, every terminal
 # enterable and leavable, every station reachable, no shortcut
 PYTHONPATH=$PP $PY src/simulation_env/scripts/check_map_topology.py \
-    --config src/simulation_env/config/warehouse_sim.yaml
+    --config src/simulation_env/test/fixtures/v2_reference.yaml
 # -> 309 transit, 485 edges, 309/309, 0 unreachable, status : OK
 
 # traffic topology: the core must stay fully one-way
@@ -664,15 +1064,17 @@ PYTHONPATH=$PP $PY src/simulation_env/scripts/validate_directional_highways.py
 # -> uncontrolled bidi edges : 0 ... status : OK
 
 # RMF graph must mirror the lane policy exactly
+# (the nav graph is the current map's, so check it against the one config)
 PYTHONPATH=$PP $PY src/rmf_grid_traffic/scripts/verify_nav_graph.py \
-    --config src/simulation_env/config/warehouse_sim.yaml \
+    --config src/simulation_env/config/warehouse.yaml \
     --graph src/rmf_grid_traffic/config/warehouse_nav_graph.yaml
-# -> 973 lanes, 0 illegal, 0 missing, 0 two-way core,
-#    0 terminal chain, 0 stranded terminals, status : OK
+# -> W100: 4244 lanes, 0 illegal, 0 missing, 0 two-way core,
+#    0 terminal chain, status : OK
 
 # full workload
-PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py --orders 100 --progress 0
-# -> 100/100, 22/22 parked, makespan 282.0000 s, reservation viol. 0
+PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+    --config src/simulation_env/test/fixtures/v2_reference.yaml --orders 100 --progress 0
+# -> 100/100, 22/22 parked, makespan 268.6667 s, reservation viol. 0
 
 # traffic behaviour suite
 for s in check_local_traffic_controller check_local_yield_selector \
@@ -692,14 +1094,15 @@ RMF-side checks (need the ROS overlay):
 ```bash
 ros2 run rmf_grid_traffic graph_check \
     src/rmf_grid_traffic/config/warehouse_nav_graph.yaml
-# -> 461 waypoints, 973 directed lanes, OK
+# -> W100: 2148 named waypoints, 4244 directed lanes, status OK
 
 ros2 run rmf_grid_traffic route_check \
     src/rmf_grid_traffic/config/warehouse_nav_graph.yaml shelf_045 staging_001
 ```
 
-Route lengths are deliberately **asymmetric** — `shelf_045 →
-staging_001` is 23 waypoints, the reverse is 27. That is the one-way
+Route lengths are deliberately **asymmetric**. On W100 `shelf_045 →
+staging_001` is 33 waypoints and the reverse is 57 (on V2 they were 23
+and 27). That is the one-way
 network working, not a bug. Both match the scientific planner cell for
 cell, which is the point of the mirror.
 
@@ -854,18 +1257,18 @@ Be precise about the current state:
   # robot_001..004 at 9%: four distinct chargers
   ros2 launch simulation_env warehouse_sim.launch.py start_gazebo:=false \
       orders:=true \
-      config_file:=$PWD/src/simulation_env/config/warehouse_sim_b3_four_low.yaml
+      config_file:=$PWD/src/simulation_env/test/fixtures/warehouse_sim_b3_four_low.yaml
 
   # robot_001..012 at 9%: 8 chargers, 4 wait in holding and are then
   # promoted onto the chargers the first eight leave (B5)
   ros2 launch simulation_env warehouse_sim.launch.py start_gazebo:=false \
       orders:=true \
-      config_file:=$PWD/src/simulation_env/config/warehouse_sim_b3_twelve_low.yaml
+      config_file:=$PWD/src/simulation_env/test/fixtures/warehouse_sim_b3_twelve_low.yaml
   # -> "promotions : 4 out of holding onto a freed charger"; 22/22
   #    parked; holding bank 14 FREE at the end
   ```
 
-  These two configs are `warehouse_sim.yaml` plus
+  These two configs are `v2_reference.yaml` plus
   `battery.initial_soc_overrides`; they are for visual acceptance only
 * `mrta_core/symbolic.py` still has `battery_high` / `battery_medium` /
   `battery_low` predicates on a 0–1 scale; they are not wired to the

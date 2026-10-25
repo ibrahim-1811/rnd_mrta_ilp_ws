@@ -65,7 +65,7 @@ from simulation_env.workload_executor import (
 from task_management.allocation_strategy import get_batch_strategy
 
 
-CONFIGS = Path(__file__).resolve().parents[1] / "config"
+CONFIGS = Path(__file__).resolve().parents[1] / "test" / "fixtures"
 
 FULL = Fraction(100)
 
@@ -108,7 +108,7 @@ def run(
     reserve=None,
 ):
 
-    cfg = load_sim_config(CONFIGS / "warehouse_sim.yaml")
+    cfg = load_sim_config(CONFIGS / "v2_reference.yaml")
 
     if robots is not None:
         cfg = replace(cfg, robot_count=robots)

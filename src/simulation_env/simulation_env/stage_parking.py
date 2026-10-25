@@ -53,10 +53,7 @@ class StageParking:
         # A bank cell is one parking slot. Zones are single-cell on
         # every current map; ``min`` keeps the choice deterministic if
         # one is ever drawn wider.
-        self.cell_of = {
-            zone.zone_id: min(zone.cells)
-            for zone in self.zones
-        }
+        self.cell_of = {zone.zone_id: min(zone.cells) for zone in self.zones}
 
         self._occupied = non_transit_cells(warehouse)
 
@@ -158,9 +155,7 @@ class StageParking:
         }
 
         pending = [
-            robot_id
-            for robot_id in sorted(robot_cells)
-            if robot_id not in result
+            robot_id for robot_id in sorted(robot_cells) if robot_id not in result
         ]
 
         if not pending:
@@ -171,19 +166,15 @@ class StageParking:
         candidates = []
 
         for robot_id in pending:
-
             start = robot_cells[robot_id]
 
             for zone_id in available:
-
                 cost = self.route_cost(start, zone_id, cache)
 
                 if cost is None:
                     continue
 
-                candidates.append(
-                    (cost, zone_id, robot_id)
-                )
+                candidates.append((cost, zone_id, robot_id))
 
         # Cost decides. zone_id then robot_id only separate exact ties,
         # so the outcome is a property of the routes and not of the
@@ -194,7 +185,6 @@ class StageParking:
         taken_zones: set[str] = set()
 
         for cost, zone_id, robot_id in candidates:
-
             if robot_id in taken_robots or zone_id in taken_zones:
                 continue
 

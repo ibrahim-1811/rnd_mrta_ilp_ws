@@ -57,9 +57,7 @@ def main() -> int:
         parser.error("give --map or --config")
 
     map_path = (
-        args.map
-        if args.map is not None
-        else load_sim_config(args.config).map_path
+        args.map if args.map is not None else load_sim_config(args.config).map_path
     )
 
     warehouse = load_warehouse_xlsx(map_path)
@@ -77,7 +75,6 @@ def main() -> int:
     cell_of_index = {}
 
     for index, vertex in enumerate(level["vertices"]):
-
         cell_of_index[index] = world_to_grid(
             (vertex[0], vertex[1]),
             grid.resolution,
@@ -114,8 +111,7 @@ def main() -> int:
     terminal_chain = sorted(
         (source, target)
         for (source, target) in graph_lanes
-        if source in service_cells
-        and target in service_cells
+        if source in service_cells and target in service_cells
     )
 
     # Removing the chain must not leave a station the fleet cannot
@@ -124,17 +120,11 @@ def main() -> int:
     exited = {source for source, _ in graph_lanes}
 
     stranded_terminals = sorted(
-        cell
-        for cell in service_cells
-        if cell not in entered or cell not in exited
+        cell for cell in service_cells if cell not in entered or cell not in exited
     )
 
     # Strong connectivity over transit vertices, on the RMF graph.
-    transit = {
-        cell
-        for cell in cell_of_index.values()
-        if cell not in service_cells
-    }
+    transit = {cell for cell in cell_of_index.values() if cell not in service_cells}
 
     forward_adj = {cell: [] for cell in transit}
     reverse_adj = {cell: [] for cell in transit}
@@ -159,10 +149,7 @@ def main() -> int:
     forward = reach(seed, forward_adj)
     reverse = reach(seed, reverse_adj)
 
-    strongly_connected = (
-        len(forward) == len(transit)
-        and len(reverse) == len(transit)
-    )
+    strongly_connected = len(forward) == len(transit) and len(reverse) == len(transit)
 
     print()
     print("=" * 72)

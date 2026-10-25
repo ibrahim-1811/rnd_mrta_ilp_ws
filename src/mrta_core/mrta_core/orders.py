@@ -87,10 +87,7 @@ def _station_problem(warehouse, zone_id: str, expected) -> str | None:
         return "is not in the warehouse map"
 
     if zone.zone_type is not expected:
-        return (
-            f"is a {zone.zone_type.value} station, "
-            f"not a {expected.value} station"
-        )
+        return f"is a {zone.zone_type.value} station, not a {expected.value} station"
 
     return None
 
@@ -113,7 +110,6 @@ def load_orders_csv(
     path = Path(path)
 
     with path.open(newline="") as handle:
-
         reader = csv.DictReader(handle)
 
         missing = [
@@ -123,9 +119,7 @@ def load_orders_csv(
         ]
 
         if missing:
-            raise ValueError(
-                f"{path}: missing column(s): {', '.join(missing)}"
-            )
+            raise ValueError(f"{path}: missing column(s): {', '.join(missing)}")
 
         rows = list(enumerate(reader, start=2))
 
@@ -137,50 +131,35 @@ def load_orders_csv(
     header: dict[str, tuple[str, int]] = {}
 
     for line, row in rows:
-
         order_id = (row["order_id"] or "").strip()
 
         if not order_id:
-            raise ValueError(
-                f"{path}:{line}: order_id must not be empty"
-            )
+            raise ValueError(f"{path}:{line}: order_id must not be empty")
 
         item_id = (row["item_id"] or "").strip()
         shelf_id = (row["shelf_id"] or "").strip()
         dropoff_id = (row["dropoff_id"] or "").strip()
 
         if not item_id:
-            raise ValueError(
-                f"{path}:{line}: item_id must not be empty"
-            )
+            raise ValueError(f"{path}:{line}: item_id must not be empty")
 
         try:
             quantity = int(row["quantity"])
         except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"{path}:{line}: non-numeric field: {exc}"
-            ) from exc
+            raise ValueError(f"{path}:{line}: non-numeric field: {exc}") from exc
 
         if quantity <= 0:
-            raise ValueError(
-                f"{path}:{line}: quantity must be > 0, got {quantity}"
-            )
+            raise ValueError(f"{path}:{line}: quantity must be > 0, got {quantity}")
 
         if warehouse is not None:
-
             for label, station_id, expected in (
                 ("shelf", shelf_id, ZoneType.SHELF),
                 ("dropoff", dropoff_id, ZoneType.DROPOFF),
             ):
-                problem = _station_problem(
-                    warehouse, station_id, expected
-                )
+                problem = _station_problem(warehouse, station_id, expected)
 
                 if problem is not None:
-                    raise ValueError(
-                        f"{path}:{line}: {label} "
-                        f"{station_id!r} {problem}"
-                    )
+                    raise ValueError(f"{path}:{line}: {label} {station_id!r} {problem}")
 
         if order_id not in grouped:
             grouped[order_id] = []
@@ -209,7 +188,6 @@ def load_orders_csv(
     orders = []
 
     for order_id in order_of_appearance:
-
         dropoff_id, _ = header[order_id]
 
         orders.append(

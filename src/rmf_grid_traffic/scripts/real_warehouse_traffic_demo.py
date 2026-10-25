@@ -102,7 +102,6 @@ def route_conflict(route_a, route_b):
     max_t = min(len(route_a), len(route_b)) - 1
 
     for t in range(max_t):
-
         a_now = route_a[t]
         b_now = route_b[t]
 
@@ -116,10 +115,7 @@ def route_conflict(route_a, route_b):
                 a_next,
             )
 
-        if (
-            a_next == b_now
-            and b_next == a_now
-        ):
+        if a_next == b_now and b_next == a_now:
             return (
                 "EDGE_SWAP",
                 t + 1,
@@ -153,7 +149,6 @@ def find_real_conflicting_pair(warehouse):
 
     for staging_name, start in staging_items:
         for shelf_name, _ in shelf_items:
-
             try:
                 result = best_path_to_zone(
                     warehouse,
@@ -178,7 +173,6 @@ def find_real_conflicting_pair(warehouse):
     # Prefer two different staging robots and two different goals.
     # Also avoid immediate start-area conflicts.
     for first, second in combinations(candidates, 2):
-
         a_start, a_goal, a_route = first
         b_start, b_goal, b_route = second
 
@@ -215,9 +209,7 @@ def find_real_conflicting_pair(warehouse):
             "conflict_cell": cell,
         }
 
-    raise RuntimeError(
-        "No synchronous conflict found in the bounded search set."
-    )
+    raise RuntimeError("No synchronous conflict found in the bounded search set.")
 
 
 def render_window(
@@ -242,9 +234,7 @@ def render_window(
         max(ay, by) + 4,
     )
 
-    obstacles = set(
-        warehouse.grid.obstacles
-    )
+    obstacles = set(warehouse.grid.obstacles)
 
     a_route = set(robot_a.route)
     b_route = set(robot_b.route)
@@ -254,34 +244,22 @@ def render_window(
     print("REAL WAREHOUSE LOCAL TRAFFIC DEMO")
     print("=" * 72)
 
-    print(
-        f"simulation time : {sim_time:.3f} s"
-    )
+    print(f"simulation time : {sim_time:.3f} s")
 
-    print(
-        f"move interval   : {DT:.3f} s"
-    )
+    print(f"move interval   : {DT:.3f} s")
 
     print()
 
-    print(
-        f"A robot_01: {robot_a.start_name}"
-        f" -> {robot_a.goal_name}"
-    )
+    print(f"A robot_01: {robot_a.start_name} -> {robot_a.goal_name}")
 
-    print(
-        f"B robot_02: {robot_b.start_name}"
-        f" -> {robot_b.goal_name}"
-    )
+    print(f"B robot_02: {robot_b.start_name} -> {robot_b.goal_name}")
 
     print()
 
     for y in reversed(range(ymin, ymax + 1)):
-
         row = []
 
         for x in range(xmin, xmax + 1):
-
             cell = (x, y)
 
             if cell == robot_a.position:
@@ -293,10 +271,7 @@ def render_window(
             elif cell in obstacles:
                 char = "#"
 
-            elif (
-                cell in a_route
-                and cell in b_route
-            ):
+            elif cell in a_route and cell in b_route:
                 char = "+"
 
             elif cell in a_route:
@@ -310,20 +285,11 @@ def render_window(
 
             row.append(char)
 
-        print(
-            f"{y:2d}  "
-            + " ".join(row)
-        )
+        print(f"{y:2d}  " + " ".join(row))
 
     print()
 
-    print(
-        "    "
-        + " ".join(
-            f"{x % 10}"
-            for x in range(xmin, xmax + 1)
-        )
-    )
+    print("    " + " ".join(f"{x % 10}" for x in range(xmin, xmax + 1)))
 
     print()
 
@@ -357,10 +323,7 @@ def main():
 
     parser.add_argument(
         "--map",
-        default=(
-            "src/simulation_env/maps/"
-            "CSV_To_Gazebo.xlsx"
-        ),
+        default=("src/simulation_env/test/fixtures/CSV_To_Gazebo_v2.xlsx"),
     )
 
     parser.add_argument(
@@ -371,58 +334,31 @@ def main():
 
     args = parser.parse_args()
 
-    warehouse = load_warehouse_xlsx(
-        args.map
-    )
+    warehouse = load_warehouse_xlsx(args.map)
 
-    pair = find_real_conflicting_pair(
-        warehouse
-    )
+    pair = find_real_conflicting_pair(warehouse)
 
     print()
     print("REAL WAREHOUSE CONFLICT FOUND")
     print("=" * 72)
 
-    print(
-        f"A: {pair['a_start']}"
-        f" -> {pair['a_goal']}"
-    )
+    print(f"A: {pair['a_start']} -> {pair['a_goal']}")
 
-    print(
-        f"B: {pair['b_start']}"
-        f" -> {pair['b_goal']}"
-    )
+    print(f"B: {pair['b_start']} -> {pair['b_goal']}")
 
-    print(
-        f"conflict type : "
-        f"{pair['conflict_type']}"
-    )
+    print(f"conflict type : {pair['conflict_type']}")
 
-    print(
-        f"conflict tick : "
-        f"{pair['conflict_tick']}"
-    )
+    print(f"conflict tick : {pair['conflict_tick']}")
 
-    print(
-        f"conflict      : "
-        f"{pair['conflict_cell']}"
-    )
+    print(f"conflict      : {pair['conflict_cell']}")
 
-    print(
-        f"A route length: "
-        f"{len(pair['a_route']) - 1} m"
-    )
+    print(f"A route length: {len(pair['a_route']) - 1} m")
 
-    print(
-        f"B route length: "
-        f"{len(pair['b_route']) - 1} m"
-    )
+    print(f"B route length: {len(pair['b_route']) - 1} m")
 
     print()
 
-    input(
-        "Press Enter to run the local traffic simulation..."
-    )
+    input("Press Enter to run the local traffic simulation...")
 
     robot_a = Robot(
         robot_id=1,
@@ -450,18 +386,12 @@ def main():
 
     time.sleep(args.delay)
 
-    while not (
-        robot_a.finished
-        and robot_b.finished
-    ):
-
+    while not (robot_a.finished and robot_b.finished):
         a_next = robot_a.next_position
         b_next = robot_b.next_position
 
         vertex_conflict = (
-            not robot_a.finished
-            and not robot_b.finished
-            and a_next == b_next
+            not robot_a.finished and not robot_b.finished and a_next == b_next
         )
 
         edge_swap = (
@@ -472,26 +402,17 @@ def main():
         )
 
         if vertex_conflict or edge_swap:
-
             winner = choose_winner(
                 robot_a,
                 robot_b,
             )
 
-            loser = (
-                robot_b
-                if winner is robot_a
-                else robot_a
-            )
+            loser = robot_b if winner is robot_a else robot_a
 
             winner.move()
             loser.wait()
 
-            conflict_kind = (
-                "vertex"
-                if vertex_conflict
-                else "edge-swap"
-            )
+            conflict_kind = "vertex" if vertex_conflict else "edge-swap"
 
             event = (
                 f"LOCAL {conflict_kind.upper()} CONFLICT. "
@@ -502,23 +423,17 @@ def main():
             )
 
         else:
-
             if not robot_a.finished:
                 robot_a.move()
 
             if not robot_b.finished:
                 robot_b.move()
 
-            event = (
-                "No local conflict. "
-                "Both robots move."
-            )
+            event = "No local conflict. Both robots move."
 
         # Hard discrete safety invariant.
         if robot_a.position == robot_b.position:
-            raise RuntimeError(
-                "Vertex collision detected."
-            )
+            raise RuntimeError("Vertex collision detected.")
 
         sim_time += DT
 
@@ -536,20 +451,11 @@ def main():
     print("RESULT")
     print("=" * 72)
 
-    print(
-        f"robot_01 waiting : "
-        f"{robot_a.wait_ticks * DT:.3f} s"
-    )
+    print(f"robot_01 waiting : {robot_a.wait_ticks * DT:.3f} s")
 
-    print(
-        f"robot_02 waiting : "
-        f"{robot_b.wait_ticks * DT:.3f} s"
-    )
+    print(f"robot_02 waiting : {robot_b.wait_ticks * DT:.3f} s")
 
-    print(
-        f"completion time  : "
-        f"{sim_time:.3f} s"
-    )
+    print(f"completion time  : {sim_time:.3f} s")
 
     print()
     print("status           : OK")
