@@ -835,6 +835,44 @@ recovery_distance     post-work parking and charging distance
 
 Charging after the final order must not change `order_makespan`.
 
+### Phase boundary and headline metrics
+
+Decided by the researcher 2026-10-26, on the B6a implementation:
+
+```text
+recovery starts    when the final order is dispatched (allocated), not
+                   at the final drop-off. A robot that retires its last
+                   order while others still deliver is in recovery.
+headline makespan  order_makespan_s
+headline throughput order_throughput_per_h: completed orders per hour
+                   of order_makespan_s
+makespan_s         kept for backward compatibility, labelled "fleet
+                   settled time" (= fleet_recovery_time_s)
+distance, energy   full-fleet totals stay as operational metrics; their
+                   productive, support and recovery components are
+                   reported beside them
+```
+
+`throughput_orders_per_h` keeps its version-1 value (per hour of fleet
+settled time) so earlier runs stay comparable; it is not a headline
+metric.
+
+## Workload Seeds and Paired Comparison
+
+Decided by the researcher 2026-10-26, after B6a showed that one
+workload cannot rank strategies by makespan (V2, seed 42: random
+240.0 s < Manhattan 242.0 s < A* 245.3 s, set by one late order).
+
+```text
+seed           selects a deterministic order workload; every strategy
+               runs the same order file for a given seed
+main study     30 workload seeds, subject to the frozen experiment budget
+reporting      paired per-seed differences between strategies with 95%
+               confidence intervals, not individual rankings
+```
+
+No general conclusion is drawn from a single workload.
+
 ## MRTA Strategy Set
 
 Target strategies:

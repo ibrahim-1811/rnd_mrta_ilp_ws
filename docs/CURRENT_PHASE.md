@@ -27,7 +27,10 @@ Battery scheduler V1         IN PROGRESS
                              B5 holding promotion + preemption
                                 DONE, APPROVED 2026-10-11,
                                 committed d6d67c1
-                             B6 NOT STARTED
+                             B6a order work vs recovery metrics
+                                DONE 2026-10-26, awaiting approval
+                             B6 rest (battery decision/outcome
+                                metrics, G6) NOT STARTED
 W20/W30/W50 map family       PLANNED, after Battery V1 (decided 2026-09-13)
 Candidate window S0          S0a + S0b IMPLEMENTED 2026-10-22,
                              awaiting approval
@@ -1850,6 +1853,174 @@ strategies       one at a time, in this order: Earliest Finish,
 next             Battery B6 (separate order_makespan from
                  fleet_recovery_time), experiment reproducibility, then
                  Earliest Finish
+```
+
+### Battery B6a: order work vs end-of-work recovery
+
+Status: implemented 2026-10-26, awaiting approval. Reporting only:
+nothing in allocation, routing, traffic, battery, charging or execution
+changed. Nothing committed.
+
+DECISIONS.md, "End of Workload", keeps `order_makespan` (the final
+drop-off) apart from `fleet_recovery_time` (every robot settled), and
+productive distance apart from recovery distance. Until now the run
+metrics had one `makespan_s`, the engine's end time, so parking and
+charging after the last order counted as order work.
+
+#### What was added
+
+```text
+src/simulation_env/simulation_env/work_accounting.py   new: WorkAccounting,
+                                      one phase per robot per instant
+                                      (support / productive / recovery)
+src/simulation_env/simulation_env/workload_executor.py feeds it at launch,
+                                      retirement and exhaustion;
+                                      phase_totals(); outcome rows take
+                                      the same mission difference
+src/simulation_env/simulation_env/run_metrics.py       schema version 2:
+                                      18 new fields, every v1 field kept
+src/simulation_env/test/test_work_accounting.py        new, 23 tests
+docs/EXPERIMENT_PROTOCOL.md                            "Run Metrics Schema"
+```
+
+`summary.csv` takes its columns from `metrics.json`, so the new fields
+reach it with no change to `run_experiment.py`.
+
+#### Measured
+
+V2 reference, 22 robots, 100 orders, seed 42:
+
+```text
+strategy            makespan_s   order_makespan_s   tail     distance = productive + support + recovery
+nearest_astar       268.6667     245.3333           23.3333  5798.0 = 5269.0 + 0.0 + 529.0
+nearest_manhattan   265.3333     242.0000           23.3333  5974.0 = 5454.0 + 0.0 + 520.0
+random              266.6667     240.0000           26.6667  6488.0 = 6011.0 + 0.0 + 477.0
+```
+
+**The split does not explain the Phase 7 makespan ordering.** The
+recovery tails are nearly equal, and on order work alone the single-seed
+ranking is still random < Manhattan < A*. The last drop-off is a max
+over 100 orders, set by one late order. It is not a stable signal for
+a single workload instance. Distance still orders A* < Manhattan <
+random, in productive distance too.
+
+W100 (`warehouse.yaml`), nearest_astar, seed 42:
+
+```text
+100 robots,  50 orders   182.6667 s vs order 124.6667 s; 7228 m = 4639 + 0 + 2589
+ 30 robots, 300 orders   888.0000 s vs order 873.3333 s; 35134 m = 34345 + 0 + 789
+```
+
+With more robots than orders, 36% of the distance is the drive back to
+the Stage Zones. The v1 `distance_per_order_m` counted it as order
+work.
+
+Test scenarios with the battery on (four robots start at 9%):
+
+```text
+busy   100 orders   the four charge while orders are owed: all
+                    charging is support; support distance 176 m
+tail     5 orders   all allocated at t=0, so the four charge in
+                    recovery: recovery_charging_s 372.6 s,
+                    order_makespan 59.3333 s, fleet recovery 151.3567 s
+```
+
+#### Proven, not documented
+
+- **Partition.** support + productive + recovery equals the run total
+  for distance, travel, waiting, service, energy and charging, for
+  every robot and over the fleet.
+- **One number.** The productive totals equal the sum of the outcome
+  rows, because both use the same mission difference.
+- **Observation only.** Four runs on a clean copy of HEAD e7c6549 and on
+  this tree: V2 reference; W100 with 50 orders under nearest_astar and
+  under random (seed 7); W100 with 30 robots and 300 orders.
+  - Decision and outcome tables are identical in every column except
+    `run_id`. That differs only because the archived copy has no git
+    metadata.
+  - `bk.pl` and `exs.pl` are byte-identical.
+  - Every v1 metric field is identical (38 fields), except the four
+    wall-clock timings.
+
+#### Read with care
+
+Recovery starts when the workload is exhausted (the last order
+allocated), not at the final drop-off. A robot that retires its last
+order early parks in recovery while others are still delivering. A
+charge that starts at the exhaustion instant is recovery even if it
+starts at t=0. Under the DECISIONS.md wording, that is "post-work".
+
+`plot_experiment.py` still plots `makespan_s`, which is the fleet
+recovery time.
+
+#### Commands
+
+```bash
+# the B6a tests
+PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management \
+  python -m pytest src/simulation_env/test/test_work_accounting.py -q
+
+# a run's split
+python src/simulation_env/scripts/run_workload.py --orders 50 --dataset runs/b6a
+#   -> runs/b6a/metrics.json: order_makespan_s, fleet_recovery_time_s,
+#      productive_/support_/recovery_ fields
+```
+
+### Paired workload seeds
+
+Status: implemented 2026-10-26, awaiting approval. Nothing committed.
+
+B6a showed that one workload cannot rank strategies by makespan: one
+late order sets the final drop-off. The researcher decided that a seed
+selects a workload, every strategy runs the same workload per seed,
+and strategies are compared by paired differences with 95% confidence
+intervals (DECISIONS.md, "Workload Seeds and Paired Comparison").
+Frozen with it: fleet sizes 10/30/50/70/100, 2000 orders per workload,
+seeds 1-30, baseline `nearest_astar` (EXPERIMENT_PROTOCOL.md, "Seeds").
+Also approved: recovery starts at the final dispatch; headline metrics
+are `order_makespan_s` and `order_throughput_per_h`; `makespan_s` is
+shown as "fleet settled time"; `throughput_orders_per_h` keeps its v1
+value.
+
+#### What was added
+
+```text
+scripts/run_experiment.py      --workloads seeded (default) | reference;
+                               write_workloads(): one order file per
+                               seed + workloads.json; every strategy
+                               runs every seed; summary.csv gets
+                               workload, orders_sha256
+simulation_env/paired.py       paired differences, 95% t-interval,
+                               refuses pairs with different workloads
+scripts/compare_paired.py      -> runs/<name>/paired.csv, paired.md
+scripts/plot_experiment.py     headline order makespan / throughput,
+                               fleet settled time, per-phase distance
+                               and energy panels
+test/test_paired_seeds.py      new, 11 tests
+```
+
+#### Measured, W100, 200 orders, seeds 1-5
+
+30 runs in 20 s wall clock. Difference to `nearest_astar`, mean with
+95% CI:
+
+```text
+                     robots   order makespan              productive distance
+nearest_manhattan      10     +36.6 s [0.3, 73.0]   +2.0%  +626 m [407, 844]     +2.6%
+                       30     +15.5 s [1.1, 29.8]   +2.5%  +817 m [528, 1106]    +3.5%
+random                 10     +53.2 s [15.9, 90.4]  +2.9%  +996 m [710, 1281]    +4.2%
+                       30     +28.9 s [16.8, 40.9]  +4.7%  +1740 m [1479, 2001]  +7.4%
+```
+
+Every interval excludes 0: on paired workloads A* finishes earlier
+than both, which the single V2 workload could not show.
+
+#### Commands
+
+```bash
+python3 src/simulation_env/scripts/run_experiment.py --name main \
+    --robots 10 30 50 70 100 --seeds $(seq 1 30)
+python3 src/simulation_env/scripts/compare_paired.py --name main
 ```
 
 ## Definition of Done for Phase B

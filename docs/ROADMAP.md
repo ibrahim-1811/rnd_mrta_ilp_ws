@@ -155,8 +155,10 @@ traffic stress test
 ## Phase 6: Battery Scheduler V1
 
 Status: B0-B5 DONE, approved and committed (578c668, 5d61c84, d6d67c1).
-B6 (decision/outcome battery metrics, the order_makespan /
-fleet_recovery_time split, G6 end-of-work partial charging) NOT STARTED.
+B6a (the order_makespan / fleet_recovery_time split: run metrics
+separate order work from end-of-work recovery) DONE 2026-10-26,
+awaiting approval. The rest of B6 (decision/outcome battery metrics,
+G6 end-of-work partial charging) NOT STARTED.
 
 Implement:
 

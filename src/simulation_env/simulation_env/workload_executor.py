@@ -60,6 +60,7 @@ from simulation_env.dataset import exact
 from simulation_env.fleet_engine import EventType, FleetSimulationEngine
 from simulation_env.grid_robot import GridRobotStatus
 from simulation_env.stage_parking import StageParking
+from simulation_env.work_accounting import WorkAccounting, counters_of
 from mrta_core.warehouse_routing import (
     MissionPlan,
     MissionSegment,
@@ -425,6 +426,13 @@ class WorkloadExecutor:
 
         for robot in robots:
             self.engine.add_robot(robot)
+
+        # Order work vs end-of-work recovery, for the run metrics
+        # (B6a). Observation only: nothing reads it back.
+        self.accounting = WorkAccounting()
+
+        for robot_id in self.engine.robots:
+            self.accounting.register(robot_id, self._counters(robot_id))
 
         # One memo for the whole run: the map and the service-cell
         # rule never change, so a leg costed for the first dispatch is
@@ -1704,11 +1712,35 @@ class WorkloadExecutor:
             self._perf = PerfBudget(self.engine.sim_time)
 
         try:
-            return self._dispatch()
+            started = self._dispatch()
+
+            self._note_exhausted()
+
+            return started
 
         finally:
             if outer:
                 self._close_perf()
+
+    def _note_exhausted(self) -> None:
+        """Start end-of-work recovery once no order is pending (B6a).
+
+        Checked after the dispatch that allocated the last order, at
+        that same instant. A robot still executing or owing an order
+        starts its recovery when that order retires instead.
+        """
+
+        if self.accounting.exhausted_at is not None or self.queue.pending():
+            return
+
+        self.accounting.exhaust(
+            self.engine.time,
+            {
+                robot_id: self._counters(robot_id)
+                for robot_id in self.engine.robots
+                if robot_id not in self.active and robot_id not in self.deferred
+            },
+        )
 
     def _close_perf(self) -> None:
         """Retire the current budget and report it if it was slow."""
@@ -2024,21 +2056,29 @@ class WorkloadExecutor:
 
             self.recorder.decision(row)
 
-    def _record_launch(self, assignment, record) -> None:
-        """Snapshot the robot's counters as one order's mission starts.
+    def _counters(self, robot_id: str) -> dict:
+        """The robot's cumulative counters now, for WorkAccounting."""
 
-        Per-order realized cost is the difference between this snapshot
-        and the one taken at completion. The robot's own counters are
-        cumulative totals, so differencing is what attributes them to a
-        single order. Sound because a robot runs one order at a time and
-        never charges mid-order, and because travel to a charger or a
-        Stage Zone falls between orders rather than inside one.
+        return counters_of(
+            self.engine.robots[robot_id], self.engine.battery, self.engine.time
+        )
+
+    def _record_launch(self, assignment, record) -> None:
+        """Note what one order's outcome row will need from its launch.
+
+        Per-order realized cost is the difference of the robot's own
+        cumulative counters across the mission. WorkAccounting takes
+        that difference for the run totals (B6a) and hands it to
+        _record_outcome, so the outcome rows and the run's productive
+        totals are one calculation, not two. Sound because a robot runs
+        one order at a time and never charges mid-order, and because
+        travel to a charger or a Stage Zone falls between orders rather
+        than inside one.
 
         See docs/DECISIONS.md, "Phase 8 Schema Gaps To Close".
         """
 
         now = self.engine.time
-        robot = self.engine.robots[assignment.robot_id]
 
         self.recorder.launched(
             assignment.order_id,
@@ -2046,10 +2086,6 @@ class WorkloadExecutor:
                 "decision_id": self.result.decisions - 1,
                 "robot_id": assignment.robot_id,
                 "launched_at": now,
-                "distance_m": robot.distance_m,
-                "travel_time_s": robot.travel_time_s,
-                "waiting_time_s": robot.waiting_time_s,
-                "service_time_s": robot.service_time_s,
                 "soc": None if self.battery is None else self.battery.soc(
                     assignment.robot_id, now
                 ),
@@ -2059,8 +2095,12 @@ class WorkloadExecutor:
             },
         )
 
-    def _record_outcome(self, order_id: str, robot_id: str) -> None:
-        """Write one order's realized outcome, by counter difference."""
+    def _record_outcome(self, order_id: str, robot_id: str, spent: dict) -> None:
+        """Write one order's realized outcome.
+
+        ``spent`` is the mission's counter difference, as WorkAccounting
+        booked it to the productive phase.
+        """
 
         start = self.recorder.snapshot_of(order_id)
 
@@ -2074,8 +2114,6 @@ class WorkloadExecutor:
         # realized costs are the whole mission.
         now = self.engine.time
         completed_at = start.get("completed_at", now)
-
-        robot = self.engine.robots[robot_id]
 
         soc = None if self.battery is None else self.battery.soc(robot_id, now)
 
@@ -2095,11 +2133,10 @@ class WorkloadExecutor:
                 "launched_at_exact": exact(start["launched_at"]),
                 "completed_at": float(completed_at),
                 "completed_at_exact": exact(completed_at),
-                "realized_distance_m": robot.distance_m - start["distance_m"],
-                "realized_travel_time_s": robot.travel_time_s
-                - start["travel_time_s"],
-                "realized_waiting_s": robot.waiting_time_s - start["waiting_time_s"],
-                "realized_service_s": robot.service_time_s - start["service_time_s"],
+                "realized_distance_m": spent["distance_m"],
+                "realized_travel_time_s": spent["travel_time_s"],
+                "realized_waiting_s": spent["waiting_time_s"],
+                "realized_service_s": spent["service_time_s"],
                 "realized_duration_s": float(completed_at - start["launched_at"]),
                 "retreat_finished_at": float(now),
                 "energy_consumed_percent": (
@@ -2371,6 +2408,10 @@ class WorkloadExecutor:
 
             self.result.dispatches.append(record)
 
+            self.accounting.launched(
+                robot_id, self._counters(robot_id), self.engine.time
+            )
+
             if self.recorder is not None:
                 self._record_launch(assignment, record)
 
@@ -2629,10 +2670,14 @@ class WorkloadExecutor:
                 finished = self.active.pop(robot_id)
                 self._services_left.pop(robot_id, None)
 
+                # Now the whole mission is driven, retreat included, so
+                # realized and predicted cover the same route.
+                spent = self.accounting.retired(
+                    robot_id, self._counters(robot_id), self.engine.time
+                )
+
                 if self.recorder is not None:
-                    # Now the whole mission is driven, retreat included,
-                    # so realized and predicted cover the same route.
-                    self._record_outcome(finished, robot_id)
+                    self._record_outcome(finished, robot_id, spent)
 
                 self._retire(robot_id)
 
@@ -2820,6 +2865,17 @@ class WorkloadExecutor:
             "reservation_violations": len(self.engine.reservations.audit()),
             "events": self.engine.processed,
         }
+
+    def phase_totals(self) -> dict:
+        """phase -> counter -> run total: order work vs recovery (B6a).
+
+        Read only: the open segments are closed on a copy, so this can
+        be called mid-run or more than once.
+        """
+
+        return self.accounting.split(
+            {robot_id: self._counters(robot_id) for robot_id in self.engine.robots}
+        )
 
 
 # ----------------------------------------------------------------------

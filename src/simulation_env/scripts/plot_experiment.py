@@ -7,11 +7,13 @@
 reads runs/<name>/summary.csv and each run's outcomes.parquet, and
 writes runs/<name>/figures/:
 
-    mrta.png               makespan, throughput, completion time,
-                           distance, waiting, allocator CPU
+    mrta.png               order makespan, throughput, completion time,
+                           fleet settled time, distance (fleet and per
+                           phase), waiting, allocator CPU
     traffic.png            waiting per order, waiting share, yields
-    battery.png            energy, minimum SOC, charging, time out of
-                           the fleet, waiting for a charger, saturation
+    battery.png            energy (fleet and per phase), minimum SOC,
+                           charging, time out of the fleet, waiting for
+                           a charger, saturation
     completion_curves.png  orders completed over time, per fleet size
     order_times.png        per-order duration and waiting, per strategy
 
@@ -51,11 +53,20 @@ INK = "#1f1f1e"
 MUTED = "#6b6a63"
 GRID = "#e4e3de"
 
+# Headline makespan and throughput are on order work (final drop-off);
+# makespan_s is the fleet settled time, end-of-work recovery included.
+# Full-fleet distance and energy sit beside their phase components.
+# See docs/DECISIONS.md, "End of Workload". A version-1 summary has no
+# order_* or phase fields, and those panels stay empty.
 MRTA = [
-    ("makespan_s", "Makespan", "simulated s"),
-    ("throughput_orders_per_h", "Throughput", "orders / hour"),
+    ("order_makespan_s", "Order makespan (final drop-off)", "simulated s"),
+    ("order_throughput_per_h", "Throughput", "orders / hour of order makespan"),
     ("mean_completion_time_s", "Mean order completion time", "simulated s"),
-    ("total_distance_m", "Total distance", "m"),
+    ("makespan_s", "Fleet settled time", "simulated s"),
+    ("total_distance_m", "Distance (fleet)", "m"),
+    ("productive_distance_m", "Distance: order work", "m"),
+    ("support_distance_m", "Distance: support", "m"),
+    ("recovery_distance_m", "Distance: recovery", "m"),
     ("total_waiting_s", "Total waiting (traffic)", "robot-s"),
     ("allocator_cpu_s", "Allocator runtime", "CPU s"),
 ]
@@ -68,6 +79,9 @@ TRAFFIC = [
 
 BATTERY = [
     ("energy_consumed_percent", "Energy consumed (fleet)", "% SOC"),
+    ("productive_energy_percent", "Energy: order work", "% SOC"),
+    ("support_energy_percent", "Energy: support", "% SOC"),
+    ("recovery_energy_percent", "Energy: recovery", "% SOC"),
     ("energy_per_order_percent", "Energy per order", "% SOC"),
     ("min_soc_percent", "Lowest SOC reached", "% SOC"),
     ("charge_sessions", "Charge sessions", "count"),

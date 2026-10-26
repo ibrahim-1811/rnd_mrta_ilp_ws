@@ -51,7 +51,11 @@ medium utilization
 full designed fleet
 ```
 
-Exact fleet sizes should be frozen before the final experiment campaign.
+Frozen 2026-10-26 for the main study on W100:
+
+```text
+10, 30, 50, 70, 100 robots
+```
 
 ## Workloads
 
@@ -74,11 +78,36 @@ high sustained load
 
 ## Seeds
 
-Use fixed seeds for stochastic strategies.
+Decided 2026-10-26 (DECISIONS.md, "Workload Seeds and Paired
+Comparison"). A seed selects a workload:
 
-For repeated experiments, use the same seed set across all stochastic strategies.
+```text
+workload     seed s -> runs/<name>/workloads/orders_s<s>.csv, generated
+             by generate_orders.py from the current map, 2000 logical
+             orders; seed 42 is byte-identical to config/orders.csv
+pairing      every strategy runs that file at every fleet size; a
+             stochastic strategy also takes s for its own choices
+main study   seeds 1-30
+baseline     nearest_astar
+reporting    compare_paired.py: per fleet size and metric, the mean of
+             (strategy - baseline) over seeds with a 95% paired
+             t-interval, and that mean as a % of the baseline mean
+```
 
-Store the seed with each result.
+Each run's run.json records the effective seed and the order file's
+path and sha256; summary.csv carries `workload` and `orders_sha256`,
+and compare_paired.py refuses a pair whose workloads differ.
+
+```bash
+python3 src/simulation_env/scripts/run_experiment.py --name main \
+    --robots 10 30 50 70 100 --seeds $(seq 1 30)
+python3 src/simulation_env/scripts/compare_paired.py --name main
+python3 src/simulation_env/scripts/plot_experiment.py --name main
+```
+
+`--workloads reference` runs the committed order file instead, as
+experiments before 2026-10-26 did; it cannot be compared with
+compare_paired.py.
 
 ## Decision-Time Features
 
@@ -234,6 +263,111 @@ policy performance
 learning runtime
 inference runtime
 ```
+
+## Run Metrics Schema
+
+Every recorded run writes `metrics.json` beside its decision and outcome
+tables (`simulation_env/run_metrics.py`); `run_experiment.py` collects
+one row per run into `summary.csv` with the same field names. Units are
+in the names: `_s` simulated seconds, `_m` metres, `_percent` SOC
+percentage points, `_per_h` per simulated hour. Wall-clock fields are
+`wall_clock_s`, `allocator_cpu_s`, `mission_build_cpu_s` and
+`worst_dispatch_s` only (see Timing).
+
+`metrics_schema_version` says which schema a file follows. Version 1
+has no such field.
+
+### Phases (version 2, B6a)
+
+Every robot is in exactly one phase at every instant, so for each
+counter (distance, travel time, waiting, service, energy, charging) the
+three phases add up to the run total:
+
+```text
+productive   executing an order mission: from launch at the robot's
+             cell to the end of its drop-off retreat
+support      not executing an order while orders are still owed: start,
+             between orders, charger trips during the workload,
+             liveness repositioning
+recovery     after the workload is exhausted (the last order has been
+             allocated) and the robot has retired its last order:
+             final parking, and any charging done then
+```
+
+A robot that owes no order when the workload is exhausted enters
+recovery at that instant; a robot still executing or owing one enters it
+when that order retires. The productive totals are the sum of the
+outcome rows: one calculation, not two.
+
+### Fields
+
+```text
+identity     metrics_schema_version, strategy, seed, robots, orders
+
+MRTA         orders_completed
+             order_makespan_s          final drop-off              (v2)
+             fleet_recovery_time_s     every robot settled         (v2)
+             recovery_tail_s           fleet_recovery - order      (v2)
+             orders_exhausted_at_s     last order allocated        (v2)
+             order_throughput_per_h    on order_makespan_s         (v2)
+             makespan_s                = fleet_recovery_time_s     (v1)
+             throughput_orders_per_h   on makespan_s               (v1)
+             mean_completion_time_s, median_completion_time_s
+             total_distance_m, distance_per_order_m
+             productive_distance_m, support_distance_m,
+             recovery_distance_m, productive_distance_per_order_m  (v2)
+             total_travel_time_s, total_service_s
+             total_waiting_s
+             productive_waiting_s, support_waiting_s,
+             recovery_waiting_s                                    (v2)
+             decisions, choice_bearing_decisions
+             allocator_cpu_s, mission_build_cpu_s, worst_dispatch_s,
+             wall_clock_s                                   (wall clock)
+
+traffic      reservation_violations, waiting_per_order_s,
+             productive_waiting_per_order_s                        (v2)
+             waiting_share, yield_events, plan_deferrals,
+             peak_in_progress
+
+battery      battery_enabled
+             energy_consumed_percent, energy_per_order_percent
+             productive_energy_percent, support_energy_percent,
+             recovery_energy_percent                               (v2)
+             min_soc_percent, mean_final_soc_percent, below_zero_robots
+             charge_requests, charge_sessions, charging_time_s,
+             recovery_charging_s                                   (v2)
+             charge_energy_percent, out_of_fleet_time_s,
+             charger_wait_time_s, saturation_events, promotions,
+             stage_promotions, preemptions
+```
+
+### Version 1 and version 2
+
+Version 2 adds fields and changes none: every version-1 field keeps its
+name and its value. Two of them are not what their names suggest:
+
+```text
+makespan_s                the engine's end time, end-of-work parking and
+                          charging included; = fleet_recovery_time_s
+throughput_orders_per_h   orders per hour of that end time
+```
+
+Headline metrics, decided 2026-10-26 (DECISIONS.md, "End of
+Workload"):
+
+```text
+makespan     order_makespan_s
+throughput   order_throughput_per_h
+makespan_s   reported as "fleet settled time", never as makespan
+distance,    full-fleet totals as operational metrics, always beside
+energy       their productive / support / recovery components
+```
+
+Compare order work with `order_makespan_s`, `order_throughput_per_h`
+and the `productive_*` fields. The `total_*` and version-1 per-order
+fields include support and recovery, so a strategy whose robots happen
+to finish far from the Stage Zone bank is charged for its parking
+drive there.
 
 ## Scalability Evaluation
 
