@@ -17,6 +17,8 @@ that makes a claim about allocation policy defensible.
 >
 > **What is where?** Open [docs/REPO_ATLAS.html](docs/REPO_ATLAS.html) in a browser:
 > every package, module, data flow and state machine on one page, kept up to date.
+> The same code map as text, every file, class and function linked to its
+> source line, is [docs/CODE_MAP.md](docs/CODE_MAP.md).
 >
 > Want to understand what was built and why? Read on.
 

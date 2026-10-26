@@ -7,6 +7,7 @@ calls whom, the traced flows, and a mind map.
 writes
 
     docs/code_map.json     the map as data
+    docs/CODE_MAP.md       the same map as a page to read
     docs/REPO_MAP.xmind    the same map for XMind (2020 or later)
 
 and refreshes the data block inside docs/REPO_ATLAS.html, which draws
@@ -37,6 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 ATLAS = ROOT / "docs" / "REPO_ATLAS.html"
 JSON_OUT = ROOT / "docs" / "code_map.json"
+MD_OUT = ROOT / "docs" / "CODE_MAP.md"
 XMIND_OUT = ROOT / "docs" / "REPO_MAP.xmind"
 
 PACKAGES = {
@@ -589,7 +591,12 @@ def other_entry(path: Path):
     text = path.read_text(errors="replace") if path.suffix in (".cpp", ".msg", ".yaml", ".csv", ".world") else ""
     doc = ""
     if path.suffix == ".cpp":
-        comments = re.findall(r"^\s*//\s?(.*)$", text, flags=re.MULTILINE)[:12]
+        lines = text.splitlines()
+        # The licence header says nothing about the code.
+        if lines and lines[0].startswith("// Copyright"):
+            while lines and lines[0].startswith("//"):
+                lines.pop(0)
+        comments = re.findall(r"^\s*//\s?(.*)$", "\n".join(lines), flags=re.MULTILINE)[:12]
         doc = " ".join(c for c in comments if c.strip())
     elif path.suffix == ".msg":
         fields = [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
@@ -772,6 +779,214 @@ def write_xmind(data, path):
 
 
 # ----------------------------------------------------------------------
+# Markdown: the same map as a page to read.
+# ----------------------------------------------------------------------
+
+
+def anchor(file_id):
+    return "f-" + re.sub(r"[^a-z0-9]+", "-", file_id.lower()).strip("-")
+
+
+def cell(text):
+    return " ".join((text or "").split()).replace("|", "\\|")
+
+
+def source(file_id, line=None):
+    """A link from docs/ to a file, or to one line of it."""
+    return "../" + file_id + (f"#L{line}" if line else "")
+
+
+def short(sid, here=None):
+    """A symbol as a reader wants it: the bare name inside its own file,
+    module.name elsewhere. A link may also name a whole file."""
+    if "::" not in sid:
+        return Path(sid).name
+    file, name = sid.split("::", 1)
+    return name if file == here else f"{Path(file).stem}.{name}"
+
+
+def short_list(ids, here):
+    return ", ".join(f"`{short(x, here)}`" for x in ids)
+
+
+def symbol_link(sid, symbols):
+    file = sid.split("::", 1)[0]
+    line = symbols[sid]["line"] if sid in symbols else None
+    return f"[`{short(sid)}`]({source(file, line)})"
+
+
+def file_links(ids):
+    return ", ".join(f"[{Path(i).name}](#{anchor(i)})" for i in ids)
+
+
+def signature(s):
+    if s["kind"] == "class":
+        bases = f"({', '.join(s['bases'])})" if s.get("bases") else ""
+        return f"**class** `{s['name']}{bases}`"
+    return f"`{s['name']}({', '.join(a for a in s['args'] if a != 'cls')})`"
+
+
+def write_markdown(data, path):
+    files = data["files"]
+    symbols = {s["id"]: s for f in files for s in f["symbols"]}
+    layers = [(layer, [f for f in files if f["layer"] == layer["id"]]) for layer in data["layers"]]
+    layers = [(layer, members) for layer, members in layers if members]
+    calls = sum(len(s["calls"]) for s in symbols.values())
+
+    out = []
+    w = out.append
+
+    w("# Code map")
+    w("")
+    w("Every source file, class and function under `src/`: what it does, what it calls, "
+      "what calls it and which tests reach it; which code reads and writes each input "
+      "file; and the traced flows from a command to its result.")
+    w("")
+    w(f"Generated {data['generated']} from commit `{data['commit']}` by "
+      f"[tools/code_map.py](tools/code_map.py): {len(files)} files, {len(symbols)} classes "
+      f"and functions, {calls} resolved calls, {len(data['flows'])} flows. **Do not edit "
+      "this file by hand.** After any code change run `python3 docs/tools/code_map.py`; "
+      "it rewrites this page, [code_map.json](code_map.json), [REPO_MAP.xmind](REPO_MAP.xmind) "
+      "and the interactive code map in [REPO_ATLAS.html](REPO_ATLAS.html).")
+    w("")
+    w("How to read it:")
+    w("")
+    w("- A name links to its line in the source.")
+    w("- In *Calls* and *Called by*, a bare name lives in the same file; "
+      "`module.name` lives in that module.")
+    w("- Names, line numbers and descriptions are the code's own, read with Python's `ast`. "
+      "Calls are resolved statically, so a call through a variable whose type the code does "
+      "not name is missing: *Called by* can be incomplete, never wrong.")
+    w("")
+
+    w("## Contents")
+    w("")
+    w("1. [Layers: which file sits where](#layers)")
+    w("2. [Input files: which code reads and writes them](#data-files)")
+    w("3. [Traced flows](#flows)")
+    for i, flow in enumerate(data["flows"], 1):
+        w(f"   {i}. [{flow['title']}](#flow-{flow['id']})")
+    w("4. [Files, layer by layer](#files)")
+    for i, (layer, members) in enumerate(layers, 1):
+        w(f"   {i}. [{layer['title']}](#layer-{layer['id']}) ({len(members)} files)")
+    w("")
+
+    w('<a id="layers"></a>')
+    w("")
+    w("## 1. Layers: which file sits where")
+    w("")
+    w("From the inputs at the top down to the domain core, then recording, checks, tests "
+      "and legacy code.")
+    w("")
+    w("| Layer | What it holds | Files |")
+    w("|---|---|---|")
+    for layer, members in layers:
+        w(f"| [**{layer['title']}**](#layer-{layer['id']}) | {cell(layer['blurb'])} | {file_links(f['id'] for f in members)} |")
+    w("")
+
+    w('<a id="data-files"></a>')
+    w("")
+    w("## 2. Input files: which code reads and writes them")
+    w("")
+    w("| File | What it is | Read by | Written by |")
+    w("|---|---|---|---|")
+    for f in files:
+        if "read_by" not in f:
+            continue
+        read = ", ".join(symbol_link(x, symbols) for x in f["read_by"]) or "nothing"
+        written = ", ".join(symbol_link(x, symbols) for x in f["written_by"]) or "no code"
+        w(f"| [{f['name']}]({source(f['id'])}) | {cell(f['role'])} | {read} | {written} |")
+    w("")
+
+    w('<a id="flows"></a>')
+    w("")
+    w("## 3. Traced flows")
+    w("")
+    w("Each flow follows one path through the code, in the order it runs. Every step names "
+      "a real file and function; the generator stops if one no longer exists.")
+    w("")
+    for i, flow in enumerate(data["flows"], 1):
+        w(f'<a id="flow-{flow["id"]}"></a>')
+        w("")
+        w(f"### 3.{i} {flow['title']}")
+        w("")
+        w(cell(flow["intro"]))
+        w("")
+        w("| # | What happens | Code | Produces |")
+        w("|---|---|---|---|")
+        for n, step in enumerate(flow["steps"], 1):
+            if step["symbol"]:
+                code = symbol_link(step["symbol"], symbols)
+            else:
+                code = f"[`{Path(step['file']).name}`]({source(step['file'])})"
+            w(f"| {n} | {cell(step['text'])} | {code} | {cell(step['makes'])} |")
+        w("")
+
+    w('<a id="files"></a>')
+    w("")
+    w("## 4. Files, layer by layer")
+    w("")
+    for i, (layer, members) in enumerate(layers, 1):
+        w(f'<a id="layer-{layer["id"]}"></a>')
+        w("")
+        w(f"### 4.{i} {layer['title']}")
+        w("")
+        w(cell(layer["blurb"]))
+        w("")
+        for f in members:
+            w(f'<a id="{anchor(f["id"])}"></a>')
+            w("")
+            w(f"#### {f['name']}")
+            w("")
+            lines = f" · {f['lines']} lines" if f["lines"] else ""
+            w(f"[`{f['id']}`]({source(f['id'])}){lines}")
+            w("")
+            # A role taken from the docstring is its first sentence: show the whole.
+            if f["doc"] and f["doc"].startswith(f["role"]):
+                w(cell(f["doc"]))
+                w("")
+            else:
+                if f["role"]:
+                    w(cell(f["role"]))
+                    w("")
+                if f["doc"]:
+                    w(f"> {cell(f['doc'])}")
+                    w("")
+            facts = []
+            if f["imports"]:
+                facts.append(("Tests" if f["layer"] == "test" else "Imports", file_links(f["imports"])))
+            if f["imported_by"]:
+                facts.append(("Imported by", file_links(f["imported_by"])))
+            if "read_by" in f:
+                facts.append(("Read by", ", ".join(symbol_link(x, symbols) for x in f["read_by"]) or "nothing"))
+                facts.append(("Written by", ", ".join(symbol_link(x, symbols) for x in f["written_by"]) or "no code"))
+            for label, text in facts:
+                w(f"- **{label}:** {text}")
+            if facts:
+                w("")
+            if not f["symbols"]:
+                continue
+            if f["layer"] == "test":
+                tests = [s for s in f["symbols"] if s["kind"] != "class"]
+                w(f"<details><summary>{len(tests)} tests</summary>")
+                w("")
+                w(", ".join(f"[`{s['name']}`]({source(f['id'], s['line'])})" for s in tests))
+                w("")
+                w("</details>")
+                w("")
+                continue
+            w("| Symbol | What it does | Calls | Called by | Tested by |")
+            w("|---|---|---|---|---|")
+            for s in f["symbols"]:
+                name = f"[{signature(s)}]({source(f['id'], s['line'])})"
+                tested = ", ".join(Path(t).name for t in s["tested_by"])
+                w(f"| {name} | {cell(s['doc'])} | {short_list(s['calls'], f['id'])} | {short_list(s['called_by'], f['id'])} | {tested} |")
+            w("")
+
+    path.write_text("\n".join(out) + "\n")
+
+
+# ----------------------------------------------------------------------
 # The atlas data block.
 # ----------------------------------------------------------------------
 
@@ -790,6 +1005,7 @@ def main() -> int:
     data = build()
     JSON_OUT.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n")
     write_xmind(data, XMIND_OUT)
+    write_markdown(data, MD_OUT)
     if ATLAS.exists() and "codemap-data" in ATLAS.read_text():
         inject(data, ATLAS)
         print(f"  refreshed {rel(ATLAS)}")
@@ -797,7 +1013,7 @@ def main() -> int:
     symbols = sum(len(f["symbols"]) for f in data["files"])
     calls = sum(len(s["calls"]) for f in data["files"] for s in f["symbols"])
     print(f"  {len(data['files'])} files, {symbols} classes and functions, {calls} resolved calls, {len(data['flows'])} flows")
-    print(f"  wrote {rel(JSON_OUT)} and {rel(XMIND_OUT)}")
+    print(f"  wrote {rel(JSON_OUT)}, {rel(MD_OUT)} and {rel(XMIND_OUT)}")
     return 0
 
 
