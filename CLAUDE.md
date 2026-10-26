@@ -115,25 +115,17 @@ Do not create a second planner, second allocator, or independent traffic policy 
 
 The scientific engine remains the source of truth.
 
-## Warehouse Family
+## Warehouse
 
-The R&D will use:
+The R&D uses one main map, W100, swept from 10 to 100 robots, plus one held-out map (planned) used only to test rule transfer. This replaced the W20/W30/W50 family on 2026-10-23; see docs/DECISIONS.md, "Warehouse Scalability".
 
-```text
-W20
-W30
-W50
-```
-
-These maps should preserve comparable semantics and reasonable robot density.
-
-Do not simply place 50 robots into the small warehouse and call it scalability.
+V2 stays as the test-suite and frozen-baseline reference.
 
 Each map must independently pass topology, routing, traffic, and terminal-reachability gates.
 
 ## Battery V1
 
-Status: **designed, not yet implemented**.
+Status: B0-B5 and B6a implemented and committed; the rest of B6 (battery decision/outcome metrics, G6 end-of-work partial charging) not started.
 
 Frozen default design:
 

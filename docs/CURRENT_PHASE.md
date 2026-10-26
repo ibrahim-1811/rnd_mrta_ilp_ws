@@ -12,7 +12,12 @@ Directional traffic          DONE
 Directed A* routing          DONE
 Gazebo mirror                DONE
 Nearest A* baseline          DONE
-V2 warehouse map             DONE, not yet committed
+V2 warehouse map             DONE; kept as the test-suite and
+                             frozen-baseline reference
+W100 research map            DONE, committed 503ca90; one config,
+                             fleet sweep 10-100 (decided 2026-10-23,
+                             replaces the W20/W30/W50 family)
+Held-out transfer map        PLANNED, not built
 Battery scheduler V1         IN PROGRESS
                              B0 charging bank DONE, visually approved
                              B1 SOC accounting DONE, approved
@@ -28,16 +33,20 @@ Battery scheduler V1         IN PROGRESS
                                 DONE, APPROVED 2026-10-11,
                                 committed d6d67c1
                              B6a order work vs recovery metrics
-                                DONE 2026-10-26, awaiting approval
+                                DONE, approved, committed 5abf5c2
                              B6 rest (battery decision/outcome
                                 metrics, G6) NOT STARTED
-W20/W30/W50 map family       PLANNED, after Battery V1 (decided 2026-09-13)
-Candidate window S0          S0a + S0b IMPLEMENTED 2026-10-22,
-                             awaiting approval
-Additional MRTA baselines    NOT IMPLEMENTED
-Outcome logging              NOT IMPLEMENTED
-Experiment runner            NOT IMPLEMENTED
-ILP / Popper                 NOT IMPLEMENTED
+Candidate window S0          S0a + S0b DONE, committed
+MRTA baselines               random, nearest_manhattan,
+                             nearest_astar DONE, distinctness gate OK;
+                             Earliest Finish, Multi-Criteria, Auction,
+                             Hungarian, MILP NOT IMPLEMENTED
+Decision/outcome logging     DONE (Phase 8), Prolog export bk.pl/exs.pl
+Experiment runner            DONE; paired workload seeds + 95% CI
+                             comparison DONE, committed 5abf5c2
+ILP / Popper                 NOT IMPLEMENTED; Popper v4.4.0
+                             installed and smoke-tested (see "Popper
+                             environment" below)
 Outcome-aware learning       NOT IMPLEMENTED
 Explanations                 NOT IMPLEMENTED
 ```
@@ -1857,7 +1866,7 @@ next             Battery B6 (separate order_makespan from
 
 ### Battery B6a: order work vs end-of-work recovery
 
-Status: implemented 2026-10-26, awaiting approval. Reporting only:
+Status: approved, committed 5abf5c2. Reporting only:
 nothing in allocation, routing, traffic, battery, charging or execution
 changed. Nothing committed.
 
@@ -1968,7 +1977,7 @@ python src/simulation_env/scripts/run_workload.py --orders 50 --dataset runs/b6a
 
 ### Paired workload seeds
 
-Status: implemented 2026-10-26, awaiting approval. Nothing committed.
+Status: approved, committed 5abf5c2.
 
 B6a showed that one workload cannot rank strategies by makespan: one
 late order sets the final drop-off. The researcher decided that a seed
@@ -2022,6 +2031,53 @@ python3 src/simulation_env/scripts/run_experiment.py --name main \
     --robots 10 30 50 70 100 --seeds $(seq 1 30)
 python3 src/simulation_env/scripts/compare_paired.py --name main
 ```
+
+### Popper environment
+
+Status: installed and smoke-tested 2026-10-26. Environment only; no
+ILP code.
+
+```text
+swi-prolog    10.0.0, conda-forge (janus-swi links to this one)
+clingo        5.8.2, conda-forge
+setuptools    80.10.2, conda-forge, capped <81: Popper 4.4.0 imports
+              pkg_resources, which newer setuptools removes
+popper-ilp    git tag v4.4.0 = commit 860cd0de (pixi pypi git dep).
+              Its metadata says 4.2.0: upstream did not bump it, so
+              cite the commit. main / v5.x needs Python >= 3.14.
+janus-swi     1.5.3; python-sat 1.9.dev17 and bitarray via Popper
+```
+
+Smoke test (scratch problems, one Popper problem per process):
+
+```text
+grandparent   grandparent(A,B) :- parent(A,C), parent(C,B).   4/0/5/0
+assign-shaped assign(D,R,O) :- nearest(D,R,O).               6/0/30/0
+              same rule with noisy=True (MaxSAT via python-sat)
+```
+
+Runtime facts for the ILP code:
+
+- Run one learning problem per Python process: a second
+  `learn_solution` in the same process failed inside Popper
+  (`KeyError: ('neg_fact', ...)`) although each problem alone works.
+- Popper emits a harmless `pkg_resources is deprecated` UserWarning.
+- The shell's ROS `PYTHONPATH` makes the pixi Python see ROS packages;
+  Popper works either way, but ILP scripts are cleanest run with it
+  unset.
+
+Verified on the way (W100, nearest_astar, seed 42, 300 orders):
+
+```text
+robots  completed  decision rows  outcome rows  violations  order makespan  fleet settled
+  30    300/300         8566           300           0          873.33 s       888.00 s
+ 100    300/300        25071           300           0          314.00 s       380.67 s
+```
+
+Phase partition holds (productive + support + recovery distance =
+total) in both. exs.pl at 30 robots: 300 pos, 8266 neg. Distinctness
+gate at 30 robots / 300 orders: every pair distinct, status OK
+(makespan 888.0 / 928.3 / 955.3 s for A* / Manhattan / random).
 
 ## Definition of Done for Phase B
 

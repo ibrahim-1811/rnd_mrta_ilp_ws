@@ -23,9 +23,15 @@ openpyxl = ">=3.1.5,<4"
 # Phase 8 decision/outcome dataset: Parquet is the format of record
 # (docs/DECISIONS.md, "Decision and Outcome Dataset").
 pyarrow = "*"
+clingo = ">=5.8.2,<6"
+setuptools = "<81"
 
 [tasks]
 test = "PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management python -m pytest src/mrta_core/tests src/simulation_env/test src/task_management/test -q"
 lint = "ruff check ."
 format = "ruff format ."
 tree = "find . -maxdepth 4 -type f -not -path \"./.git/*\" -not -path \"./.pixi/*\" -not -path \"./.pytest_cache/*\" | sort"
+
+[pypi-dependencies]
+popper-ilp = { git = "https://github.com/logic-and-learning-lab/Popper.git", rev = "v4.4.0" }
+janus-swi = ">=1.5.3, <2"

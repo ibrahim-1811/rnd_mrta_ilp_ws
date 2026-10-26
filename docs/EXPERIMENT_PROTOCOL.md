@@ -23,14 +23,16 @@ initial robot states
 seed
 ```
 
-## Warehouse Family
+## Warehouse
 
-Use the controlled map family:
+Decided 2026-10-23 (DECISIONS.md, "Warehouse Scalability"); replaces
+the earlier W20 / W30 / W50 family:
 
 ```text
-W20
-W30
-W50
+main map       W100, fleet-size sweep (see Fleet Size)
+held-out map   one map of a different layout and size, never trained
+               on, used only to test whether learned rules transfer
+               (planned, not built)
 ```
 
 Do not mix results from different maps as if they were the same operating condition.
@@ -371,13 +373,9 @@ drive there.
 
 ## Scalability Evaluation
 
-Evaluate scalability across:
-
-```text
-W20
-W30
-W50
-```
+Evaluate scalability across the W100 fleet-size sweep (10, 30, 50, 70,
+100 robots) on the same map, so only fleet size and the congestion it
+brings change.
 
 Measure both:
 
