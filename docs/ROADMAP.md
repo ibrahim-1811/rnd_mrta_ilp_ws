@@ -1,5 +1,36 @@
 # Phasewise Development Roadmap
 
+## Milestone plan to 20 December 2026
+
+Set 2026-10-27 after the read-only audit, on the research backend branch
+`research/outcome-aware-ilp`. Phases below are the long-standing
+structure; these milestones are the working schedule through them.
+
+```text
+M0  Oct 27-30   integrity and reproducibility: F5 decision linkage,
+                F6 failure classes, F7 quantum/window per experiment,
+                F8 strategy identity, seed split       IMPLEMENTED,
+                                                       awaiting review
+M1  Oct 30-Nov 2  measure the outcome signal at 70/100 robots;
+                decision-time congestion / route-overlap proposal;
+                F9 statistics, F10 outcome attribution, F12 workload
+                variant scoped
+M2  Nov 2-7     ILP data layer: learner-side predicates, run-scoped
+                atoms, sampling, bias, offline teacher relabelling
+M3  Nov 7-12    Phase 10: reproduce nearest_astar with Popper; rules
+                compiled to Python; rule-executing strategy
+M4  Nov 12-17   Phase 11: Single-Teacher ILP
+M5  Nov 17-22   Phase 12: Multi-Teacher ILP
+M6  Nov 22-Dec 2  Phase 13: Outcome-Aware ILP, supervision frozen first
+M7  Dec 1-4     Phase 14: explanations
+M8  Dec 4-10    Phase 15: final campaign, quantum 3 primary, quantum 0
+                secondary
+M9  Dec 8-20    Phase 16: report
+```
+
+Deferred, not cancelled (2026-10-27): G6 end-of-work partial charging
+and the held-out transfer map.
+
 ## Phase 0: Research Scope
 
 Status: DONE
@@ -92,7 +123,8 @@ repository docs synchronized
 
 ## Phase 5: Warehouse Scalability Family
 
-Status: UNBLOCKED 2026-10-23 (awaiting approval). The blocker was that
+Status: W100 DONE, committed 503ca90; the held-out transfer map is a
+DEFERRED requirement (2026-10-27). UNBLOCKED 2026-10-23. The blocker was that
 the lane policy was hard-coded to the 17 x 35 V2 indices, so no other
 map shape could be legal (ARCHITECTURE.md section 12, P0-5). A map can
 now carry its own lanes as arrows drawn in Excel (DECISIONS.md, "Drawn
@@ -157,8 +189,9 @@ traffic stress test
 Status: B0-B5 DONE, approved and committed (578c668, 5d61c84, d6d67c1).
 B6a (the order_makespan / fleet_recovery_time split: run metrics
 separate order work from end-of-work recovery) DONE 2026-10-26,
-awaiting approval. The rest of B6 (decision/outcome battery metrics,
-G6 end-of-work partial charging) NOT STARTED.
+approved, committed 5abf5c2. The rest of B6 (decision/outcome battery
+metrics) NOT STARTED; G6 end-of-work partial charging is a DEFERRED
+requirement (2026-10-27).
 
 Implement:
 
@@ -201,7 +234,7 @@ Run at least one long workload where charging actually occurs.
 
 ## Phase 6b: Candidate Window and Dispatch (S0)
 
-Status: IMPLEMENTED 2026-10-22, awaiting approval. Decisions in
+Status: IMPLEMENTED 2026-10-22, committed 503ca90. Decisions in
 docs/DECISIONS.md, acceptance in docs/CURRENT_PHASE.md.
 
 A prerequisite for Phase 7, not an optimisation. The FIFO window sizes
@@ -233,7 +266,10 @@ changes.
 
 ## Phase 7: MRTA Baselines
 
-Status: SLICE 1 DONE (awaiting approval), slice 2 not started
+Status: DONE. Slice 1 committed 503ca90, slice 2 committed aa77ee0;
+accepted by the researcher as an implemented foundation 2026-10-27.
+Primary condition quantum 3 (DECISIONS.md, "Dispatch quantum
+conditions"); measurements in CURRENT_PHASE.md, "Phase 7 slice 2".
 
 Implemented in two slices, so the window, the dataset and the
 distinctness gate are exercised end to end before any effort goes into
@@ -252,7 +288,7 @@ ordering, so two strategies differ by their ranking and by nothing
 else -- not by how they resolve a conflict, not by how many pairs they
 emit, not by what they do when one side runs out.
 
-### Slice 2 — not started
+### Slice 2 — done
 
 ```text
 Earliest Finish
@@ -326,7 +362,9 @@ are shuffled, so a seeded run never depends on dict iteration order.
 
 ## Phase 8: Decision and Outcome Logging
 
-Status: DONE (awaiting approval)
+Status: DONE, committed 503ca90; accepted as an implemented foundation
+2026-10-27. The deferred-launch decision_id defect was fixed in M0
+(DECISIONS.md, "Decision Linkage").
 
 Two Parquet tables and a manifest per run, written by
 `simulation_env/dataset.py`:
@@ -438,7 +476,11 @@ Close" for the above.
 
 ## Phase 9: Experiment Runner
 
-Status: PLANNED
+Status: DONE for paired seeds and E1 integrity (committed 5abf5c2,
+aa77ee0); M0 adds per-experiment quantum and window, strategy identity,
+classified failures and the seed split. Holm correction and Wilcoxon
+sensitivity (F9) are not implemented; spatial workload scenarios (F12)
+do not exist yet.
 
 Build reproducible batch execution over:
 
@@ -543,13 +585,11 @@ Evaluate explanation complexity and usefulness.
 
 Status: PLANNED
 
-Run controlled experiments across:
-
-```text
-W20
-W30
-W50
-```
+Run controlled experiments on W100 across the fleet sweep 10, 30, 50,
+70, 100 (the W20 / W30 / W50 family was replaced 2026-10-23), quantum 3
+primary and quantum 0 secondary, on the evaluation seeds
+(EXPERIMENT_PROTOCOL.md, "Statistical Evaluation Protocol" and "Data
+Split Protocol"). The held-out transfer map is deferred.
 
 Vary:
 

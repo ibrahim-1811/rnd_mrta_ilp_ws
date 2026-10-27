@@ -10,9 +10,13 @@ module and must never change robot-order ownership.
 """
 
 from dataclasses import dataclass
+from hashlib import sha256
+from json import dumps
+from pathlib import Path
 from random import Random
 
 import numpy as np
+import scipy
 from scipy.optimize import Bounds, LinearConstraint, linear_sum_assignment, milp
 from scipy.sparse import coo_matrix
 
@@ -118,6 +122,41 @@ def get_batch_strategy(name: str, **kwargs) -> "BatchAllocationStrategy":
     return BATCH_STRATEGIES[key](**kwargs)
 
 
+class AllocationSolverError(RuntimeError):
+    """An optimising strategy's solver returned no decision.
+
+    A failure of the strategy, not of the warehouse, so a run that ends
+    on one is reported as a solver failure and never as a traffic stall
+    (docs/DECISIONS.md, "Run Failure Classification").
+    """
+
+
+def artifact_record(role: str, path) -> dict:
+    """Identity of one file a strategy reads, such as a learned rule set.
+
+    The content hash is what identifies it; the path is for the reader.
+    A missing file is an error rather than an empty hash: a strategy
+    that runs must be able to say exactly what it ran.
+    """
+
+    path = Path(path)
+
+    if not path.is_file():
+        raise FileNotFoundError(f"strategy artifact {role!r}: no such file {path}")
+
+    return {
+        "role": role,
+        "path": str(path),
+        "sha256": sha256(path.read_bytes()).hexdigest(),
+    }
+
+
+def identity_sha256(identity: dict) -> str:
+    """Short hash of a strategy identity, for manifests and summaries."""
+
+    return sha256(dumps(identity, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
 class BatchAllocationStrategy:
     """Pairs available robots with eligible orders.
 
@@ -160,6 +199,42 @@ class BatchAllocationStrategy:
 
     def reset(self):
         """Reset any per-trial internal state."""
+
+    # -- identity (docs/DECISIONS.md, "Strategy Identity") ---------
+
+    def parameters(self) -> dict:
+        """Effective parameters that change this strategy's choices.
+
+        The seed is not one of them: it is recorded per run, beside the
+        strategy, because it also selects the workload.
+        """
+
+        return {}
+
+    def execution(self) -> dict:
+        """Execution environment its choices depend on, e.g. a solver."""
+
+        return {}
+
+    def artifacts(self) -> list[dict]:
+        """Files it reads, as artifact_record() entries.
+
+        A learned strategy lists its rule set here, so two runs of
+        different rule sets can never be mistaken for one strategy.
+        """
+
+        return []
+
+    def identity(self) -> dict:
+        """Everything that defines this strategy's behaviour, for run.json."""
+
+        return {
+            "name": self.name,
+            "implementation": f"{type(self).__module__}.{type(self).__qualname__}",
+            "parameters": self.parameters(),
+            "execution": self.execution(),
+            "artifacts": self.artifacts(),
+        }
 
     def score(
         self,
@@ -618,6 +693,9 @@ class MultiCriteriaGridAwareAllocator(BatchAllocationStrategy):
 
         super().__init__(seed)
 
+    def parameters(self) -> dict:
+        return {"weights": dict(sorted(self.weights.items()))}
+
     def assign(
         self,
         warehouse,
@@ -793,6 +871,12 @@ class HungarianAllocator(BatchAllocationStrategy):
 
     name = "hungarian"
 
+    def execution(self):
+        return {
+            "solver": "scipy.optimize.linear_sum_assignment",
+            "scipy": scipy.__version__,
+        }
+
     def assign(
         self,
         warehouse,
@@ -907,7 +991,7 @@ def milp_pairing(candidates, timing, fifo_position):
     )
 
     if not makespan.success:
-        raise RuntimeError(f"milp stage 1 failed: {makespan.message}")
+        raise AllocationSolverError(f"milp stage 1 failed: {makespan.message}")
 
     ceiling = makespan.x[n] + 1e-6 * max(1.0, makespan.x[n])
 
@@ -919,7 +1003,7 @@ def milp_pairing(candidates, timing, fifo_position):
     )
 
     if not total.success:
-        raise RuntimeError(f"milp stage 2 failed: {total.message}")
+        raise AllocationSolverError(f"milp stage 2 failed: {total.message}")
 
     chosen = [c for c, x in zip(candidates, total.x[:n]) if x > 0.5]
 
@@ -952,6 +1036,11 @@ class MILPAllocator(BatchAllocationStrategy):
     """
 
     name = "milp"
+
+    def execution(self):
+        # Ties between equally optimal matchings are the solver's, so
+        # its build is part of what this strategy is (see above).
+        return {"solver": "HiGHS via scipy.optimize.milp", "scipy": scipy.__version__}
 
     def assign(
         self,

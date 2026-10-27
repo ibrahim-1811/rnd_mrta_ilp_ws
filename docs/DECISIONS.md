@@ -999,6 +999,19 @@ hungarian chooses as nearest_astar and milp as earliest_finish
 That near-equivalence is reported as a scientific observation, not
 engineered away. At quantum 3 every pair passes the 5 % gate.
 
+Revised by the researcher 2026-10-27, after the audit; the decision
+above is kept as history:
+
+```text
+primary learning and evaluation condition   dispatch quantum 3 s
+secondary comparison                        dispatch quantum 0 s
+```
+
+Both remain separate experiments (`run_experiment.py --quantum 3` and
+`--quantum 0`). In the primary condition hungarian and milp are
+distinct from every other strategy; at quantum 0 their near-equivalence
+to nearest_astar and earliest_finish is reported as observed.
+
 ## Allocation Candidate Window
 
 Approved 2026-10-22. The FIFO window is widened so that an allocation
@@ -1346,6 +1359,8 @@ decision-time route congestion is not computed
     fabricate a route-congestion feature. A genuine decision-time
     congestion predictor is a scoped extension, not part of Phase 8,
     and it must be computed from state at t only.
+    Approved for investigation 2026-10-27, together with route
+    overlap ("Research Direction After the Audit"); not implemented.
 
 estimated travel time is not recorded
     WorkloadExecutor accepts speed_mps but does not use it; the engine
@@ -1477,12 +1492,157 @@ allocation_window, resolved window width, dispatch_quantum_s
 the full battery configuration
 schema_version
 run totals, for cross-checking the tables against the report
+strategy_identity and strategy_sha256 (M0, "Strategy Identity")
 ```
 
 `schema_version` is explicit: a dataset whose schema changed is not
 comparable with an older one, and silently mixing the two would
 invalidate any learned rule. Phase 9 reads this manifest to assemble
 experiment matrices.
+
+## Research Direction After the Audit
+
+Decided by the researcher 2026-10-27, accepting the read-only audit of
+that day as the research engineering baseline:
+
+```text
+foundations        Phase 7, the traffic rotation rule, E1 and Phase 8
+                   are implemented foundations. Their scientific
+                   definitions change only with documented
+                   justification.
+congestion         decision-time congestion and route-overlap features
+                   are APPROVED FOR INVESTIGATION. Computed from state
+                   at t only (DECISIONS "Phase 8 Schema Gaps To Close");
+                   not implemented in M0.
+seeds              training 101-110, validation 111-115 ("Seed Split")
+condition          dispatch quantum 3 s is the primary learning and
+                   evaluation condition; quantum 0 is the secondary
+                   comparison ("Dispatch quantum conditions")
+statistics         primary metrics, paired comparisons, confidence
+                   intervals, Holm correction and a Wilcoxon sensitivity
+                   analysis are predefined before the final experiments
+                   (EXPERIMENT_PROTOCOL.md, "Statistical Evaluation
+                   Protocol")
+deferred           G6 end-of-work partial charging and the held-out
+                   transfer map remain requirements, deferred and not
+                   cancelled
+```
+
+## Decision Linkage
+
+M0, F5, 2026-10-27. An outcome row's `decision_id` is the decision that
+assigned the order, recorded in the executor when the allocator decides
+(`WorkloadExecutor._decision_of`) and read when the mission launches.
+
+It used to be read as "the latest decision" at launch. A deferred
+assignment (its plan refused, retried later) launches under a later
+dispatch, so its outcome would have joined the wrong decision. No
+recorded run was affected -- every run on record has 0 plan deferrals
+-- but the label an outcome-aware learner reads would have been silently
+wrong as soon as one occurred. The regression test forces deferrals that
+span several decisions and fails on the old rule.
+
+## Run Failure Classification
+
+M0, F6, 2026-10-27. A run that does not finish is classified, never
+lumped into "stalled":
+
+```text
+traffic_deadlock       fleet_engine.DeadlockError: a proven wait cycle,
+                       livelock or no-progress timeout          STALLED
+workload_stall         WorkloadStalledError: work outstanding, no
+                       events, recovery freed nothing           STALLED
+invalid_assignment     InvalidAssignmentError: robot not offered or
+                       used twice, order outside the window or used
+                       twice, pair without a route
+eligibility_violation  IneligibleAssignmentError: battery-ineligible pair
+solver_failure         AllocationSolverError: an optimiser failed
+charging_saturation    ChargingSaturationError
+execution_error        anything else; a defect, never a result
+```
+
+Only the first two are a STALLED run in the sense of
+EXPERIMENT_PROTOCOL.md. A failed run writes `failure.json` (kind,
+exception, message, simulated time, order counts) and no metrics, run
+manifest or tables, so it can never be compared as a result.
+
+The allocation contract (`_check_assignment_contract`) is now checked
+for every strategy, with or without battery accounting. Before M0 a
+contract breach was caught only by the battery check, and only when
+battery accounting was on. It raises; it never repairs a decision.
+
+## Strategy Identity
+
+M0, F8, 2026-10-27. A strategy name is not an identity. Every allocator
+reports `identity()`:
+
+```text
+name             the registered name
+implementation   module and class
+parameters       effective parameters that change its choices
+                 (multi_criteria: the weights). Not the seed: the seed
+                 is recorded per run, and it also selects the workload
+execution        what its choices depend on beyond its inputs
+                 (hungarian, milp: solver and scipy version)
+artifacts        files it reads, by content hash (a learned strategy's
+                 rule set), via artifact_record()
+```
+
+run.json records `strategy_identity` and its short hash
+`strategy_sha256`; both are part of the run_id. The settings signature
+leaves them out, because strategies differ by design; instead
+`check_strategies` requires each strategy name to have exactly one
+identity across an experiment, and run_experiment.py records every
+strategy's hash in the spec, so `--resume` refuses a changed strategy.
+
+Consequences, accepted: milp and hungarian runs from the ROS node
+(system scipy 1.11.4) and from pixi (1.17.1) are different identities;
+experiments made before M0 have no identity and are refused by
+compare_paired.py.
+
+## Experiment Conditions on the Command Line
+
+M0, F7, 2026-10-27. One config stays the only config. An experiment may
+override two of its values for every run:
+
+```text
+run_experiment.py --quantum T     dispatch quantum, 0 = continuous
+run_experiment.py --window W      fleet_size | legacy | integer >= 1
+```
+
+They are passed to each run as run_workload.py's existing flags, run.json
+records the effective values, the settings signature covers them, and
+the experiment spec records them for `--resume`. A condition is
+therefore an experiment, never a second config.
+
+## Seed Split
+
+Decided by the researcher 2026-10-27 (training, validation); the final
+set is a proposal. Enforced by `simulation_env/seed_split.py`.
+
+```text
+training      101-110    ILP examples come from these runs only
+validation    111-115    learner settings are chosen on these
+evaluation    1-30       the frozen main study
+final         201-230    PROPOSED: a sealed set, never run until the
+                         final campaign; reserved by the guard now
+development   any other seed (42, the reference workload): debugging
+                         only, never training, tuning or a reported
+                         result
+```
+
+`run_experiment.py --purpose training|validation|evaluation|final`
+refuses any seed outside that role; without a purpose, the reserved
+final seeds are refused. The purpose is recorded in the experiment spec,
+so the ILP pipeline (M2) can refuse to learn from an experiment that is
+not a training experiment.
+
+Why a final set is proposed: seeds 1-30 have already been looked at
+during development (E1 used 1-3, the paired-seed check 1-5, the fleet
+sweep 1-3), so they are no longer strictly unseen. They are not yet
+used for any learner, so they remain a valid evaluation set if the
+researcher prefers to keep the frozen main study as the final one.
+Decision needed before M8.
 
 ## Outcome-Aware Learning
 

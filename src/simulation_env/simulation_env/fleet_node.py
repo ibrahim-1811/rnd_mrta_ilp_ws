@@ -28,6 +28,7 @@ import subprocess
 from math import ceil
 from pathlib import Path
 from time import perf_counter, sleep
+import traceback
 
 import rclpy
 from rclpy.node import Node
@@ -50,6 +51,12 @@ from mrta_core.warehouse_routing import HOME_TYPES
 from simulation_env.battery_ledger import battery_report_lines
 from simulation_env.charging import ChargeState, ResourceState, WAITING_STATES
 from simulation_env.dataset import RunRecorder, build_manifest
+from simulation_env.failures import (
+    EXECUTION_ERROR,
+    classify,
+    failure_record,
+    write_failure,
+)
 from simulation_env.run_metrics import run_metrics, write_metrics
 from simulation_env.fleet import build_fleet, home_stations
 from simulation_env.grid_robot import GridRobotStatus
@@ -691,6 +698,7 @@ class FleetNode(Node):
             manifest = build_manifest(
                 config,
                 strategy=self.strategy_name,
+                strategy_identity=allocator.identity(),
                 window=self.window,
                 window_width=WorkloadExecutor.resolve_window(
                     self.window, len(self.robots)
@@ -752,8 +760,20 @@ class FleetNode(Node):
         try:
             result = executor.run()
 
-        except RuntimeError as error:
-            self.get_logger().error(f"workload stalled: {error}")
+        except Exception as error:
+            # The same classification as the headless runner, and the
+            # same failure.json when a dataset was asked for.
+            kind = classify(error)
+            self.get_logger().error(f"workload failed [{kind}]: {error}")
+
+            if kind == EXECUTION_ERROR:
+                self.get_logger().error(traceback.format_exc())
+
+            if self.dataset_dir:
+                write_failure(
+                    self.dataset_dir, failure_record(error, executor, manifest)
+                )
+
             return
 
         wall = perf_counter() - started

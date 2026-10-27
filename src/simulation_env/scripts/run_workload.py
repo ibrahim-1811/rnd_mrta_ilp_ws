@@ -19,6 +19,7 @@ import argparse
 from dataclasses import replace
 from pathlib import Path
 import time
+import traceback
 
 from mrta_core.order_queue import OrderQueue
 from mrta_core.orders import describe_order_selection, load_orders_csv, select_orders
@@ -27,6 +28,14 @@ from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from simulation_env.battery_ledger import battery_report_lines
 from simulation_env.dataset import RunRecorder, build_manifest
+from simulation_env.failures import (
+    EXECUTION_ERROR,
+    FAILURE_FILE,
+    STALL_KINDS,
+    classify,
+    failure_record,
+    write_failure,
+)
 from simulation_env.fleet import build_fleet, home_stations
 from simulation_env.workload_executor import (
     PerfBudget,
@@ -188,6 +197,8 @@ def main() -> int:
     # and a deterministic one simply ignores it.
     seed = config.seed if args.seed is None else args.seed
 
+    allocator = get_batch_strategy(args.strategy, seed=seed)
+
     # The manifest is built before the run, from the inputs only, so
     # the run_id names what is about to be measured rather than what
     # came out of it.
@@ -195,9 +206,14 @@ def main() -> int:
     recorder = None
 
     if args.dataset:
+        # A failure record left by an earlier attempt at this run
+        # directory describes that attempt, not this one.
+        (Path(args.dataset) / FAILURE_FILE).unlink(missing_ok=True)
+
         manifest = build_manifest(
             config,
             strategy=args.strategy,
+            strategy_identity=allocator.identity(),
             window=window,
             window_width=width,
             seed=seed,
@@ -253,7 +269,7 @@ def main() -> int:
         warehouse=warehouse,
         robots=robots,
         queue=queue,
-        allocator=get_batch_strategy(args.strategy, seed=seed),
+        allocator=allocator,
         resolution=config.resolution_m,
         speed_mps=speed,
         service_seconds={
@@ -287,9 +303,32 @@ def main() -> int:
     try:
         result = executor.run()
 
-    except RuntimeError as error:
+    except Exception as error:
+        # Classified, never lumped together: a strategy that breaks the
+        # contract is not a warehouse that jammed (docs/DECISIONS.md,
+        # "Run Failure Classification"). No metrics and no tables are
+        # written, so a failed run can never be compared as a result.
+        kind = classify(error)
+
         print()
-        print(f"STALLED: {error}")
+
+        if kind in STALL_KINDS:
+            # The line run logs have always carried for a stall.
+            print(f"STALLED: {error}")
+        else:
+            print(f"FAILED: {error}")
+
+            if kind == EXECUTION_ERROR:
+                traceback.print_exc()
+
+        print(f"FAILURE KIND: {kind} ({type(error).__name__})")
+
+        if args.dataset:
+            path = write_failure(
+                args.dataset, failure_record(error, executor, manifest)
+            )
+            print(f"  failure record   : {path}")
+
         return 1
 
     wall = time.perf_counter() - started

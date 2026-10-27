@@ -127,17 +127,35 @@ overwrite   run_experiment refuses an existing runs/<name>; --resume
 Uncommitted changes are recorded (`git.dirty` in run.json and
 experiment.json) and reported, not refused.
 
+Seed roles (DECISIONS.md, "Seed Split"; M0): training 101-110,
+validation 111-115, evaluation 1-30, a proposed sealed final set
+201-230. `--purpose` declares an experiment's role and refuses any other
+seed.
+
 ## Dispatch Conditions
 
-Decided 2026-10-27 (DECISIONS.md, "Dispatch quantum conditions"):
+Revised by the researcher 2026-10-27, after the audit (DECISIONS.md,
+"Dispatch quantum conditions"; the first decision of that day named
+quantum 0 primary and is kept there as history):
 
 ```text
-primary operational experiment   --quantum 0   (config default)
-controlled batch experiment      --quantum 3
+primary learning and evaluation condition   --quantum 3
+secondary comparison                        --quantum 0   (config default)
 ```
 
-Run them as separate experiments (separate `--name`); a quantum change
-changes `settings_sha256`, so compare_paired refuses to mix them.
+Run them as separate experiments (separate `--name`). The quantum is an
+experiment option since M0 (`run_experiment.py --quantum T`, likewise
+`--window W`); the one config is not copied. A quantum change changes
+`settings_sha256`, so compare_paired refuses to mix them.
+
+```bash
+python3 src/simulation_env/scripts/run_experiment.py --name main_q3 \
+    --quantum 3 --purpose evaluation \
+    --robots 10 30 50 70 100 --seeds $(seq 1 30)
+python3 src/simulation_env/scripts/run_experiment.py --name main_q0 \
+    --quantum 0 --purpose evaluation \
+    --robots 10 30 50 70 100 --seeds $(seq 1 30)
+```
 
 ## Stalled Runs
 
@@ -147,6 +165,15 @@ success, never dropped from the paired statistics without being
 reported, and never rescued by a fallback. It has no metrics.json, so
 the experiment is incomplete and compare_paired refuses it; the stall
 and its diagnostics stay in the run's run.log.
+
+Since M0 every failed run is classified (DECISIONS.md, "Run Failure
+Classification") and leaves failure.json. STALLED means exactly the
+kinds `traffic_deadlock` and `workload_stall`. An
+`invalid_assignment`, `eligibility_violation` or `solver_failure` is a
+defect of the strategy and is reported as such, never as the warehouse
+jamming; an `execution_error` is a defect to fix before any result is
+reported. compare_paired.py `--allow-incomplete` lists each missing
+run with its kind.
 
 `--workloads reference` runs the committed order file instead, as
 experiments before 2026-10-26 did; it cannot be compared with
@@ -444,6 +471,110 @@ confidence interval where appropriate
 
 The final statistical method should be frozen before the main experiment campaign.
 
+## Statistical Evaluation Protocol
+
+PROPOSED 2026-10-27 (M0), to be frozen by the researcher before the
+final campaign (M8). The paired t-interval exists in
+`simulation_env/paired.py`; Holm, Wilcoxon and the effect size do not
+yet (F9, "Requirements Before Outcome-Aware Training").
+
+```text
+unit            one workload seed. d_s = metric(strategy, s) -
+                metric(nearest_astar, s), same fleet size, same
+                condition, same workload (E1 checks this)
+primary metric  order_makespan_s (DECISIONS.md, "End of Workload")
+secondary       mean_completion_time_s, productive_distance_m,
+                productive_waiting_s, energy_consumed_percent;
+                order_throughput_per_h is reported but not tested
+                separately (a monotone transform of the primary);
+                allocator CPU per decision as the computational metric
+estimate        mean d with its 95% paired t-interval; median d beside
+                it; mean d as % of the baseline mean
+effect size     d_z = mean(d) / sd(d)
+primary test    two-sided paired t-test of mean d = 0
+multiplicity    Holm-Bonferroni, family-wise alpha 0.05, over the
+                primary family: every strategy against nearest_astar at
+                every fleet size (10, 30, 50, 70, 100) on
+                order_makespan_s in the primary condition (quantum 3).
+                With 7 conventional and 3 ILP strategies: 50 tests.
+                Each secondary metric is its own Holm family, reported
+                as secondary.
+ILP family      a second, pre-listed family, Holm within it: each ILP
+                strategy against its teacher(s); Outcome-Aware ILP
+                against Single-Teacher and Multi-Teacher ILP
+sensitivity     Wilcoxon signed-rank on the same pairs, Holm-adjusted on
+                the same families. A conclusion that holds under the
+                t-test but not under Wilcoxon is reported as not robust.
+failed runs     a failed or stalled run is a missing pair, never
+                imputed. Each comparison reports its expected and actual
+                n, and every strategy's failure count by kind is a
+                reported outcome in its own right.
+secondary condition
+                quantum 0: the same analysis, reported separately, with
+                its own families.
+n               30 evaluation seeds per fleet size
+```
+
+## Data Split Protocol
+
+PROPOSED 2026-10-27 (M0); the training and validation seeds are the
+researcher's decision of that day (DECISIONS.md, "Seed Split").
+
+```text
+training     seeds 101-110: teacher runs whose decision rows become ILP
+             examples; nothing else is learned from
+validation   seeds 111-115: every learner setting is chosen here --
+             discretisation thresholds, bias and hypothesis-space
+             limits, example sampling, label aggregation, the choice
+             between learner variants
+evaluation   seeds 1-30 (or the proposed sealed final set 201-230):
+             run once per strategy after every learner setting and rule
+             set is frozen. Nothing may be chosen by looking at them.
+freeze       a learned rule set is frozen as a file before any
+             evaluation run; its content hash is in every evaluation
+             run.json (strategy identity)
+thresholds   fitted on training seeds only
+fleet sizes  which fleet sizes training data comes from is declared
+             before training
+enforced     run_experiment.py --purpose refuses seeds outside the
+             declared role; the ILP pipeline (M2) must refuse decision
+             rows from any experiment whose purpose is not training
+```
+
+## Requirements Before Outcome-Aware Training
+
+Recorded 2026-10-27 (M0) from the audit. None is implemented; each must
+be resolved before Outcome-Aware ILP is trained, and F9 before any
+final comparison.
+
+```text
+F9   statistics       Holm correction, Wilcoxon signed-rank, d_z and
+                      failure counts in paired.py / compare_paired.py,
+                      as the protocol above; the protocol frozen
+F10  outcome          yield_events_during and charge_sessions_before in
+     attribution      outcomes are fleet-wide counter differences, not
+                      per order, and must not be read as per-order
+                      labels. Missing per-order values: minimum SOC
+                      (needs a running minimum in the ledger), whether
+                      the order left the robot needing a charge, and
+                      when the robot was next available. Whether an
+                      order's effect on other robots (waiting it caused)
+                      is an outcome must be decided.
+F12  workload         only uniform random demand exists. At least one
+     variety          spatial variant (a shelf hotspot or a skewed
+                      side) is needed before any robustness claim; the
+                      held-out transfer map is a deferred requirement
+M1   outcome signal   measure predicted vs realized outcomes at 70 and
+                      100 robots: at 30-50 robots waiting is 1-2% of
+                      mission time and distance is predicted exactly,
+                      so per-order outcomes barely differ from what the
+                      teacher already predicts
+features             decision-time congestion and route-overlap features
+                      (approved for investigation 2026-10-27)
+supervision           the outcome-aware supervision definition frozen
+                      ("Outcome-Aware Supervision" below)
+```
+
 ## Outcome-Aware Supervision
 
 The final outcome-aware target is not yet frozen.
@@ -471,10 +602,13 @@ warehouse map
 fleet size
 workload file
 strategy
-seed
+strategy identity (parameters, solver, artifacts by hash; M0)
+seed, and the experiment's seed purpose (M0)
+dispatch quantum and candidate window
 battery configuration
 traffic configuration
 result file paths
+failure kind, for a run that did not finish (M0)
 ```
 
 No final thesis result should depend on an undocumented local configuration.

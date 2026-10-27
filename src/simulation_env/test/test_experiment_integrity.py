@@ -266,6 +266,8 @@ def test_compare_refuses_an_incomplete_or_mixed_experiment(tmp_path):
             writer.writerows(selected)
 
     # One run stalled: no metrics, so it is missing from the summary.
+    # Its log is the pre-F6 kind, with no failure.json beside it; the
+    # classified case is in test_m0_integrity.py.
     stalled = rows[-1]
     stalled_dir = base / stalled["strategy"] / f"r{stalled['robots']}_s{stalled['seed']}"
     (stalled_dir / "metrics.json").unlink()
@@ -286,7 +288,7 @@ def test_compare_refuses_an_incomplete_or_mixed_experiment(tmp_path):
     assert "3 of 4 expected runs present" in report
     assert (
         f"| {stalled['strategy']} | {stalled['robots']} | {stalled['seed']} | "
-        "stalled (traffic deadlock); see run.log |"
+        "stalled, unclassified (run predates failure.json); see run.log |"
     ) in report
     # random lost seed 2, so its comparison with nearest_astar has n = 1.
     assert "| random | 4 | 2 | 1 | 2 |" in report

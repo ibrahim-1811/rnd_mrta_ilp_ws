@@ -72,6 +72,9 @@ def manifest_of(config, *, orders=12, **changes):
         repo=REPO,
     )
     params.update(changes)
+    params.setdefault(
+        "strategy_identity", get_batch_strategy(params["strategy"]).identity()
+    )
 
     return build_manifest(config, **params)
 

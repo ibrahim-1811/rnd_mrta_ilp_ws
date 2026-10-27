@@ -2,52 +2,51 @@
 
 ## Current Position
 
-The deterministic warehouse simulator is complete and verified. The research learner is not yet implemented.
-
-Current high-level state:
+Updated 2026-10-27, M0, on the research backend branch
+`research/outcome-aware-ilp`. The deterministic warehouse simulator is
+complete and verified; the research learner is not yet implemented. The
+milestone plan to 20 December 2026 (M0-M9) is in ROADMAP.md.
 
 ```text
 Deterministic simulator       DONE
-Directional traffic          DONE
+Directional traffic          DONE; rotation right-of-way committed
+                             aa77ee0, accepted foundation 2026-10-27
 Directed A* routing          DONE
 Gazebo mirror                DONE
-Nearest A* baseline          DONE
-V2 warehouse map             DONE; kept as the test-suite and
-                             frozen-baseline reference
+V2 warehouse map             DONE; the test-suite and frozen-baseline
+                             reference
 W100 research map            DONE, committed 503ca90; one config,
-                             fleet sweep 10-100 (decided 2026-10-23,
-                             replaces the W20/W30/W50 family)
-Held-out transfer map        PLANNED, not built
-Battery scheduler V1         IN PROGRESS
-                             B0 charging bank DONE, visually approved
-                             B1 SOC accounting DONE, approved
-                             B2 eligibility + CHARGE_DUE/NEEDED DONE,
-                                approved
-                             B3 charger / holding travel DONE,
-                                approved, verified in Gazebo
-                                2026-10-06
-                             B4 charging + leaving + rejoin COMPLETE,
-                                VERIFIED, APPROVED 2026-10-06,
-                                committed 5d61c84
-                             B5 holding promotion + preemption
-                                DONE, APPROVED 2026-10-11,
-                                committed d6d67c1
-                             B6a order work vs recovery metrics
-                                DONE, approved, committed 5abf5c2
+                             fleet sweep 10-100
+Held-out transfer map        DEFERRED requirement (2026-10-27), not
+                             built; not cancelled
+Battery scheduler V1         B0-B5 and B6a DONE, committed
                              B6 rest (battery decision/outcome
-                                metrics, G6) NOT STARTED
-Candidate window S0          S0a + S0b DONE, committed
-MRTA baselines               random, nearest_manhattan,
-                             nearest_astar DONE; earliest_finish,
-                             multi_criteria, auction, hungarian, milp
-                             IMPLEMENTED 2026-10-26, awaiting review
-                             (see "Phase 7 slice 2")
-Decision/outcome logging     DONE (Phase 8), Prolog export bk.pl/exs.pl
-Experiment runner            DONE; paired workload seeds + 95% CI
-                             comparison DONE, committed 5abf5c2
-ILP / Popper                 NOT IMPLEMENTED; Popper v4.4.0
-                             installed and smoke-tested (see "Popper
-                             environment" below)
+                             metrics) NOT STARTED
+                             G6 end-of-work partial charging DEFERRED
+                             requirement (2026-10-27), not built
+Candidate window S0          S0a + S0b DONE, committed 503ca90
+MRTA baselines (Phase 7)     random, nearest_manhattan, nearest_astar,
+                             earliest_finish, multi_criteria, auction,
+                             hungarian, milp; committed aa77ee0,
+                             accepted foundation 2026-10-27
+Decision/outcome dataset     DONE (Phase 8), committed 503ca90,
+                             accepted foundation 2026-10-27; F5
+                             linkage defect fixed in M0
+Experiment runner            DONE: paired seeds, E1 integrity
+                             (accepted foundation); M0 adds --quantum,
+                             --window, --purpose, strategy identity,
+                             classified failures
+M0 integrity                 IMPLEMENTED 2026-10-27, awaiting review,
+                             not committed (see "M0" at the end)
+Primary condition            dispatch quantum 3 s for learning and
+                             evaluation; quantum 0 secondary
+                             (researcher, 2026-10-27)
+Statistical protocol         PROPOSED in EXPERIMENT_PROTOCOL.md; Holm
+                             and Wilcoxon not implemented (F9)
+Decision-time congestion     APPROVED FOR INVESTIGATION (2026-10-27),
+  and route-overlap features not implemented
+ILP / Popper                 NOT IMPLEMENTED; Popper v4.4.0 installed
+                             and smoke-tested (see "Popper environment")
 Outcome-aware learning       NOT IMPLEMENTED
 Explanations                 NOT IMPLEMENTED
 ```
@@ -68,17 +67,14 @@ The current V2 map is a 17 x 35 XLSX warehouse with:
 Chargers and holding cells form two one-cell-deep terminal banks,
 y=2 and y=32, reading `C Q Q C Q Q C Q Q C Q` over x=4..14 (B0).
 
-The current V2 map is the starting point for the W20-class warehouse.
-
-For strict W20 experiments, use 20 active robots from the available home capacity unless a dedicated 20-home map is created later.
+V2 is the test-suite and frozen-baseline reference. The research map
+is W100 (see "W100: the research map, and one config"); the W20/W30/W50
+family was replaced by it on 2026-10-23.
 
 ## Current Scientific Baseline
 
-The currently implemented allocation strategy is:
-
-```text
-nearest_astar
-```
+`nearest_astar` is the reference baseline every paired comparison is
+made against. Eight conventional strategies are implemented (Phase 7).
 
 The simulator uses directed A* over the one-way warehouse graph.
 
@@ -265,7 +261,8 @@ B6  decision / outcome battery metrics   NOT STARTED
 
 ### Phase S0: Candidate window and dispatch
 
-Status: S0a and S0b IMPLEMENTED 2026-10-22, awaiting approval.
+Status: S0a and S0b IMPLEMENTED 2026-10-22, committed in checkpoint
+503ca90; formal approval not recorded.
 
 S0a is the candidate window, the FIFO liveness rule and the
 decision-shape instrumentation. S0b is the dispatch quantum; it
@@ -1038,7 +1035,8 @@ check_b4_charging.py                   -> a freed charger no longer stays
 
 ### Phase 8: Decision and outcome dataset
 
-Status: implemented, awaiting approval. Nothing committed.
+Status: implemented, committed in checkpoint 503ca90; accepted by the researcher as an implemented foundation 2026-10-27.
+The deferred-launch decision_id defect (F5) is fixed in M0, below.
 
 The first phase whose purpose is not simulator behaviour but evidence.
 Without it there is nothing for an ILP learner to read, and no way to
@@ -1179,7 +1177,8 @@ PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management \
 
 ### Phase 7 slice 1: Random and Nearest Manhattan
 
-Status: implemented, awaiting approval. Nothing committed.
+Status: implemented, committed in checkpoint 503ca90; as part of Phase 7,
+accepted by the researcher as an implemented foundation 2026-10-27.
 
 The first real strategy comparison. Until now `nearest_astar` was the
 only registered strategy, so no claim about allocation policy could be
@@ -1373,7 +1372,7 @@ PYTHONPATH=$PP $PY -m pytest src/task_management/test/test_strategies.py -q
 
 ### Any map: lanes drawn in Excel (unblocks Phase 5)
 
-Status: implemented, awaiting approval. Nothing committed.
+Status: implemented, committed in checkpoint 503ca90; formal approval not recorded.
 
 Requested 2026-10-23: anyone should be able to create a map in Excel,
 by following an SOP, and run the system on it. The researcher plans one
@@ -1460,7 +1459,7 @@ Scalability", now says so. See the W100 section below.
 
 ### W100: the research map, and one config
 
-Status: implemented, awaiting approval. Nothing committed.
+Status: implemented, committed in checkpoint 503ca90; formal approval not recorded.
 
 The researcher chose one main map for the R&D, with a fleet-size sweep
 from 10 to 100 robots (DECISIONS.md, "Warehouse Scalability").
@@ -1533,7 +1532,7 @@ test fixtures used by `check_charger_evacuation.py`.
 
 ### One map, one config, one world
 
-Status: implemented, awaiting approval. Nothing committed. Supersedes
+Status: implemented, committed in checkpoint 503ca90; formal approval not recorded. Supersedes
 the per-fleet-size worlds and the `warehouse_W100*.yaml` configs of the
 W100 section above.
 
@@ -1593,7 +1592,7 @@ one config.
 
 ### Gazebo pauses and the silent end of a long run
 
-Status: fixed 2026-10-24, awaiting approval. Nothing committed.
+Status: fixed 2026-10-24, committed in checkpoint 503ca90; formal approval not recorded.
 Performance only: every decision, outcome and metric is unchanged.
 
 Reported with 100 robots in Gazebo: every robot stopped together for a
@@ -1703,8 +1702,8 @@ for a demo; they are back at the frozen 1.0.
 
 ### Gazebo opens with the robots parked; one Gazebo at a time
 
-Status: implemented 2026-10-24, awaiting approval. Visualization only;
-nothing in the simulation changed. Nothing committed.
+Status: implemented 2026-10-24, committed in checkpoint 503ca90.
+Visualization only; nothing in the simulation changed.
 
 The researcher saw no robots in Gazebo with the one-command launch, and
 robots that appeared late with two terminals. Robots were created by
@@ -1742,8 +1741,8 @@ started a new one with 50. Not checked by me: the Gazebo window itself
 
 ### Experiment tooling, and a quiet terminal with ROS topics
 
-Status: implemented 2026-10-25, awaiting approval. Reporting only:
-nothing in the simulation changed. Nothing committed.
+Status: implemented 2026-10-25, committed in checkpoint 503ca90.
+Reporting only: nothing in the simulation changed.
 
 Experiments:
 
@@ -1806,7 +1805,7 @@ metrics cannot tell the strategies apart in this setup. Changing that
 
 ### One order limit for headless and Gazebo; honest run provenance
 
-Status: implemented 2026-10-25, awaiting approval. Nothing committed.
+Status: implemented 2026-10-25, committed in checkpoint e7c6549; formal approval not recorded.
 
 ```text
 headless   run_workload.py --orders N          (unchanged)
@@ -1869,7 +1868,7 @@ next             Battery B6 (separate order_makespan from
 
 Status: approved, committed 5abf5c2. Reporting only:
 nothing in allocation, routing, traffic, battery, charging or execution
-changed. Nothing committed.
+changed.
 
 DECISIONS.md, "End of Workload", keeps `order_makespan` (the final
 drop-off) apart from `fleet_recovery_time` (every robot settled), and
@@ -2035,8 +2034,9 @@ python3 src/simulation_env/scripts/compare_paired.py --name main
 
 ### E1: paired experiment integrity
 
-Status: implemented 2026-10-26, awaiting approval. Analysis tooling
-only: nothing in the simulation changed.
+Status: implemented 2026-10-26, committed in checkpoint aa77ee0;
+accepted by the researcher as an implemented foundation 2026-10-27. Analysis tooling only: nothing in the simulation
+changed.
 
 Four guarantees before a paired comparison is reported
 (EXPERIMENT_PROTOCOL.md, "Seeds"): complete seed sets against
@@ -2073,7 +2073,8 @@ suite 459 passed.
 
 ### Phase 7 slice 2: the five remaining conventional strategies
 
-Status: implemented 2026-10-26, awaiting review. Nothing committed.
+Status: implemented 2026-10-26, committed in checkpoint aa77ee0;
+accepted by the researcher as an implemented foundation 2026-10-27.
 
 Definitions in DECISIONS.md, "Conventional strategy definitions".
 Every strategy gets the same window, battery mask, directed A* routes,
@@ -2164,8 +2165,8 @@ All 300/300, 0 reservation violations. One workload: not a ranking.
 
 ### Traffic liveness: diagnosis and proposed fix
 
-Status: approved and implemented 2026-10-27, awaiting review. Nothing
-committed. Rule recorded in DECISIONS.md, "Rotation Right-of-Way".
+Status: approved and implemented 2026-10-27, committed in checkpoint
+aa77ee0; accepted by the researcher as an implemented foundation 2026-10-27. Rule recorded in DECISIONS.md, "Rotation Right-of-Way".
 Full trace in
 .scratch/traffic-liveness/issues/01-cyclic-deadlock-under-scattered-allocation.md.
 
@@ -2298,9 +2299,199 @@ total) in both. exs.pl at 30 robots: 300 pos, 8266 neg. Distinctness
 gate at 30 robots / 300 orders: every pair distinct, status OK
 (makespan 888.0 / 928.3 / 955.3 s for A* / Manhattan / random).
 
-## Definition of Done for Phase B
+### M0: research integrity and experimental reproducibility
 
-The current phase is complete when:
+Status: implemented 2026-10-27 on `research/outcome-aware-ilp`, awaiting
+review. Not committed. Scope: F5-F8 of the 2026-10-27 audit and the seed
+split guard. Nothing in routing, traffic, battery, charging, execution or
+any strategy's choices changed.
+
+#### What was added
+
+```text
+simulation_env/workload_executor.py  F5: _decision_of, order -> the
+                                     decision that assigned it, read at
+                                     launch. F6: InvalidAssignmentError,
+                                     WorkloadStalledError,
+                                     _check_assignment_contract (every
+                                     strategy, with or without battery)
+simulation_env/failures.py           new: failure kinds, failure.json
+simulation_env/seed_split.py         new: seed roles, check_purpose
+simulation_env/dataset.py            build_manifest(strategy_identity=):
+                                     run.json strategy_identity and
+                                     strategy_sha256
+simulation_env/paired.py             check_strategies; identity fields
+                                     left out of the settings signature
+simulation_env/fleet_node.py         the same identity, classification
+                                     and failure.json in the ROS node
+task_management/allocation_strategy.py
+                                     identity() = parameters, execution,
+                                     artifacts; artifact_record,
+                                     identity_sha256;
+                                     AllocationSolverError (milp)
+scripts/run_workload.py              classified failures, failure.json,
+                                     a stale failure.json cleared
+scripts/run_experiment.py            --quantum, --window, --purpose;
+                                     spec records them and every
+                                     strategy's identity; summary.csv
+                                     strategy_sha256; failure kind shown
+scripts/compare_paired.py            check_strategies; a missing run is
+                                     reported with its failure kind
+test/test_m0_integrity.py            new, 38 tests
+test/test_dataset.py                 helper passes the identity
+test/test_experiment_integrity.py    pre-F6 log wording
+```
+
+#### Evidence
+
+```text
+F5  deferred launch keeps its decision_id, quantum 0 and 3: 40 V2
+    orders, every third order's plans refused until two further
+    decisions; >= 5 orders launch under a later decision, some after
+    >= 2 refused attempts, deferred assignments of >= 2 decisions
+    outstanding together. Every outcome row joins its selected decision
+    row 1:1. With the old stamp (decisions - 1) restored, both tests
+    fail at the decision_id assertion.
+F6  each kind classified; end to end through run_workload.main:
+    invalid assignment, solver failure, traffic deadlock, workload
+    stall, execution error, eligibility violation. STALLED is printed
+    for the two stall kinds only; a failed run writes failure.json and
+    no metrics.json, run.json or tables.
+F7  --quantum 3 --window 5, --quantum 0 and no flag reach every run.json
+    and experiment.json; the two conditions get different settings
+    signatures; --resume with another quantum is refused; a negative
+    quantum, window 0 or an unknown strategy is refused before
+    anything runs.
+F8  every registered strategy has an identity; the seed is not part of
+    it; multi_criteria weights, milp and hungarian solver builds and a
+    rule artifact's content are; compare_paired refuses a strategy that
+    ran as two identities, --resume refuses a changed identity.
+seeds  roles disjoint; --purpose training refuses seed 5; the reserved
+    final seeds are refused without --purpose final.
+```
+
+Full suite: 600 passed (562 before M0 + 38). ruff clean. The ROS
+node's system interpreter (Python 3.12.3, scipy 1.11.4) imports every
+changed module.
+
+Frozen baseline compatibility, before (badbc59) against after (M0 tree),
+same commands:
+
+```text
+V2 reference, 100 orders            makespan / distance       tables
+  nearest_astar                     268.6667 s / 5798.0 m     identical
+  nearest_manhattan                 265.3333 s / 5974.0 m     identical
+  random                            266.6667 s / 6488.0 m     identical
+W100, 30 robots, 120 orders, q 3    hungarian, milp, earliest_finish,
+                                    multi_criteria, auction   identical
+```
+
+Identical means: decisions and outcomes equal row for row (run_id
+aside), every non-CPU metric in metrics.json equal. run.json differs
+only in git state, run_id, strategy_identity and strategy_sha256.
+
+#### What a reader of older runs must know
+
+- `run_id` of a new run differs from an older run of the same inputs:
+  the manifest now names the strategy identity. The tables are
+  unchanged and `schema_version` stays 1.
+- milp and hungarian record their scipy build, so a headless run (pixi,
+  1.17.1) and a ROS node run (system, 1.11.4) are different strategy
+  identities with different run_ids. The others still agree.
+- compare_paired.py refuses a summary.csv without strategy_sha256, that
+  is, any experiment made before M0. Rerun it, or compare it with the
+  pre-M0 code.
+- Run logs print `STALLED:` only for traffic_deadlock and
+  workload_stall; any other failure prints `FAILED:` and every failure
+  prints `FAILURE KIND: <kind>`.
+- The ROS node now catches every exception at the end of a workload
+  (previously RuntimeError only), logs its kind, logs the traceback of
+  an execution_error and writes failure.json when recording.
+
+#### Outcome schema: completed, deferred, incomplete and failed orders
+
+Checked against the code, not changed:
+
+```text
+completed   one outcome row, written at retirement; success = true
+deferred    one outcome row like any other. decision_id is the deciding
+            decision (F5); launched_at is the real launch, so the
+            deferral delay is launched_at minus that decision's
+            sim_time, by join. realized_duration_s starts at launch and
+            excludes the deferral wait.
+incomplete  cannot occur in a written dataset: run() raises unless every
+            order completed.
+failed run  no tables are written; failure.json counts completed,
+            pending, in-flight and deferred orders. No outcome is
+            invented for an order that did not finish.
+```
+
+So `success` is true on every written row and is not a failure
+indicator: failure is a run-level record. A failed run's partial
+decision table is not kept; keeping it for failure analysis would be a
+separate decision.
+
+#### Not done in M0, required before outcome-aware training
+
+F9 (statistics), F10 (per-order outcome attribution) and F12 (workload
+variety) are recorded as requirements in EXPERIMENT_PROTOCOL.md,
+"Requirements Before Outcome-Aware Training". The statistical and
+data-split protocols are proposed there and in DECISIONS.md.
+
+#### Backend changes the GUI contract should know
+
+`src/dashboard_GUI/docs/control_center/API_CONTRACT.md` is Codex-owned
+and was not edited. Additive changes it may need to reflect:
+
+```text
+run_experiment.py   new flags --quantum, --window, --purpose (the
+                    contract currently accepts no experiment quantum or
+                    window; GET /capabilities will now see them)
+run directories     may hold failure.json: kind, stalled, exception,
+                    message, order counts
+run.json            strategy_identity (object), strategy_sha256 (text)
+summary.csv         strategy_sha256 column, text
+experiment.json     spec gains quantum, window, purpose, strategy_sha256
+run.log             "STALLED:" only for stall kinds; "FAILED:" and
+                    "FAILURE KIND:" lines are new
+comparisons         pre-M0 summaries are refused (no strategy_sha256)
+```
+
+#### Commands
+
+```bash
+cd ~/rnd_mrta_ilp_research
+export PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management
+PY=python3          # inside the pixi environment
+
+# M0 tests, then the whole suite and lint
+$PY -m pytest src/simulation_env/test/test_m0_integrity.py -q
+$PY -m pytest src/mrta_core/tests src/simulation_env/test \
+    src/task_management/test -q
+ruff check .
+
+# frozen V2 baselines: 268.6667 s / 5798.0 m, 265.3333 s / 5974.0 m,
+# 266.6667 s / 6488.0 m
+for s in nearest_astar nearest_manhattan random; do
+  $PY src/simulation_env/scripts/run_workload.py --strategy $s \
+      --config src/simulation_env/test/fixtures/v2_reference.yaml \
+      --quiet --progress 0 | grep -E "makespan  |total distance"
+done
+
+# the two conditions, a small grid each
+$PY src/simulation_env/scripts/run_experiment.py --name m0_q3 \
+    --quantum 3 --strategies nearest_astar hungarian milp \
+    --robots 10 30 --seeds 101 102 103 --orders 100 --purpose training
+$PY src/simulation_env/scripts/run_experiment.py --name m0_q0 \
+    --quantum 0 --strategies nearest_astar hungarian milp \
+    --robots 10 30 --seeds 101 102 103 --orders 100 --purpose training
+$PY src/simulation_env/scripts/compare_paired.py --name m0_q3
+```
+
+## Definition of Done for Phase B (superseded)
+
+Superseded 2026-10-23 by the one-map W100 decision (DECISIONS.md,
+"Warehouse Scalability"); kept as history. It read:
 
 ```text
 1. baseline simulator state is clean and reproducible

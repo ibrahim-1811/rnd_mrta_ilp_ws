@@ -337,16 +337,20 @@ blue = next · grey = not started</sub>
 | Deterministic simulator, directed A*, one-way traffic | **done**, verified |
 | Gazebo / RMF mirror | **done**, verified |
 | Battery V1 (B0–B5: SOC, eligibility, charging, holding, preemption) | **done**, committed |
-| Battery V1 B6 (metrics, `order_makespan` split, end-of-work charging) | not started |
-| S0 candidate window + dispatch quantum | **done**, awaiting approval |
-| Decision/outcome dataset (Phase 8) | **done**, awaiting approval |
-| MRTA strategies, slice 1 (`random`, `nearest_manhattan`, `nearest_astar`) | **done**, awaiting approval |
-| MRTA strategies, slice 2 (Earliest Finish, Multi-Criteria, Auction, Hungarian, MILP) | not started |
-| Experiment runner (map × fleet × workload × strategy × seed) | not started |
-| Popper / ILP / learned rules | **not started** — swi-prolog is a declared dependency only |
+| Battery V1 B6a (`order_makespan` split) | **done**, committed |
+| Battery V1 B6 rest (battery decision/outcome metrics) | not started |
+| G6 end-of-work partial charging; held-out transfer map | deferred requirements |
+| S0 candidate window + dispatch quantum | **done**, committed |
+| Decision/outcome dataset (Phase 8) | **done**, committed; accepted foundation |
+| MRTA strategies, slice 1 (`random`, `nearest_manhattan`, `nearest_astar`) | **done**, committed; accepted foundation |
+| MRTA strategies, slice 2 (Earliest Finish, Multi-Criteria, Auction, Hungarian, MILP) | **done**, committed; accepted foundation |
+| Experiment runner (paired seeds, E1 integrity) | **done**, committed |
+| M0: decision linkage, failure classes, quantum/window per experiment, strategy identity, seed split | implemented, awaiting review |
+| Holm / Wilcoxon statistics, spatial workload variants | not started |
+| Popper / ILP / learned rules | **not started** — Popper v4.4.0 installed and smoke-tested |
 | Explanations | `strategy.explain()` returns one line |
 | Any map, drawn in Excel with its own one-way lanes | **done**, awaiting approval — see [MAKE_A_MAP.md](docs/MAKE_A_MAP.md) |
-| Breaking a deadlock once robots form a waiting circle | **not done** — maps must avoid 2 × 2 rotaries instead (the checker warns) |
+| Breaking a deadlock once robots form a waiting circle | **done** for a rotation inside one movement batch (rotation right-of-way, aa77ee0); a cycle through a robot outside the batch still stalls |
 
 > **About the ICAPS'26 talk.** The ILP results presented there
 > (makespan tables for fleet sizes 5/10/15/20) came from an **earlier,

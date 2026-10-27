@@ -15,7 +15,9 @@ mean per-seed difference and its 95% confidence interval:
 A difference is strategy minus baseline. An interval that does not
 contain 0 is marked. Refuses (E1) an experiment whose runs do not match
 the grid in experiment.json, whose runs do not share one map and
-simulator setting, or whose pairs did not run the same workload.
+simulator setting, whose strategy ran as more than one identity (its
+parameters, solver or rule artifact changed between runs), or whose
+pairs did not run the same workload.
 
 --allow-incomplete compares the runs that are there, and says so:
 paired.md opens with an INCOMPLETE banner, lists every missing run
@@ -38,10 +40,12 @@ for package in ("mrta_core", "simulation_env", "task_management"):
     if str(ROOT / "src" / package) not in sys.path:
         sys.path.insert(0, str(ROOT / "src" / package))
 
+from simulation_env.failures import read_failure  # noqa: E402
 from simulation_env.paired import (  # noqa: E402
     PairingError,
     check_complete,
     check_settings,
+    check_strategies,
     paired_differences,
 )
 
@@ -49,8 +53,39 @@ from simulation_env.paired import (  # noqa: E402
 # Identity columns stay text: a hex digest such as "12e4..." or one of
 # only digits would otherwise parse as a number.
 TEXT_COLUMNS = frozenset(
-    {"strategy", "workload", "orders_sha256", "settings_sha256", "run_dir"}
+    {
+        "strategy",
+        "workload",
+        "orders_sha256",
+        "settings_sha256",
+        "strategy_sha256",
+        "run_dir",
+    }
 )
+
+
+def missing_reason(run_dir) -> str:
+    """Why an expected run has no metrics, as precisely as it is known.
+
+    failure.json first (docs/DECISIONS.md, "Run Failure Classification");
+    a run made before failures were classified is read from its log.
+    """
+
+    if not run_dir.exists():
+        return "not run"
+
+    failure = read_failure(run_dir)
+
+    if failure is not None:
+        stalled = " (stalled)" if failure.get("stalled") else ""
+        return f"failed: {failure['kind']}{stalled}; see failure.json"
+
+    log = run_dir / "run.log"
+
+    if log.exists() and "STALLED" in log.read_text(errors="replace"):
+        return "stalled, unclassified (run predates failure.json); see run.log"
+
+    return "failed, no metrics; see run.log"
 
 
 def load(path):
@@ -89,16 +124,7 @@ def completeness(base, rows, expected_runs, baseline):
     missing = []
 
     for strategy, robots, seed in sorted(expected - have):
-        run_dir = base / strategy / f"r{robots}_s{seed}"
-        log = run_dir / "run.log"
-
-        if not run_dir.exists():
-            why = "not run"
-        elif log.exists() and "STALLED" in log.read_text(errors="replace"):
-            why = "stalled (traffic deadlock); see run.log"
-        else:
-            why = "failed, no metrics; see run.log"
-
+        why = missing_reason(base / strategy / f"r{robots}_s{seed}")
         missing.append((strategy, robots, seed, why))
 
     extra = sorted(have - expected)
@@ -244,6 +270,7 @@ def main() -> int:
             check_complete(rows, record["runs"])
 
         check_settings(rows)
+        check_strategies(rows)
         records = paired_differences(rows, args.baseline)
     except PairingError as error:
         print(f"refused: {error}")

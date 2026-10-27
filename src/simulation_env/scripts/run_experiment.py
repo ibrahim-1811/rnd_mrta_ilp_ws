@@ -48,6 +48,27 @@ settings_sha256). An existing runs/<name> is never overwritten:
     --force    start again; the old directory is kept, renamed to
                runs/<name>.replaced-<UTC time>
 
+The dispatch quantum and the candidate window come from the one config
+unless the experiment overrides them for every run:
+
+    --quantum 3        the primary learning / evaluation condition
+    --quantum 0        continuous dispatch, the secondary comparison
+    --window W         fleet_size, legacy or a positive integer
+
+Each run's run.json records the effective values and they are part of
+the settings signature, so two conditions can never be paired; run them
+as separate experiments (EXPERIMENT_PROTOCOL.md, "Dispatch Conditions").
+
+--purpose training | validation | evaluation | final declares which
+seed role the experiment serves, and refuses any seed outside it; with
+no purpose, the reserved final seeds are refused (docs/DECISIONS.md,
+"Seed Split"). Every strategy's identity hash (its parameters, solver
+and artifacts) is part of the spec, so --resume refuses to mix two
+versions of one strategy.
+
+A run that fails leaves failure.json with its classified kind instead
+of metrics.json (docs/DECISIONS.md, "Run Failure Classification").
+
 Then plot it with plot_experiment.py and compare strategies with
 compare_paired.py.
 """
@@ -76,7 +97,14 @@ for package in PACKAGES:
         sys.path.insert(0, str(ROOT / "src" / package))
 
 from simulation_env.dataset import git_state  # noqa: E402
+from simulation_env.failures import read_failure  # noqa: E402
 from simulation_env.paired import settings_signature  # noqa: E402
+from simulation_env.seed_split import ROLES, SeedLeakageError, check_purpose  # noqa: E402
+from simulation_env.workload_executor import WorkloadExecutor  # noqa: E402
+from task_management.allocation_strategy import (  # noqa: E402
+    get_batch_strategy,
+    identity_sha256,
+)
 
 EXPERIMENT_FILE = "experiment.json"
 
@@ -187,16 +215,33 @@ def prepare(out, spec, resume, force) -> str | None:
 
     recorded = json.loads(path.read_text())["spec"]
 
-    if recorded != spec:
-        changed = sorted(k for k in set(recorded) | set(spec) if recorded.get(k) != spec.get(k))
+    # Compared key by key, so a spec field added later (quantum, window,
+    # purpose, strategy identities) reads as "changed" against an older
+    # experiment rather than silently matching.
+    changed = sorted(k for k in set(recorded) | set(spec) if recorded.get(k) != spec.get(k))
+
+    if changed:
         return f"--resume with a different grid: {', '.join(changed)} changed"
 
     return None
 
 
-def run_one(out, strategy, robots, seed, orders, export, orders_file=None):
-    run_dir = run_dir_of(out, strategy, robots, seed)
-    run_dir.mkdir(parents=True, exist_ok=True)
+def strategy_identities(strategies) -> dict:
+    """strategy -> strategy_sha256, as each run's run.json will record it."""
+
+    return {name: identity_sha256(get_batch_strategy(name).identity()) for name in strategies}
+
+
+def workload_command(
+    run_dir, strategy, robots, seed, orders, export,
+    orders_file=None, quantum=None, window=None,
+) -> list:
+    """The run_workload.py command line of one run.
+
+    ``quantum`` and ``window`` override the one config's dispatch
+    quantum and candidate window for this experiment; None keeps the
+    config's value. Either way run.json records the effective value.
+    """
 
     cmd = [
         sys.executable,
@@ -210,11 +255,31 @@ def run_one(out, strategy, robots, seed, orders, export, orders_file=None):
         "--dataset", str(run_dir),
     ]
 
+    if quantum is not None:
+        cmd += ["--quantum", str(quantum)]
+
+    if window is not None:
+        cmd += ["--window", str(window)]
+
     if orders_file is not None:
         cmd += ["--orders-file", str(orders_file)]
 
     if export:
         cmd.append("--export")
+
+    return cmd
+
+
+def run_one(
+    out, strategy, robots, seed, orders, export,
+    orders_file=None, quantum=None, window=None,
+):
+    run_dir = run_dir_of(out, strategy, robots, seed)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = workload_command(
+        run_dir, strategy, robots, seed, orders, export, orders_file, quantum, window
+    )
 
     started = time.perf_counter()
 
@@ -231,7 +296,9 @@ def run_one(out, strategy, robots, seed, orders, export, orders_file=None):
         ).returncode
 
     took = time.perf_counter() - started
-    print(f"  {'ok ' if code == 0 else 'FAILED'} {strategy:<18} robots {robots:<4} seed {seed:<3} {took:6.1f} s  {run_dir}", flush=True)
+    failure = read_failure(run_dir) if code else None
+    status = "ok " if code == 0 else f"FAILED[{failure['kind']}]" if failure else "FAILED"
+    print(f"  {status} {strategy:<18} robots {robots:<4} seed {seed:<3} {took:6.1f} s  {run_dir}", flush=True)
 
     return run_dir, code
 
@@ -259,12 +326,52 @@ def main() -> int:
         help="seeded: one generated order file per seed, shared by every "
         "strategy (default); reference: the committed order file",
     )
+    parser.add_argument(
+        "--quantum",
+        type=float,
+        default=None,
+        help="dispatch quantum in simulated s for every run (default: the "
+        "config's); 0 = continuous dispatch, 3 = the primary condition",
+    )
+    parser.add_argument(
+        "--window",
+        default=None,
+        help="candidate window for every run: fleet_size, legacy or a "
+        "positive integer (default: the config's)",
+    )
+    parser.add_argument(
+        "--purpose",
+        choices=sorted(ROLES),
+        default=None,
+        help="the seed role this experiment serves; every seed must belong "
+        "to it (docs/DECISIONS.md, 'Seed Split'). Omitted: development, "
+        "any seed outside the reserved final set",
+    )
     parser.add_argument("--resume", action="store_true", help="run only what is missing or failed")
     parser.add_argument("--force", action="store_true", help="start again; the old directory is kept, renamed")
     args = parser.parse_args()
 
     if args.resume and args.force:
         parser.error("--resume and --force exclude each other")
+
+    if args.quantum is not None and args.quantum < 0:
+        parser.error("--quantum must be >= 0")
+
+    if args.window is not None:
+        try:
+            WorkloadExecutor.resolve_window(args.window, 1)
+        except ValueError as error:
+            parser.error(f"--window {args.window}: {error}")
+
+    try:
+        check_purpose(args.seeds, args.purpose)
+    except SeedLeakageError as error:
+        parser.error(str(error))
+
+    try:
+        identities = strategy_identities(args.strategies)
+    except KeyError as error:
+        parser.error(str(error))
 
     out = ROOT / args.out / args.name
     paired = args.workloads == "seeded"
@@ -278,6 +385,10 @@ def main() -> int:
         "orders": args.orders,
         "workloads": args.workloads,
         "workload_orders": args.workload_orders if paired else None,
+        "quantum": args.quantum,
+        "window": args.window,
+        "purpose": args.purpose,
+        "strategy_sha256": identities,
     }
 
     refusal = prepare(out, spec, args.resume, args.force)
@@ -321,7 +432,8 @@ def main() -> int:
                 pending,
                 pool.map(
                     lambda run: run_one(
-                        out, *run, args.orders, args.export, files.get(run[2])
+                        out, *run, args.orders, args.export, files.get(run[2]),
+                        quantum=args.quantum, window=args.window,
                     ),
                     pending,
                 ),
@@ -335,7 +447,9 @@ def main() -> int:
 
         if not finished(run_dir):
             code = done[run][1] if run in done else "?"
-            print(f"  no metrics from {run_dir} (exit {code}); see run.log")
+            failure = read_failure(run_dir)
+            why = f"failed: {failure['kind']}; " if failure else ""
+            print(f"  no metrics from {run_dir} (exit {code}); {why}see run.log")
             continue
 
         # What each run really executed, from its own manifest, so
@@ -351,6 +465,9 @@ def main() -> int:
                 "line_items": manifest["line_items"],
                 "window_width": manifest["window_width"],
                 "settings_sha256": settings_signature(manifest),
+                # Absent from a run made before strategy identities
+                # existed; compare_paired refuses such a run.
+                "strategy_sha256": manifest.get("strategy_sha256", ""),
                 "run_dir": str(where),
             }
         )

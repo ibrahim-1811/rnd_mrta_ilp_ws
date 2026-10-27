@@ -15,7 +15,8 @@ strategy finished earlier. The interval is the paired t-interval:
 Before any difference is taken, the experiment's integrity is checked
 (E1): every expected strategy x fleet size x seed run is present
 (check_complete), every run shares one simulator setting
-(check_settings), and the two runs of a pair executed the same
+(check_settings), every strategy name ran one strategy identity
+(check_strategies, F8), and the two runs of a pair executed the same
 workload at the same fleet size (paired_differences).
 
 Read only: rows are summary.csv rows from run_experiment.py.
@@ -54,6 +55,10 @@ CONFIDENCE = 0.95
 VARIES_BY_RUN = frozenset(
     {
         "strategy",
+        # Differs between strategies by design; check_strategies holds
+        # each strategy to one identity across the experiment instead.
+        "strategy_identity",
+        "strategy_sha256",
         "seed",
         "run_id",
         "robot_count",
@@ -132,6 +137,40 @@ def check_settings(rows) -> None:
             for signature, runs in sorted(groups.items())
         )
         raise PairingError(f"runs differ in map or simulator settings: {detail}")
+
+
+def check_strategies(rows) -> None:
+    """Every run of one strategy name ran one strategy identity.
+
+    A name is not an identity: multi_criteria with other weights, MILP
+    on another solver build, or a learned strategy with another rule
+    set decides differently under the same name. Pairing such runs
+    would average two strategies into one (docs/DECISIONS.md,
+    "Strategy Identity").
+    """
+
+    identities = defaultdict(lambda: defaultdict(list))
+
+    for row in rows:
+        identities[row["strategy"]][row.get("strategy_sha256")].append(
+            (int(row["robots"]), int(row["seed"]))
+        )
+
+    for strategy, groups in sorted(identities.items()):
+        if None in groups or "" in groups:
+            raise PairingError(
+                f"{strategy}: summary.csv has no strategy_sha256 for some runs; "
+                "rerun them with the current run_experiment.py"
+            )
+
+        if len(groups) > 1:
+            detail = "; ".join(
+                f"{sha}: {len(runs)} run(s), e.g. {sorted(runs)[0]}"
+                for sha, runs in sorted(groups.items())
+            )
+            raise PairingError(
+                f"{strategy} ran as more than one strategy identity: {detail}"
+            )
 
 
 def interval(differences, confidence=CONFIDENCE):

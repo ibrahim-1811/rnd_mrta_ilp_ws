@@ -37,6 +37,8 @@ from json import dumps
 from pathlib import Path
 from subprocess import run as run_process
 
+from task_management.allocation_strategy import identity_sha256
+
 
 # A dataset whose schema changed is not comparable with an older one.
 # Mixing the two silently would invalidate any rule learned from them,
@@ -354,6 +356,7 @@ def build_manifest(
     config,
     *,
     strategy: str,
+    strategy_identity: dict,
     window,
     window_width,
     seed: int,
@@ -372,7 +375,20 @@ def build_manifest(
     actually run. They are keyword-only and required, so a caller
     cannot silently fall back to the config's value. ``orders`` is the
     executed order sequence.
+
+    ``strategy_identity`` is the allocator's ``identity()``: its
+    implementation, effective parameters, solver and any artifact (a
+    learned rule set) by content hash. Its short hash,
+    ``strategy_sha256``, is what an experiment compares, so two runs
+    named alike but deciding differently can never be paired as one
+    strategy (docs/DECISIONS.md, "Strategy Identity").
     """
+
+    if strategy_identity.get("name") != strategy:
+        raise ValueError(
+            f"strategy {strategy!r} recorded with the identity of "
+            f"{strategy_identity.get('name')!r}"
+        )
 
     battery = config.battery
     orders = tuple(orders)
@@ -396,6 +412,8 @@ def build_manifest(
         "shelf_pick_s": config.shelf_pick_s,
         "dropoff_s": config.dropoff_s,
         "strategy": strategy,
+        "strategy_identity": strategy_identity,
+        "strategy_sha256": identity_sha256(strategy_identity),
         "seed": seed,
         "allocation_window": str(window),
         "window_width": window_width,

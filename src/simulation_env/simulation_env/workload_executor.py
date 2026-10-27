@@ -105,6 +105,25 @@ class IneligibleAssignmentError(RuntimeError):
     """
 
 
+class InvalidAssignmentError(RuntimeError):
+    """An allocator broke the allocation contract.
+
+    A robot that was not offered, a robot or an order used twice, an
+    order outside the candidate window, or a pair with no route. Like an
+    ineligible pair, it is refused rather than repaired, and the run
+    fails as the strategy's fault, not the warehouse's.
+    """
+
+
+class WorkloadStalledError(RuntimeError):
+    """The clock ran dry with work outstanding and recovery freed nothing.
+
+    Distinct from fleet_engine.DeadlockError, which the engine raises
+    when it can prove a wait cycle or a livelock: this one says only
+    that the workload stopped making progress.
+    """
+
+
 @dataclass(frozen=True)
 class BatteryEvent:
     """A battery state change the executor acted on. Reporting only."""
@@ -464,6 +483,13 @@ class WorkloadExecutor:
         # handed to a different robot. Its order is already ASSIGNED,
         # so FIFO keeps flowing past it to later orders.
         self.deferred: dict = {}
+
+        # order_id -> the decision_id that assigned it. Set once, when
+        # the allocator decides, and read when the mission launches,
+        # which for a deferred assignment is a later dispatch with its
+        # own decision_id. Nothing else may stand in for it: the
+        # outcome row joins to the decision through this id.
+        self._decision_of: dict[str, int] = {}
 
         # Bumped whenever traffic meaningfully changes: a robot
         # finishes a mission, or a robot starts moving and will vacate
@@ -1626,6 +1652,44 @@ class WorkloadExecutor:
             "no pending work; parks as usual (G6 partial charge is B6)",
         )
 
+    def _check_assignment_contract(self, free, window, assignments) -> None:
+        """Refuse a decision that breaks the allocation contract.
+
+        BatchAllocationStrategy promises at most one order per robot and
+        one robot per order, only offered robots, only orders from the
+        window, and a route for every pair. Checked here, independently
+        of the strategy, so a learned or buggy strategy fails loudly as
+        an invalid assignment instead of surfacing later as something
+        else.
+        """
+
+        offered = set(free)
+        in_window = {order.order_id for order in window}
+        robots, orders = set(), set()
+
+        for assignment in assignments or ():
+            pair = f"{assignment.robot_id} -> {assignment.order_id}"
+
+            if assignment.robot_id not in offered:
+                problem = "robot was not offered at this decision"
+            elif assignment.robot_id in robots:
+                problem = "robot assigned twice"
+            elif assignment.order_id not in in_window:
+                problem = "order is not in the candidate window"
+            elif assignment.order_id in orders:
+                problem = "order assigned twice"
+            elif assignment.route is None or assignment.route.plan is None:
+                problem = "pair has no route"
+            else:
+                robots.add(assignment.robot_id)
+                orders.add(assignment.order_id)
+                continue
+
+            raise InvalidAssignmentError(
+                f"allocator {getattr(self.allocator, 'name', '?')!r}: {pair}: "
+                f"{problem}. The decision is refused, not repaired."
+            )
+
     def _check_battery_feasibility(self, assignments, battery) -> None:
         """Re-derive every returned pair's eligibility; refuse any violation.
 
@@ -2102,7 +2166,10 @@ class WorkloadExecutor:
         self.recorder.launched(
             assignment.order_id,
             {
-                "decision_id": self.result.decisions - 1,
+                # The decision that made this pairing, not the latest
+                # one: a deferred assignment launches under a later
+                # dispatch (docs/DECISIONS.md, "Decision Linkage").
+                "decision_id": self._decision_of[assignment.order_id],
                 "robot_id": assignment.robot_id,
                 "launched_at": now,
                 "soc": None if self.battery is None else self.battery.soc(
@@ -2259,6 +2326,11 @@ class WorkloadExecutor:
                 timing=self._decision_timing(free),
             )
 
+        # The allocation contract first, for every strategy and with or
+        # without a battery: a malformed decision is the strategy's
+        # failure and must never reach execution.
+        self._check_assignment_contract(free, eligible, assignments)
+
         if battery is not None:
             self.result.candidate_pairs += battery.evaluated
             self.result.ineligible_pairs += battery.ineligible
@@ -2279,7 +2351,11 @@ class WorkloadExecutor:
             self.result.deferrals += 1
             return started
 
+        decision_id = self.result.decisions - 1
+
         for assignment in assignments:
+            self._decision_of[assignment.order_id] = decision_id
+
             # The MRTA decision is recorded before any planning, so a
             # deferral retries this exact pairing rather than
             # re-allocating the order to somebody else. ASSIGNED also
@@ -2859,7 +2935,7 @@ class WorkloadExecutor:
                 break
 
         if not self.finished():
-            raise RuntimeError(
+            raise WorkloadStalledError(
                 f"workload stalled at t={self.engine.sim_time:.4f}: "
                 f"{len(self.queue.pending())} pending, "
                 f"{len(self.deferred)} deferred, "

@@ -646,16 +646,27 @@ dependencies; removing whole modules indiscriminately would break them.
 
 ## 11. What does **not** exist yet
 
+Updated 2026-10-27 (M0). The eight conventional strategies, the
+experiment runner with paired seeds, E1 integrity and the M0 additions
+(strategy identity, classified failures, seed split) exist; see
+CURRENT_PHASE.md.
+
 ```text
-MRTA strategies slice 2        Earliest Finish, Multi-Criteria,
-                               Auction, Hungarian, MILP
-experiment runner              no batch, no seeds in use, no manifests
-statistical analysis, plots    none
-symbolic predicate library     only the legacy stub
-Popper / Prolog / ILP          none (swi-prolog is a declared dependency only)
+symbolic predicate library     only the legacy stub (mrta_core/symbolic.py,
+                               not to be wired into the dataset)
+Popper / Prolog / ILP          no ILP code; Popper v4.4.0 installed and
+                               smoke-tested
+rule-executing strategy        none; the identity() / artifact_record()
+                               hooks are ready for one
 explanations                   strategy.explain() returns one line
-W30 / W50 maps                 lane policy is hard-coded to V2
-B6 battery metrics, order_makespan split, G6 end-of-work charging
+statistics                     paired t-interval only; Holm and
+                               Wilcoxon not implemented (F9)
+per-order outcome attribution  no per-order minimum SOC, charge-after
+                               flag or next-available time (F10)
+workload variety               uniform random demand only (F12)
+decision-time congestion       approved for investigation, not built
+held-out transfer map          deferred requirement
+B6 battery decision/outcome metrics; G6 end-of-work charging (deferred)
 ```
 
 `is_chosen = 1` is still not an outcome, but the join now exists:
@@ -739,12 +750,13 @@ rows, 100 positive and 1873 negative examples, makespan unchanged at
 268.6667 s with recording on. No leakage is enforced structurally and
 proven by a truncation test, not documented and hoped for.
 
-**P0-3 — No experiment runner.** map × fleet × workload × strategy ×
-seed, with CSV output and a manifest recording config hash and git commit.
+**P0-3 — RESOLVED.** `scripts/run_experiment.py` (paired seeds, E1
+integrity; M0: `--quantum`, `--window`, `--purpose`, strategy identity,
+classified failures) and `scripts/compare_paired.py`.
 
-**P0-4 — `makespan` includes recovery.** The printed value is the
-engine's end time (282.0000 s) while the last dropoff is at 256.0000 s.
-The `order_makespan` / `fleet_recovery_time` split is B6.
+**P0-4 — RESOLVED by B6a (5abf5c2).** `order_makespan_s` and
+`fleet_recovery_time_s` are reported separately; `makespan_s` is the
+fleet settled time.
 
 **P0-5 — RESOLVED 2026-10-23.** The lane policy was hard-coded to V2. A map may now draw its own lanes as arrows in Excel; `directional_blocked_edges` routes a drawn map by its arrows and an undrawn one by the built-in V2 policy. V2 exported as arrows is routed on the identical edge set (775 = 775). See DECISIONS.md, "Drawn Lane Maps" and "Rotaries".
 
@@ -776,7 +788,9 @@ src/mrta_core/mrta_core/
 
 src/task_management/task_management/
   features.py             OrderCandidate, C_static, decision-time energy
-  allocation_strategy.py  BatchAllocationStrategy, NearestAStarAllocator
+  allocation_strategy.py  BatchAllocationStrategy and the eight
+                          conventional strategies; identity(),
+                          artifact_record(), AllocationSolverError
 
 src/simulation_env/simulation_env/
   workload_executor.py    WorkloadExecutor — orchestration
@@ -785,8 +799,14 @@ src/simulation_env/simulation_env/
   local_traffic_controller.py / local_yield_selector.py
   grid_robot.py           GridRobot, GridRobotStatus
   battery_ledger.py       BatteryLedger — the one SOC record
-  dataset.py              decision/outcome schemas, RunRecorder
+  dataset.py              decision/outcome schemas, RunRecorder,
+                          build_manifest (with strategy identity)
   dataset_export.py       CSV and ground Prolog facts
+  failures.py             failure kinds, failure.json (M0)
+  seed_split.py           training / validation / evaluation / final
+                          seed roles (M0)
+  paired.py               paired differences, E1 checks,
+                          check_strategies
   charging.py             TerminalBank, ChargeState, ChargeRecord
   stage_parking.py        StageParking
   fleet.py                build_fleet, home_stations
