@@ -1,0 +1,11 @@
+MRTA CONTROL CENTER | CODEX STAGE 0
+
+You are in `~/rnd_mrta_ilp_ws`, branch expected `traffic/rmf-integration`. This is Stage 0 of the MRTA Warehouse Control Center. **Read and comply with `AGENTS.md`, `CLAUDE.md`, and repository instructions first.**
+
+The repository contains important uncommitted work. Do not stash, clean, reset, restore, switch branches, commit, push, or overwrite it. Record HEAD, branch and exact git changes without changing them. Inspect the real source and any existing local diffs in files you read. Treat existing scientific engine/allocator/traffic behavior as frozen.
+
+Audit `run_workload.py`, `run_experiment.py`, `FleetSimulationEngine`, `WorkloadExecutor.snapshot`, existing progress/event callbacks, `dataset.py`, `run_metrics.py`, `paired.py`, warehouse XLSX loader and active strategies registry. Read `docs/EXPERIMENT_PROTOCOL.md`, `docs/DECISIONS.md`, `pixi.toml` and both runner CLI parsers. Determine real supported flags, current metric schema, available snapshots, run artifacts and safe instrumentation points. Pay attention to experimental integrity and exact `Fraction` sim time.
+
+Add only new files under `docs/control_center/`: `BASELINE_INVENTORY.md`, `API_CONTRACT.md`, `EVENT_SCHEMA.md`, `SCIENTIFIC_PARITY.md`, `STAGED_PLAN.md`. Propose headless-first, localhost-only FastAPI+React architecture. Mark fields and routes as proposed. Design a non-invasive observation path without inventing signals, new sim events or calls that advance the clock. Document unresolved constraints explicitly. Check if running headless too quickly requires recorded sampled replay to be useful. Document how the dashboard indexes existing `runs/*` without editing them.
+
+Do **not** implement UI/backend, run long simulations, or modify core source in Stage 0. At end report source paths/symbols and exact usage, changed/new files, lightweight checks performed, risks, and `git status`. Stop and wait for my review.
