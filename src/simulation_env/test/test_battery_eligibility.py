@@ -575,7 +575,14 @@ class _MaskBlindAllocator(NearestAStarAllocator):
     name = "mask_blind"
 
     def assign(
-        self, warehouse, robots, orders, fifo_position, cache=None, battery=None
+        self,
+        warehouse,
+        robots,
+        orders,
+        fifo_position,
+        cache=None,
+        battery=None,
+        timing=None,
     ):
         candidates = sorted(
             (

@@ -61,6 +61,7 @@ from simulation_env.fleet_engine import EventType, FleetSimulationEngine
 from simulation_env.grid_robot import GridRobotStatus
 from simulation_env.stage_parking import StageParking
 from simulation_env.work_accounting import WorkAccounting, counters_of
+from task_management.features import DecisionTiming
 from mrta_core.warehouse_routing import (
     MissionPlan,
     MissionSegment,
@@ -605,6 +606,24 @@ class WorkloadExecutor:
             self._nearest_charger_memo[cell] = found
 
         return found
+
+    def _decision_timing(self, robot_ids) -> DecisionTiming:
+        """Speeds and service durations the engine executes with.
+
+        The same for every strategy; a strategy that ignores time ignores
+        it. Nothing realized is in it.
+        """
+
+        service = self.engine.service_seconds
+
+        return DecisionTiming(
+            speed_mps={
+                robot_id: float(self.engine.robots[robot_id].speed_mps)
+                for robot_id in robot_ids
+            },
+            shelf_service_s=float(service.get(ZoneType.SHELF, 0)),
+            dropoff_service_s=float(service.get(ZoneType.DROPOFF, 0)),
+        )
 
     def _battery_context(self, robot_ids) -> BatteryDecisionContext:
         """Decision-time battery view for ``robot_ids``, at this instant."""
@@ -2237,6 +2256,7 @@ class WorkloadExecutor:
                 self.fifo_position,
                 self.routes,
                 battery=battery,
+                timing=self._decision_timing(free),
             )
 
         if battery is not None:

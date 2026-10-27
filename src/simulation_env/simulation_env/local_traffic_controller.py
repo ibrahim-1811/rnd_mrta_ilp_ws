@@ -13,6 +13,14 @@ Temporary right-of-way rule:
 
 Head-on edge swaps are never approved directly. The lower-priority
 robot must locally yield before the higher-priority robot may pass.
+
+Rotations. Robots that each want the cell the next one is leaving,
+closing a loop of three or more, can all move at once: every target is
+vacated in the same batch. Such a loop member wins the contention for
+the cell it rotates into; the rule above decides every other
+contention. Without this a robot outside a full ring could win a ring
+cell, stall the ring, and so wait forever for a cell the stalled ring
+can never vacate (docs/DECISIONS.md, "Rotation Right-of-Way").
 """
 
 from __future__ import annotations
@@ -71,6 +79,61 @@ class LocalTrafficController:
     @classmethod
     def winner(cls, intents):
         return min(intents, key=cls.priority_key)
+
+    @staticmethod
+    def rotation_members(intents, occupancy, excluded=frozenset()) -> frozenset:
+        """Robots on a closed movement loop of three or more.
+
+        Robot r points at robot h when h holds r's target and h is in
+        this batch moving out of exactly that cell. Each robot has one
+        target, so each points at most once, and a loop is a set of
+        robots that can all move in the same instant: every target is
+        vacated by its holder. Robots in ``excluded`` (a side step is
+        required of them) cannot be part of one. A robot not in the
+        batch -- servicing, charging, mid-transit, stationary -- is never
+        pointed at, so no loop runs through it.
+
+        A loop of two is a head-on swap and is never a rotation.
+        """
+
+        by_id = {i.robot_id: i for i in intents if i.robot_id not in excluded}
+        points_at = {}
+
+        for intent in by_id.values():
+            holder = occupancy.get(intent.target)
+
+            if holder is None or holder == intent.robot_id or holder not in by_id:
+                continue
+
+            if by_id[holder].source != intent.target:
+                continue
+
+            points_at[intent.robot_id] = holder
+
+        members = set()
+        settled = set()
+
+        # Walk each chain once; robots are visited in sorted order so the
+        # result never depends on dict or list order.
+        for start in sorted(points_at):
+            if start in settled:
+                continue
+
+            position = {}
+            path = []
+            robot = start
+
+            while robot in points_at and robot not in position and robot not in settled:
+                position[robot] = len(path)
+                path.append(robot)
+                robot = points_at[robot]
+
+            if robot in position and len(path) - position[robot] >= 3:
+                members.update(path[position[robot] :])
+
+            settled.update(path)
+
+        return frozenset(members)
 
     def resolve(
         self,
@@ -150,9 +213,23 @@ class LocalTrafficController:
         # ------------------------------------------------------------
         # 2. Multiple robots requesting the same destination cell.
         #
-        # The highest-priority robot wins if the cell can actually
-        # become available in this batch.
+        # A rotation member wins the cell it rotates into: the loop
+        # can move as a whole only if it keeps every one of its cells,
+        # and an outsider handed one of them could never be released
+        # (its target stays held by the stalled loop). At most one
+        # member can want a given cell. Every other contention goes
+        # to the highest-priority robot, as before.
         # ------------------------------------------------------------
+
+        rotating = self.rotation_members(
+            intents,
+            occupancy,
+            excluded=frozenset(
+                robot_id
+                for robot_id, decision in decisions.items()
+                if decision.decision is TrafficDecision.YIELD_REQUIRED
+            ),
+        )
 
         by_target: dict[Cell, list[MovementIntent]] = {}
 
@@ -169,14 +246,27 @@ class LocalTrafficController:
             if len(contenders) <= 1:
                 continue
 
-            priority_winner = self.winner(contenders)
+            members = [c for c in contenders if c.robot_id in rotating]
+
+            if len(members) > 1:
+                raise RuntimeError(
+                    f"two rotations claim {target}: "
+                    f"{sorted(m.robot_id for m in members)}"
+                )
+
+            if members:
+                priority_winner = members[0]
+                won = f"rotating into {target}"
+            else:
+                priority_winner = self.winner(contenders)
+                won = f"won local contention for {target}"
 
             for contender in contenders:
                 if contender.robot_id == priority_winner.robot_id:
                     decisions[contender.robot_id] = MovementDecision(
                         robot_id=contender.robot_id,
                         decision=TrafficDecision.MOVE,
-                        reason=(f"won local contention for {target}"),
+                        reason=won,
                     )
 
                 else:

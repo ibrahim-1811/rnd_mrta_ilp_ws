@@ -352,6 +352,12 @@ which is what prevents a third robot slipping in mid-transit.
 3. lower numeric robot_id           (engineering tie-break only)
 ```
 
+One exception to that order: robots closing a loop of three or more,
+each moving into the cell the next is leaving, rotate together, and a
+loop member wins the cell it rotates into against any outsider
+(DECISIONS.md, "Rotation Right-of-Way"). Without it a full ring could
+wait forever.
+
 Head-on swaps are never approved; the loser yields one cell and rejoins.
 Structural head-on is prevented by the one-way topology, so yields are
 rare — all current controlled runs report **0 yields**.

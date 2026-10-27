@@ -1,6 +1,6 @@
 # Cyclic deadlock under a scattering allocation policy
 
-Status: ready-for-human (root cause found 2026-10-23; see Comments)
+Status: ready-for-human (rotation right-of-way implemented 2026-10-27, awaiting review; residual: loops through non-moving robots)
 
 ## Summary
 
@@ -152,3 +152,79 @@ circle once one forms. Larger circles (6, 8, ... cells) are possible in
 principle but need as many robots as cells, all wanting to advance at
 once, and none has been observed. V2 itself still has its 33 rotaries;
 changing V2 would move every frozen baseline, so it is left as is.
+
+### 2026-10-26 — a 6-robot circle observed on W100 (no rotaries)
+
+First observation of a circle larger than a 2 x 2 rotary. W100 passes
+`map_tool.py check` with no rotary warnings, and still:
+
+```bash
+PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+    --robots 100 --orders 300 --strategy hungarian --quantum 3 --quiet --progress 0
+# STALLED, time 450.6667, 57 waiting robots
+# CYCLES robot_093 -> robot_028 -> robot_082 -> robot_031 -> robot_005
+#        -> robot_022 -> robot_093
+```
+
+The same command completes 300/300 with nearest_astar, random,
+auction and milp. The allocation is legal; the traffic controller has
+no way to break the circle once it forms. Found while implementing the
+Phase 7 strategies; not fixed there (traffic is fixed infrastructure).
+Any long or 100-robot experiment can hit this for any strategy, so
+the main study needs a decision here: a controller-level circle
+breaker, or reporting stalled runs as failures per strategy.
+
+### 2026-10-27 — diagnosis: a controller contention rule, not geometry alone
+
+The 6-robot circle is a 3 x 2 ring: southbound aisle x=2, eastbound
+row y=19, northbound aisle x=4, westbound row y=18. W100 has 24 such
+6-cell rings (directed cycles of length <= 8: 24, all length 6); a
+strongly connected one-way grid always has cycles, so the map cannot
+remove them.
+
+The ring was **not physically stuck**. All six robots requested their
+next ring cell in the same retry batch, and `begin_moves_batch` accepts
+a closed rotation (every target is vacated by a robot leaving in the
+same batch). Traced controller decisions at the stall:
+
+```text
+robot_005 (3,19)->(4,19) remaining 55  WAIT: yielded (4,19) to robot_066
+robot_066 (4,20)->(4,19) remaining 21  WAIT: (4,19) remains occupied by robot_022
+robot_042 (5,18)->(4,18) remaining 21  WAIT: yielded (4,18) to robot_022
+other ring robots                       WAIT: target remains occupied
+```
+
+Step 2 of `LocalTrafficController.resolve` gave (4,19) to the feeder
+robot_066 (shorter remaining distance) over ring member robot_005.
+Then nothing in the ring can move, so robot_066's target is never
+vacated either, and every retry repeats the same decisions: permanent.
+
+Proposed fix (not implemented, awaiting review): in `resolve`, find the
+closed cycles (length >= 3) of the intent graph robot -> holder of its
+target, and let a cycle member win the contention for its own target.
+Prototype in the scratchpad only:
+
+- W100 hungarian 100 robots q3 300 orders: 300/300, 0 violations (rule
+  fired 2x)
+- V2 random seed 42 orders_500 (the original rotary deadlock):
+  500/500, 0 violations (fired 1x)
+- completed runs (nearest_astar, random r30 q0; milp r100 q3;
+  multi_criteria r30 q3) and the V2 frozen baseline: rule fired 0x,
+  decisions, outcomes and metrics byte-identical
+
+### 2026-10-27 — implemented: rotation right-of-way
+
+Approved and implemented in `LocalTrafficController.resolve`
+(DECISIONS.md, "Rotation Right-of-Way"; tests in
+`simulation_env/test/test_traffic_rotation.py`).
+
+```text
+W100 hungarian 100 robots q3 300 orders   300/300, 0 violations
+V2 random seed 42 orders_500              500/500, 0 violations
+17 completed W100 runs + V2 baselines     byte-identical, rule fired 0x
+```
+
+Still open, and still loud: a waiting loop through a robot that is not
+moving in the batch (servicing, charging, side-stepping, a protected
+service entry or retreat) is not a rotation. It ends as STALLED, which
+the protocol records as a failed run. Not observed so far.

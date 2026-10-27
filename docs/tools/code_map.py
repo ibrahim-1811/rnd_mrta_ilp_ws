@@ -663,7 +663,9 @@ def build():
     for name, links in DATA_FILES.items():
         if name in by_id:
             # A link names a function, or a whole script that has none.
-            known = lambda x: x in symbols or x in by_id
+            def known(x):
+                return x in symbols or x in by_id
+
             for key in ("read_by", "written_by"):
                 bad = [x for x in links[key] if not known(x)]
                 if bad:

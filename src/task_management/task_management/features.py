@@ -247,6 +247,40 @@ class OrderCandidate:
         return self.reachable and self.battery_eligible
 
 
+@dataclass(frozen=True)
+class DecisionTiming:
+    """Decision-time timing: robot speeds and the fixed service durations.
+
+    Built by the executor from the same values the engine executes with
+    (each robot's own speed, the configured shelf and drop-off service
+    times), so a strategy's time estimate and the realized execution
+    share one model. It holds nothing realized: no waiting, no traffic.
+    """
+
+    speed_mps: dict  # robot_id -> m/s
+    shelf_service_s: float  # per shelf visit
+    dropoff_service_s: float  # per order
+
+    def travel_s(self, candidate: "OrderCandidate") -> float:
+        return candidate.cost / self.speed_mps[candidate.robot_id]
+
+    def service_s(self, candidate: "OrderCandidate") -> float:
+        visits = len(candidate.route.shelf_sequence)
+        return visits * self.shelf_service_s + self.dropoff_service_s
+
+    def finish_s(self, candidate: "OrderCandidate") -> float:
+        """Estimated time from now to the end of the mission.
+
+        Directed A* route length over the robot's speed, plus one shelf
+        service per visited shelf and one drop-off service. Every robot
+        offered to a decision is free now, so its start time is now for
+        all of them. Traffic waiting is a realized outcome and is never
+        part of it.
+        """
+
+        return self.travel_s(candidate) + self.service_s(candidate)
+
+
 def route_energy(
     battery: BatteryDecisionContext,
     robot_id: str,

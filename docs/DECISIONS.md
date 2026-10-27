@@ -365,10 +365,57 @@ generated example maps have none, by construction
 ```
 
 A warning rather than an error, because the risk scales with robot
-density and because the frozen V2 baseline has 33. The traffic
-controller does not break a waiting circle once formed; that remains
-open in `.scratch/traffic-liveness/issues/01-...`. Removing rotaries
-from the map removes the circle that occurs in practice.
+density and because the frozen V2 baseline has 33. Since 2026-10-27 the
+controller also keeps a full ring moving (see "Rotation Right-of-Way"
+below), which resolves both measured stalls; the map rule stands,
+because a map without tight loops still queues less.
+
+## Rotation Right-of-Way
+
+Approved by the researcher 2026-10-27; implemented in
+`LocalTrafficController.resolve`.
+
+Cause. Every one-way grid that is strongly connected has loops: W100
+has no 2 x 2 rotary but 24 six-cell rings (aisle down, row east, aisle
+up, row west). With a robot on every cell of a loop, each wanting the
+next, the reservation table accepts moving all of them at once
+(`begin_moves_batch`: every target is vacated in the same batch). The
+controller did not: a robot outside the loop, closer to its goal, won
+one loop cell on priority; the loop could then not move, so that cell
+was never vacated, and the identical decision repeated forever.
+
+Rule:
+
+```text
+rotation members   robots on a closed loop of >= 3 within one batch,
+                   each wanting the cell the next is leaving in that
+                   same batch; robots required to side-step, and every
+                   robot not moving in the batch (servicing, charging,
+                   mid-transit, stationary), can never be members
+contention         a member wins the cell it rotates into; at most one
+                   member can want a given cell; every other
+                   contention keeps busy > remaining distance > id
+unchanged          head-on swap handling, chain propagation,
+                   begin_moves_batch validation, reservations, engine,
+                   routing, order ownership
+```
+
+Strategy-independent. It changes a decision only in a state that before
+could end only in STALLED: on 17 completed W100 runs (all eight
+strategies across quantum 0 and 3, 30 and 100 robots) and the V2 frozen
+baselines it never fired, and every dataset and metric is
+byte-identical. Measured:
+
+```text
+W100 hungarian, 100 robots, 300 orders, quantum 3
+    before: STALLED t=450.67, 6-robot ring      after: 300/300, 0 violations
+V2 random, seed 42, 500 orders (the rotary above)
+    before: STALLED                              after: 500/500, 0 violations
+```
+
+Not covered, and still loud: a waiting loop through a robot that is not
+moving in the batch is not a rotation and still ends as STALLED, a
+failed run (EXPERIMENT_PROTOCOL.md, "Stalled Runs").
 
 ## Battery V1
 
@@ -895,6 +942,63 @@ Every new strategy must be checked for distinct behavior.
 
 Avoid multiple strategy names that collapse to the same allocation policy.
 
+### Conventional strategy definitions (Phase 7)
+
+Reviewed by the researcher 2026-10-26/27: Earliest Finish's estimate
+and multi_criteria's weights approved; auction, hungarian and milp
+reviewed with the wording below. Every strategy uses the same candidate window, battery mask,
+directed A* routes, traffic and execution; each also receives the same
+DecisionTiming (robot speeds, configured service durations).
+
+```text
+earliest_finish  greedy on estimated finish = C_static / robot speed
+                 + shelf service x shelf visits + drop-off service;
+                 no waiting, no outcome data (approved 2026-10-26)
+multi_criteria   greedy on a weighted sum of per-decision min-max
+                 normalised criteria: estimated finish 0.5 (lower),
+                 FIFO age 0.2 (lower), energy margin 0.2 (higher),
+                 charger distance after the mission 0.1 (lower).
+                 UNTUNED HEURISTIC WEIGHTS, fixed 2026-10-27; never
+                 tuned on evaluation workloads. A criterion equal
+                 across the decision contributes 0. Normalisation is
+                 per decision, so the weights trade relative positions,
+                 not units: a 1 m spread weighs as much as a 100 m one
+auction          sequential single-item auction, orders announced in
+                 FIFO order, bid = the route length the order adds to
+                 the robot's plan, which with no other order held is
+                 C_static. No opportunity cost, no re-auctioning. The
+                 round-based variant reduces exactly to nearest_astar
+                 when a robot holds one order, so it is not used
+hungarian        maximum matching of minimum total C_static
+milp             maximum matching of minimum latest estimated finish
+                 (bottleneck), then minimum total estimated finish;
+                 HiGHS via scipy.optimize.milp. Battery only through
+                 the shared mask; no congestion or traffic constraint
+```
+
+Hungarian and MILP optimise different objectives: total route length
+against the latest finish of the batch.
+
+Estimated finish (earliest_finish, multi_criteria, milp) was checked
+against execution on 600 orders (W100, 30 robots, quantum 0 and 3):
+predicted service and travel time equal the realized values exactly;
+only waiting differs, as intended.
+
+### Dispatch quantum conditions
+
+Decided by the researcher 2026-10-27:
+
+```text
+primary operational experiment   dispatch quantum 0 s
+controlled batch experiment      dispatch quantum 3 s
+```
+
+At quantum 0 most decisions offer one free robot, and then
+hungarian chooses as nearest_astar and milp as earliest_finish
+(distinctness 0.4-0.8 % and 2.3-4.9 %, W100, 30 robots, 300 orders).
+That near-equivalence is reported as a scientific observation, not
+engineered away. At quantum 3 every pair passes the 5 % gate.
+
 ## Allocation Candidate Window
 
 Approved 2026-10-22. The FIFO window is widened so that an allocation
@@ -1062,10 +1166,15 @@ separated by objective, not by solver:
 ```text
 Hungarian   min sum of C_static over the assignment
             optimal, scipy.optimize.linear_sum_assignment
-MILP        min-max completion (makespan-oriented), with
-            battery-feasibility and congestion constraints
+MILP        min-max completion (makespan-oriented)
             scipy.optimize.milp (HiGHS)
 ```
+
+As implemented (2026-10-26; see "Conventional strategy definitions"):
+battery feasibility is the shared eligibility mask -- an ineligible
+pair is not a variable -- and there is **no congestion constraint**.
+The 2026-10-22 plan named one, but no decision-time congestion feature
+exists (DECISIONS "Phase 8 Schema Gaps To Close"), so none was built.
 
 Both are optimal for their own stated objective, and they disagree on
 the same decision whenever a min-sum assignment loads one robot

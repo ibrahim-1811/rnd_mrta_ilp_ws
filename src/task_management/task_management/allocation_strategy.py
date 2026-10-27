@@ -12,8 +12,13 @@ module and must never change robot-order ownership.
 from dataclasses import dataclass
 from random import Random
 
+import numpy as np
+from scipy.optimize import Bounds, LinearConstraint, linear_sum_assignment, milp
+from scipy.sparse import coo_matrix
+
 from mrta_core.battery import EnergyRequirement
 from task_management.features import (
+    DecisionTiming,
     OrderCandidate,
     OrderRoute,
     build_order_candidates,
@@ -129,6 +134,9 @@ class BatchAllocationStrategy:
                       -- and is identical for every strategy
       fifo_position   order_id -> FIFO index, for deterministic ties
       battery         a BatteryDecisionContext, or None
+      timing          a DecisionTiming (robot speeds, service
+                      durations), or None; strategies that estimate
+                      time require it
 
     and gets back a list of :class:`OrderAssignment`. A strategy may
     return fewer assignments than robots (an unreachable order defers),
@@ -175,6 +183,7 @@ class BatchAllocationStrategy:
         fifo_position,
         cache=None,
         battery=None,
+        timing=None,
     ) -> list[OrderAssignment]:
         raise NotImplementedError
 
@@ -223,6 +232,7 @@ class NearestAStarAllocator(BatchAllocationStrategy):
         fifo_position,
         cache=None,
         battery=None,
+        timing=None,
     ):
 
         eligible = [
@@ -292,6 +302,7 @@ class NearestManhattanAllocator(BatchAllocationStrategy):
         fifo_position,
         cache=None,
         battery=None,
+        timing=None,
     ):
 
         by_id = {order.order_id: order for order in orders}
@@ -370,6 +381,7 @@ class RandomAllocator(BatchAllocationStrategy):
         fifo_position,
         cache=None,
         battery=None,
+        timing=None,
     ):
 
         eligible = [
@@ -397,3 +409,569 @@ class RandomAllocator(BatchAllocationStrategy):
             f"{a.robot_id}->{a.order_id} (random, A* {a.cost:.1f} m)"
             for a in assignments
         )
+
+
+# ======================================================================
+# Phase 7: the remaining conventional strategies
+# ======================================================================
+#
+# All five see exactly what the first three see -- the same candidate
+# window, the same C_static routes, the same battery mask -- plus the
+# decision timing (robot speeds, service durations) the executor builds
+# for every strategy. Each one returns pairs chosen from the eligible
+# candidates and nothing else; the route driven is always the
+# candidate's directed A* route and the cost carried forward is always
+# C_static.
+
+
+def _eligible(strategy, warehouse, robots, orders, fifo_position, cache, battery):
+    return [
+        candidate
+        for candidate in strategy.score(
+            warehouse, robots, orders, fifo_position, cache, battery
+        )
+        if candidate.eligible
+    ]
+
+
+def _require_timing(name: str, timing: DecisionTiming | None) -> DecisionTiming:
+    if timing is None:
+        raise ValueError(
+            f"{name} estimates mission time and needs the decision timing "
+            "(robot speeds, service durations); the executor supplies it"
+        )
+
+    return timing
+
+
+def _canonical(candidates):
+    """Robots and orders of the candidates, in a fixed order.
+
+    Robots by id, orders by FIFO position: the matrix an optimizer sees
+    never depends on dict or set iteration order.
+    """
+
+    robots = sorted({c.robot_id for c in candidates})
+    position = {c.order_id: c.fifo_position for c in candidates}
+    orders = sorted(position, key=position.get)
+
+    return robots, orders
+
+
+def earliest_finish_pairing(candidates, timing, fifo_position):
+    """Greedy on estimated finish time: travel + service."""
+
+    ranked = sorted(
+        candidates,
+        key=lambda c: (timing.finish_s(c), c.cost, c.fifo_position, c.robot_id),
+    )
+
+    return greedy_pairing(ranked, fifo_position)
+
+
+@register_batch
+class EarliestFinishAllocator(BatchAllocationStrategy):
+    """Greedy minimum estimated completion time.
+
+    For each eligible pair, the time from now until the order would be
+    finished, using only what is known at the decision:
+
+        directed A* route length (C_static) / the robot's speed
+      + configured shelf service x the number of shelf visits
+      + configured drop-off service
+
+    Every robot offered to a decision is free now, so they all start
+    now. Traffic waiting is a realized outcome and is never included
+    (docs/DECISIONS.md, "Decision-Time Features").
+
+    Pairing is the shared greedy sweep, ranked by that estimate; ties on
+    (C_static, FIFO position, robot_id). It differs from nearest_astar
+    exactly where service time changes the order: an order with more
+    shelves takes longer to finish at the same route length, and robots
+    of different speeds finish the same route at different times. With
+    equal speeds and short services the two rank alike most of the
+    time; how often they differ is measured, not assumed.
+    """
+
+    name = "earliest_finish"
+
+    def assign(
+        self,
+        warehouse,
+        robots,
+        orders,
+        fifo_position,
+        cache=None,
+        battery=None,
+        timing=None,
+    ):
+        timing = _require_timing(self.name, timing)
+        candidates = _eligible(
+            self, warehouse, robots, orders, fifo_position, cache, battery
+        )
+
+        return earliest_finish_pairing(candidates, timing, fifo_position)
+
+    def explain(self, assignments):
+        if not assignments:
+            return f"{self.name}: no eligible robot-order pair -> defer"
+
+        return ", ".join(
+            f"{a.robot_id}->{a.order_id} (A* {a.cost:.1f} m, earliest finish)"
+            for a in assignments
+        )
+
+
+# Criterion weights of multi_criteria: untuned heuristic weights, fixed
+# by the researcher 2026-10-27 and never tuned on evaluation workloads
+# (DECISIONS.md, "Conventional strategy definitions"). Travel and
+# service time dominate, the oldest orders are pulled forward, and
+# battery headroom and ending near a charger break near-ties.
+MULTI_CRITERIA_WEIGHTS = {
+    "finish": 0.5,
+    "fifo_age": 0.2,
+    "energy_margin": 0.2,
+    "charger_distance": 0.1,
+}
+
+
+def _normalised(values):
+    """Min-max to [0, 1] within one decision; all equal -> all 0."""
+
+    low, high = min(values), max(values)
+
+    if high == low:
+        return [0.0] * len(values)
+
+    return [(v - low) / (high - low) for v in values]
+
+
+def multi_criteria_scores(candidates, timing, weights) -> list[float]:
+    """Weighted sum of decision-time criteria, lower is better.
+
+    Each criterion is min-max normalised over this decision's eligible
+    pairs, so the weights trade relative positions, not units:
+
+        finish             estimated travel + service time   lower
+        fifo_age           FIFO position of the order         lower
+        energy_margin      SOC left above the requirement     higher
+        charger_distance   directed A* leg to a charger
+                           from where the mission ends        lower
+
+    Without battery features the two battery criteria drop out and the
+    remaining weights are rescaled to the same total.
+    """
+
+    columns = {
+        "finish": [timing.finish_s(c) for c in candidates],
+        "fifo_age": [float(c.fifo_position) for c in candidates],
+    }
+
+    if all(c.energy is not None for c in candidates):
+        columns["energy_margin"] = [
+            -float(c.energy.energy_margin_percent) for c in candidates
+        ]
+        columns["charger_distance"] = [
+            float(c.energy.predicted_nearest_charger_distance_m) for c in candidates
+        ]
+
+    used = {name: weights.get(name, 0.0) for name in columns}
+    total = sum(used.values())
+    scale = sum(weights.values()) / total if total else 0.0
+
+    scores = [0.0] * len(candidates)
+
+    for name, column in columns.items():
+        weight = used[name] * scale
+
+        for index, value in enumerate(_normalised(column)):
+            scores[index] += weight * value
+
+    return scores
+
+
+@register_batch
+class MultiCriteriaGridAwareAllocator(BatchAllocationStrategy):
+    """Greedy on a weighted score of grid-aware decision-time criteria.
+
+    Where nearest_astar and earliest_finish rank on one number, this
+    trades several the operator cares about: how soon the order is done
+    (directed A* travel + service), how long the order has waited (FIFO
+    age), how much battery the robot keeps, and whether the mission
+    ends near a charger (directed A*). Every criterion is known at the
+    decision; none is a realized outcome. Weights default to
+    MULTI_CRITERIA_WEIGHTS and are a constructor argument.
+
+    Pairing is the shared greedy sweep ranked by the score; ties on
+    (estimated finish, C_static, FIFO position, robot_id).
+    """
+
+    name = "multi_criteria"
+
+    def __init__(self, seed: int = 0, weights: dict | None = None):
+        self.weights = dict(MULTI_CRITERIA_WEIGHTS if weights is None else weights)
+
+        unknown = set(self.weights) - set(MULTI_CRITERIA_WEIGHTS)
+
+        if unknown:
+            raise ValueError(f"unknown multi_criteria weight(s): {sorted(unknown)}")
+
+        super().__init__(seed)
+
+    def assign(
+        self,
+        warehouse,
+        robots,
+        orders,
+        fifo_position,
+        cache=None,
+        battery=None,
+        timing=None,
+    ):
+        timing = _require_timing(self.name, timing)
+        candidates = _eligible(
+            self, warehouse, robots, orders, fifo_position, cache, battery
+        )
+
+        if not candidates:
+            return []
+
+        scores = multi_criteria_scores(candidates, timing, self.weights)
+        ranked = [
+            c
+            for _, _, _, _, _, c in sorted(
+                (s, timing.finish_s(c), c.cost, c.fifo_position, c.robot_id, c)
+                for s, c in zip(scores, candidates)
+            )
+        ]
+
+        return greedy_pairing(ranked, fifo_position)
+
+    def explain(self, assignments):
+        if not assignments:
+            return f"{self.name}: no eligible robot-order pair -> defer"
+
+        return ", ".join(
+            f"{a.robot_id}->{a.order_id} (A* {a.cost:.1f} m, multi-criteria)"
+            for a in assignments
+        )
+
+
+def auction_pairing(candidates, fifo_position):
+    """Sequential single-item auction in FIFO order.
+
+    Orders are put up one at a time, oldest first. Every robot still
+    unassigned bids its marginal cost for the order -- the route length
+    it would add to its plan, which, holding no other order, is
+    C_static -- and the lowest bid wins (ties: lower robot_id). An order
+    no remaining robot can take is passed over.
+    """
+
+    bids: dict[str, list[OrderCandidate]] = {}
+
+    for candidate in candidates:
+        bids.setdefault(candidate.order_id, []).append(candidate)
+
+    taken: set[str] = set()
+    won: list[OrderCandidate] = []
+
+    for order_id in sorted(bids, key=lambda o: fifo_position[o]):
+        open_bids = [c for c in bids[order_id] if c.robot_id not in taken]
+
+        if not open_bids:
+            continue
+
+        best = min(open_bids, key=lambda c: (c.cost, c.robot_id))
+        taken.add(best.robot_id)
+        won.append(best)
+
+    return greedy_pairing(won, fifo_position)
+
+
+@register_batch
+class AuctionAllocator(BatchAllocationStrategy):
+    """Market-based allocation: a sequential single-item auction.
+
+    Orders are auctioned one at a time in FIFO order, the way a
+    market-based dispatcher announces tasks as they arrive (MURDOCH,
+    Gerkey and Mataric 2002). Each free robot bids its marginal cost:
+    the directed A* route length the order would add to its plan.
+
+    Why FIFO announcement and not rounds. In the round-based variant
+    every robot bids on every open order and the globally cheapest bid
+    wins each round. A robot here holds at most one order per decision,
+    so its marginal cost for any order is that order's C_static, and the
+    round-based auction reduces exactly to nearest_astar's greedy sweep.
+    The same behaviour under a second name is not a second strategy, so
+    the auction announces orders in arrival order: the oldest order
+    goes to its cheapest robot even when that robot is cheaper still
+    for a younger order.
+    """
+
+    name = "auction"
+
+    def assign(
+        self,
+        warehouse,
+        robots,
+        orders,
+        fifo_position,
+        cache=None,
+        battery=None,
+        timing=None,
+    ):
+        candidates = _eligible(
+            self, warehouse, robots, orders, fifo_position, cache, battery
+        )
+
+        return auction_pairing(candidates, fifo_position)
+
+    def explain(self, assignments):
+        if not assignments:
+            return f"{self.name}: no eligible robot-order pair -> defer"
+
+        return ", ".join(
+            f"{a.robot_id}->{a.order_id} (won at {a.cost:.1f} m)" for a in assignments
+        )
+
+
+def hungarian_pairing(candidates, fifo_position):
+    """Maximum matching of minimum total C_static.
+
+    First as many pairs as the eligibility mask allows, then, among all
+    matchings of that size, the one with the smallest summed route
+    length. Ineligible pairs carry a cost larger than any feasible
+    matching can reach, so the solver never trades a pair away to save
+    distance.
+    """
+
+    if not candidates:
+        return []
+
+    chosen = _min_total_matching(candidates, [c.cost for c in candidates])
+
+    return greedy_pairing(chosen, fifo_position)
+
+
+def _min_total_matching(candidates, weights) -> list[OrderCandidate]:
+    """Maximum-cardinality matching of minimum summed weight."""
+
+    robots, orders = _canonical(candidates)
+    row = {r: i for i, r in enumerate(robots)}
+    col = {o: j for j, o in enumerate(orders)}
+
+    blocked = (max(weights) + 1.0) * (min(len(robots), len(orders)) + 1)
+
+    matrix = np.full((len(robots), len(orders)), blocked)
+    by_cell = {}
+
+    for c, weight in zip(candidates, weights):
+        matrix[row[c.robot_id], col[c.order_id]] = weight
+        by_cell[row[c.robot_id], col[c.order_id]] = c
+
+    rows, cols = linear_sum_assignment(matrix)
+
+    return [by_cell[i, j] for i, j in zip(rows, cols) if (i, j) in by_cell]
+
+
+@register_batch
+class HungarianAllocator(BatchAllocationStrategy):
+    """Optimal assignment: minimum total route length, per decision.
+
+    The Hungarian method (Kuhn 1955; scipy's linear_sum_assignment)
+    over the decision's eligible pairs: the matching with the most pairs
+    the mask allows and, among those, the least summed C_static. Where
+    nearest_astar is greedy and can lock a robot into a cheap pair that
+    forces an expensive one elsewhere, this minimises the sum.
+
+    It optimises one decision at a time, not the workload: the window,
+    the free robots and the timing of decisions are infrastructure and
+    the same for every strategy. When a decision offers one free robot,
+    every minimum-cost rule picks the same pair, so its difference from
+    nearest_astar shows only in decisions with several free robots.
+    """
+
+    name = "hungarian"
+
+    def assign(
+        self,
+        warehouse,
+        robots,
+        orders,
+        fifo_position,
+        cache=None,
+        battery=None,
+        timing=None,
+    ):
+        candidates = _eligible(
+            self, warehouse, robots, orders, fifo_position, cache, battery
+        )
+
+        return hungarian_pairing(candidates, fifo_position)
+
+    def explain(self, assignments):
+        if not assignments:
+            return f"{self.name}: no eligible robot-order pair -> defer"
+
+        total = sum(a.cost for a in assignments)
+        return f"{self.name}: {len(assignments)} pair(s), {total:.1f} m in total"
+
+
+def milp_pairing(candidates, timing, fifo_position):
+    """Minimum batch makespan, then minimum total finish time.
+
+    x_e in {0, 1} for every eligible pair e, z >= 0 continuous:
+
+        stage 1   minimise  z
+                  s.t.      sum of x over each robot              <= 1
+                            sum of x over each order              <= 1
+                            sum of all x                          =  K
+                            sum of finish_e * x_e over a robot    <= z
+                            sum of finish_e * x_e over an order   <= z
+
+        stage 2   minimise  sum of finish_e * x_e
+                  s.t.      the same, and z <= z* (stage 1 optimum)
+
+    A robot and an order each hold at most one pair, so each of the last
+    two sums is the finish time of that robot's (or order's) one pair:
+    z is the latest finish of the matching. Written per robot and per
+    order rather than per pair, the program has the same optimum and a
+    much tighter LP relaxation (100 x 100: 13 s instead of 98 s).
+
+    K is the maximum matching size the eligibility mask allows, so the
+    MILP pairs as many robots as the Hungarian method does. finish_e is
+    DecisionTiming.finish_s: directed A* travel + service, nothing
+    realized.
+
+    Before solving, a pair that finishes later than the latest finish of
+    one feasible K-matching (the minimum-total matching on finish times)
+    is left out: it cannot be in an optimal solution of either stage,
+    since z* is no larger than that matching's latest finish. This is
+    exact, not a heuristic. Solved with HiGHS through scipy.optimize.milp.
+    """
+
+    if not candidates:
+        return []
+
+    feasible = _min_total_matching(candidates, [timing.finish_s(c) for c in candidates])
+    size = len(feasible)
+    bound = max(timing.finish_s(c) for c in feasible)
+    tolerance = 1e-9 * max(1.0, bound)
+
+    candidates = [c for c in candidates if timing.finish_s(c) <= bound + tolerance]
+
+    robots, orders = _canonical(candidates)
+    n = len(candidates)
+    finish = np.array([timing.finish_s(c) for c in candidates])
+
+    row = {r: i for i, r in enumerate(robots)}
+    col = {o: len(robots) + j for j, o in enumerate(orders)}
+    count = len(robots) + len(orders)
+
+    entries, rows_of, cols_of = [], [], []
+
+    for e, c in enumerate(candidates):
+        # each robot once, each order once
+        rows_of += [row[c.robot_id], col[c.order_id]]
+        cols_of += [e, e]
+        entries += [1.0, 1.0]
+
+        # exactly K pairs
+        rows_of.append(count)
+        cols_of.append(e)
+        entries.append(1.0)
+
+        # the robot's and the order's finish time, against z
+        rows_of += [count + 1 + row[c.robot_id], count + 1 + col[c.order_id]]
+        cols_of += [e, e]
+        entries += [float(finish[e]), float(finish[e])]
+
+    for k in range(count):
+        rows_of.append(count + 1 + k)
+        cols_of.append(n)
+        entries.append(-1.0)
+
+    shape = (2 * count + 1, n + 1)
+    matrix = coo_matrix((entries, (rows_of, cols_of)), shape=shape).tocsr()
+
+    lower = np.concatenate([np.zeros(count), [size], np.full(count, -np.inf)])
+    upper = np.concatenate([np.ones(count), [size], np.zeros(count)])
+    constraints = LinearConstraint(matrix, lower, upper)
+    integrality = np.concatenate([np.ones(n), [0]])
+
+    makespan = milp(
+        c=np.concatenate([np.zeros(n), [1.0]]),
+        constraints=constraints,
+        integrality=integrality,
+        bounds=Bounds(np.zeros(n + 1), np.concatenate([np.ones(n), [np.inf]])),
+    )
+
+    if not makespan.success:
+        raise RuntimeError(f"milp stage 1 failed: {makespan.message}")
+
+    ceiling = makespan.x[n] + 1e-6 * max(1.0, makespan.x[n])
+
+    total = milp(
+        c=np.concatenate([finish, [0.0]]),
+        constraints=constraints,
+        integrality=integrality,
+        bounds=Bounds(np.zeros(n + 1), np.concatenate([np.ones(n), [ceiling]])),
+    )
+
+    if not total.success:
+        raise RuntimeError(f"milp stage 2 failed: {total.message}")
+
+    chosen = [c for c, x in zip(candidates, total.x[:n]) if x > 0.5]
+
+    return greedy_pairing(chosen, fifo_position)
+
+
+@register_batch
+class MILPAllocator(BatchAllocationStrategy):
+    """Mixed-integer program: minimise the decision's makespan.
+
+    A different objective from the Hungarian method, not a different
+    solver for the same one. Hungarian minimises the *sum* of route
+    lengths; this minimises the *latest* estimated finish among the
+    pairs it makes (a bottleneck objective, which a linear assignment
+    cannot express), and only then the total estimated finish time. It
+    accepts a longer total to bring the slowest mission of the batch in
+    earlier.
+
+    Estimated finish is DecisionTiming.finish_s (directed A* travel +
+    service), the same estimate earliest_finish ranks on. The
+    formulation is in milp_pairing. With one free robot in a decision
+    the bottleneck is that robot's own mission, so it picks what
+    earliest_finish picks; the objectives part only with several free
+    robots.
+
+    Ties between equally optimal matchings are resolved by the solver
+    (HiGHS), deterministic for one scipy version. The headless runner
+    (pixi) and the ROS node (system Python) use different scipy builds,
+    so an exact tie could resolve differently between the two.
+    """
+
+    name = "milp"
+
+    def assign(
+        self,
+        warehouse,
+        robots,
+        orders,
+        fifo_position,
+        cache=None,
+        battery=None,
+        timing=None,
+    ):
+        timing = _require_timing(self.name, timing)
+        candidates = _eligible(
+            self, warehouse, robots, orders, fifo_position, cache, battery
+        )
+
+        return milp_pairing(candidates, timing, fifo_position)
+
+    def explain(self, assignments):
+        if not assignments:
+            return f"{self.name}: no eligible robot-order pair -> defer"
+
+        return f"{self.name}: {len(assignments)} pair(s), batch makespan minimised"

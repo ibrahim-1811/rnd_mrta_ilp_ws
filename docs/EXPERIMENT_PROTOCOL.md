@@ -107,6 +107,47 @@ python3 src/simulation_env/scripts/compare_paired.py --name main
 python3 src/simulation_env/scripts/plot_experiment.py --name main
 ```
 
+Integrity (E1), checked before any paired difference is reported:
+
+```text
+complete    runs/<name>/experiment.json records the grid; compare_paired
+            refuses missing or extra runs (--allow-incomplete warns)
+settings    every run's run.json, minus strategy / seed / fleet size /
+            workload / outputs, hashes to one settings_sha256: same map,
+            config, speed, service times, quantum, window rule, battery,
+            order count and git commit
+pairs       the two runs of a pair share orders_sha256, orders,
+            line_items and window_width
+overwrite   run_experiment refuses an existing runs/<name>; --resume
+            runs only missing or failed runs (grid and workload hashes
+            must match), --force renames the old one to
+            <name>.replaced-<UTC time>
+```
+
+Uncommitted changes are recorded (`git.dirty` in run.json and
+experiment.json) and reported, not refused.
+
+## Dispatch Conditions
+
+Decided 2026-10-27 (DECISIONS.md, "Dispatch quantum conditions"):
+
+```text
+primary operational experiment   --quantum 0   (config default)
+controlled batch experiment      --quantum 3
+```
+
+Run them as separate experiments (separate `--name`); a quantum change
+changes `settings_sha256`, so compare_paired refuses to mix them.
+
+## Stalled Runs
+
+A run the engine stops as STALLED (a traffic deadlock) is a failed run
+of that strategy at that seed and fleet size. It is never counted as a
+success, never dropped from the paired statistics without being
+reported, and never rescued by a fallback. It has no metrics.json, so
+the experiment is incomplete and compare_paired refuses it; the stall
+and its diagnostics stay in the run's run.log.
+
 `--workloads reference` runs the committed order file instead, as
 experiments before 2026-10-26 did; it cannot be compared with
 compare_paired.py.

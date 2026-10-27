@@ -38,9 +38,10 @@ Battery scheduler V1         IN PROGRESS
                                 metrics, G6) NOT STARTED
 Candidate window S0          S0a + S0b DONE, committed
 MRTA baselines               random, nearest_manhattan,
-                             nearest_astar DONE, distinctness gate OK;
-                             Earliest Finish, Multi-Criteria, Auction,
-                             Hungarian, MILP NOT IMPLEMENTED
+                             nearest_astar DONE; earliest_finish,
+                             multi_criteria, auction, hungarian, milp
+                             IMPLEMENTED 2026-10-26, awaiting review
+                             (see "Phase 7 slice 2")
 Decision/outcome logging     DONE (Phase 8), Prolog export bk.pl/exs.pl
 Experiment runner            DONE; paired workload seeds + 95% CI
                              comparison DONE, committed 5abf5c2
@@ -2031,6 +2032,224 @@ python3 src/simulation_env/scripts/run_experiment.py --name main \
     --robots 10 30 50 70 100 --seeds $(seq 1 30)
 python3 src/simulation_env/scripts/compare_paired.py --name main
 ```
+
+### E1: paired experiment integrity
+
+Status: implemented 2026-10-26, awaiting approval. Analysis tooling
+only: nothing in the simulation changed.
+
+Four guarantees before a paired comparison is reported
+(EXPERIMENT_PROTOCOL.md, "Seeds"): complete seed sets against
+`experiment.json`; one map and simulator setting across the experiment
+(`settings_sha256`); the same workload within each pair; no accidental
+overwrite (`--resume`, `--force` keeps the old directory). A dirty tree
+is recorded and reported, not refused (researcher, 2026-10-26).
+
+```text
+simulation_env/paired.py         settings_signature, check_complete,
+                                 check_settings; pairs also compare
+                                 line_items and window_width
+scripts/run_experiment.py        experiment.json, --resume, --force,
+                                 workload hashes checked on resume;
+                                 summary.csv: line_items, window_width,
+                                 settings_sha256
+scripts/compare_paired.py        enforces all four; --allow-incomplete;
+                                 identity columns kept as text
+test/test_experiment_integrity.py  new, 19 tests (2 end to end)
+```
+
+Found on the way:
+
+- run.json carries three outputs (`format`, `decision_rows`,
+  `outcome_rows`); the first signature included them, so every real
+  run looked different. Caught by an 18-run, two-fleet-size check, not
+  by the unit tests; outputs are now excluded and tested.
+- `compare_paired.py` parsed every CSV value that looked numeric,
+  so a digest like `12e4...` or all digits would have become a float.
+
+Measured: 18 runs (3 strategies x 10/30 robots x seeds 1-3, 100 orders)
+share one signature; `--resume` on it finds 18 done, 0 to run. Full
+suite 459 passed.
+
+### Phase 7 slice 2: the five remaining conventional strategies
+
+Status: implemented 2026-10-26, awaiting review. Nothing committed.
+
+Definitions in DECISIONS.md, "Conventional strategy definitions".
+Every strategy gets the same window, battery mask, directed A* routes,
+traffic and execution; the executor now also hands every strategy a
+`DecisionTiming` (each robot's speed, configured shelf and drop-off
+service), built from the values the engine executes with. The first
+three ignore it and reproduce their frozen V2 numbers exactly
+(268.6667 s / 5798.0 m, 265.3333 s / 5974.0 m, 266.6667 s / 6488.0 m).
+
+```text
+task_management/features.py            DecisionTiming (travel, service,
+                                       finish estimates)
+task_management/allocation_strategy.py earliest_finish, multi_criteria,
+                                       auction, hungarian, milp; timing=
+                                       accepted by every strategy
+simulation_env/workload_executor.py    passes DecisionTiming per decision
+scripts/check_strategy_distinctness.py --quantum; default = every
+                                       registered strategy (as its help
+                                       already said)
+test/test_phase7_strategies.py         new: controlled scenarios per
+                                       strategy, properties x 8,
+                                       25 brute-force MILP checks
+```
+
+#### Distinctness, W100, 30 robots, 300 orders, seed 42
+
+Percent of choice-bearing decisions where the rival would choose
+differently (row drives, column is asked):
+
+```text
+quantum 0 s (config default)       FAIL
+        auc    EF    hun   milp    MC    A*    man   rnd
+auc      -    96.0  96.4  96.0  89.7  96.4  96.4  97.6
+EF     98.5    -     6.5   2.3  45.2   6.1  63.2  96.9
+hun    97.7   6.2    -     6.6  44.2   0.8  61.6  96.9
+milp   97.6   4.9   7.3    -    48.0   8.9  63.0  97.6
+MC     98.8  25.6  26.4  26.4    -    26.0  65.9  95.7
+A*     97.7   6.6   0.4   8.2  47.5    -    61.9  96.1
+below 5 %: hungarian ~ nearest_astar (0.4 / 0.8 %),
+           milp ~ earliest_finish (2.3 / 4.9 %)
+
+quantum 3 s                        OK, every pair above 5 %
+        auc    EF    hun   milp    MC    A*    man   rnd
+EF     98.5    -    24.3  35.3  65.4   8.1  77.9  97.1
+hun   100.0  28.4    -    27.6  64.9  24.6  73.9  99.3
+milp   99.3  32.4  27.9    -    66.2  33.8  75.0 100.0
+A*     99.3  10.4  20.0  40.0  65.2    -    74.1  95.6
+lowest: earliest_finish vs nearest_astar 8.1 / 10.4 %
+```
+
+The quantum-0 failures are structural, not a defect: with dispatch on
+every free robot most decisions offer one robot, and for one robot the
+minimum total is the nearest order (Hungarian = nearest_astar) and the
+minimum latest finish is the earliest finish (MILP = earliest_finish).
+They separate once decisions hold several robots. Nothing was tuned to
+pass the gate. Which quantum the main study uses is the researcher's
+decision (see fifo-window note in S0b).
+
+#### Headless, W100, 30 robots, 300 orders, seed 42 (one workload)
+
+```text
+                 quantum 0                       quantum 3
+                 order mk   distance  waiting    order mk   distance  waiting
+nearest_astar     873.33    35134 m   244.7      896.67    34738 m   482.0
+earliest_finish   862.00    35200 m   232.0      884.67    34660 m   520.3
+multi_criteria    859.33    34882 m   250.7      887.67    34360 m   465.0
+auction           874.67    36562 m   271.0      917.00    36292 m   511.7
+hungarian         861.00    35116 m   215.3      872.67    34446 m   465.0
+milp              865.33    35104 m   244.3      888.67    34770 m   585.3
+```
+
+All 300/300, 0 reservation violations. One workload: not a ranking.
+
+#### Found on the way
+
+- MILP was slow: per-pair bottleneck rows, 118 s for the opening
+  100 x 100 decision. Rewritten with per-robot and per-order rows and
+  an exact upper-bound prune; 100 robots / 300 orders / quantum 3:
+  allocator CPU 132 s -> 3.6 s, worst decision 118 s -> 1.9 s.
+  Exactness checked against brute force on 25 random decisions.
+- hungarian, 100 robots, 300 orders, quantum 3 stalls at t = 450.7 s
+  in a 6-robot waiting circle on W100 (no rotaries). Traffic
+  infrastructure, not the strategy; recorded in
+  .scratch/traffic-liveness/issues/01-cyclic-deadlock-under-scattered-allocation.md.
+- MILP ties between equally optimal matchings are resolved by HiGHS;
+  pixi has scipy 1.17, the ROS node's system Python 1.11.4, so an exact
+  tie could resolve differently in Gazebo than headless.
+
+### Traffic liveness: diagnosis and proposed fix
+
+Status: approved and implemented 2026-10-27, awaiting review. Nothing
+committed. Rule recorded in DECISIONS.md, "Rotation Right-of-Way".
+Full trace in
+.scratch/traffic-liveness/issues/01-cyclic-deadlock-under-scattered-allocation.md.
+
+Cause. A controller rule, not a physical jam. Six robots fill a 6-cell
+ring (W100 has 24; one-way grids always have cycles). All six ask to
+advance in the same batch, and the reservation table would accept the
+rotation. But the contention rule hands one ring cell to a robot
+*outside* the ring (closer to its goal), the ring member waits, so the
+whole ring waits, so the outsider's target never frees: the identical
+decision repeats at every retry. The original V2 rotary deadlock is the
+same mechanism on a 4-cell ring.
+
+Proposed change, `local_traffic_controller.py` only:
+
+```text
+resolve(), after the head-on step:
+  rotation members = robots on a closed cycle (length >= 3) of
+                     robot -> holder of its target, within the batch
+contention for a cell:
+  a rotation member wins the cell it is rotating into; otherwise the
+  existing priority (busy, remaining distance, robot id) is unchanged
+propagation, begin_moves_batch, reservations, engine: unchanged
+```
+
+At most one rotation member can contend for a cell (each robot has one
+target), so the rule is well defined and deterministic. It never
+reassigns orders, reroutes, or depends on the strategy.
+
+Why recovery-by-contention rather than prevention: capping occupancy of
+each ring needs every cycle enumerated (longer cycles are
+combinatorial), changes throughput in runs that complete today (moving
+every frozen baseline), and still leaves the long cycles. This rule
+changes a decision only in a state that today can only end in STALLED,
+so every run that completes today stays byte-identical.
+
+Prototype evidence: the W100 stall (hungarian, 100 robots, quantum 3)
+completes 300/300 and the V2 rotary stall 500/500, 0 violations; four
+completed runs and the V2 frozen baseline are byte-identical with the
+rule fired 0 times.
+
+Residual risk, kept loud: a wait cycle through a robot outside the
+movement batch (servicing, charging, side-stepping, a protected service
+move) is not a rotation and still ends as STALLED, a failed run
+(EXPERIMENT_PROTOCOL.md, "Stalled Runs"). None observed.
+
+#### Implemented
+
+```text
+simulation_env/local_traffic_controller.py   rotation_members(); a
+                                             member wins its target;
+                                             two members claiming one
+                                             cell raises (cannot happen)
+simulation_env/test/test_traffic_rotation.py new, 17 tests
+scripts/compare_paired.py                    --allow-incomplete report
+                                             (E1 gap, below)
+```
+
+Measured after implementation:
+
+```text
+W100 hungarian 100 robots 300 orders q3   300/300, 0 violations, 2 overrides
+V2 random seed 42 orders_500              500/500, 0 violations, 1 override
+17 previously completed W100 runs         rule fired 0x; decisions,
+  (8 strategies, q0/q3, 30/100 robots)    outcomes, metrics byte-identical
+V2 frozen baselines                       268.6667 s / 5798.0 m,
+                                          265.3333 s / 5974.0 m,
+                                          266.6667 s / 6488.0 m
+traffic verification scripts              8/8 pass
+full suite                                562 passed; ruff clean
+```
+
+The rotation tests fail with the rule switched off (traced W100 stall,
+4- and 6-cell ring vs outsider, two rings); the unchanged-contention
+test passes either way.
+
+#### E1 reporting gap closed
+
+`compare_paired.py --allow-incomplete` used to print a warning and
+write an ordinary-looking paired.md. paired.md now opens with
+"INCOMPLETE EXPERIMENT -- not a complete result", the present/expected
+run count, every missing run with its status (stalled / failed / not
+run), runs outside the grid (left out, never compared), and per
+comparison the expected n, paired n and seeds left out; paired.csv
+gains expected_n and complete. Strict mode is unchanged.
 
 ### Popper environment
 

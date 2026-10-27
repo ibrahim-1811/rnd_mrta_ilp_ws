@@ -37,6 +37,17 @@ give.
 experiment did before paired seeds: a deterministic strategy once, with
 the first seed, and only a stochastic one over every seed.
 
+Integrity (E1). runs/<name>/experiment.json records the grid, the
+workload settings and the git state; compare_paired.py refuses an
+experiment whose runs do not match that grid or do not share one map
+and simulator setting (summary.csv carries each run's
+settings_sha256). An existing runs/<name> is never overwritten:
+
+    --resume   run only what is missing or failed; the grid and the
+               workload files must match what experiment.json recorded
+    --force    start again; the old directory is kept, renamed to
+               runs/<name>.replaced-<UTC time>
+
 Then plot it with plot_experiment.py and compare strategies with
 compare_paired.py.
 """
@@ -49,6 +60,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 
@@ -58,6 +70,15 @@ import generate_orders
 ROOT = Path(__file__).resolve().parents[3]
 RUN_WORKLOAD = ROOT / "src" / "simulation_env" / "scripts" / "run_workload.py"
 PACKAGES = ("mrta_core", "simulation_env", "task_management")
+
+for package in PACKAGES:
+    if str(ROOT / "src" / package) not in sys.path:
+        sys.path.insert(0, str(ROOT / "src" / package))
+
+from simulation_env.dataset import git_state  # noqa: E402
+from simulation_env.paired import settings_signature  # noqa: E402
+
+EXPERIMENT_FILE = "experiment.json"
 
 # A strategy whose choices depend on its seed. On the reference
 # workload every other strategy is deterministic and needs one run per
@@ -84,36 +105,97 @@ def runs_for(strategies, robots, seeds, paired=True):
 def write_workloads(out, seeds, orders=WORKLOAD_ORDERS) -> dict:
     """One order file per seed, from the current map; seed -> path.
 
-    Rewriting an existing experiment's files is harmless: same seed and
-    map, same bytes.
+    Rewriting an existing experiment's files is harmless while they come
+    out the same: same seed, map and size, same bytes. If a recorded
+    workload would now come out different (the map changed), the runs
+    already made used another workload, and this refuses.
     """
 
     folder = out / "workloads"
     folder.mkdir(parents=True, exist_ok=True)
 
+    index_path = folder / "workloads.json"
+    recorded = json.loads(index_path.read_text()) if index_path.exists() else {}
+
     shelves, dropoffs = generate_orders.stations_of(generate_orders.DEFAULT_CONFIG)
-    paths, index = {}, {}
+    paths, index = {}, dict(recorded)
 
     for seed in seeds:
         text = generate_orders.build(orders, seed, shelves, dropoffs)
+        digest = sha256(text.encode()).hexdigest()
+        before = recorded.get(str(seed))
+
+        if before is not None and before["sha256"] != digest:
+            raise SystemExit(
+                f"{index_path}: seed {seed} was recorded as {before['sha256'][:12]}, "
+                f"now generates {digest[:12]}; the map or workload size changed"
+            )
+
         path = folder / f"orders_s{seed}.csv"
         path.write_text(text)
 
         paths[seed] = path
         index[str(seed)] = {
             "file": path.name,
-            "sha256": sha256(text.encode()).hexdigest(),
+            "sha256": digest,
             "orders": orders,
             "line_items": len(text.strip().splitlines()) - 1,
         }
 
-    (folder / "workloads.json").write_text(json.dumps(index, indent=2))
+    index_path.write_text(json.dumps(index, indent=2))
 
     return paths
 
 
+def run_dir_of(out, strategy, robots, seed) -> Path:
+    return out / strategy / f"r{robots}_s{seed}"
+
+
+def finished(run_dir) -> bool:
+    """A run that left both its manifest and its metrics."""
+
+    return (run_dir / "metrics.json").exists() and (run_dir / "run.json").exists()
+
+
+def prepare(out, spec, resume, force) -> str | None:
+    """Guard runs/<name> against overwrites; None when clear to run.
+
+    Returns the reason to refuse, or None. With --force the old
+    directory is renamed, never deleted.
+    """
+
+    if not out.exists() or not any(out.iterdir()):
+        return None
+
+    if force:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        kept = out.with_name(f"{out.name}.replaced-{stamp}")
+        out.rename(kept)
+        print(f"  --force: kept the old experiment as {kept}")
+        return None
+
+    if not resume:
+        return (
+            f"{out} already holds an experiment; use --resume to finish it "
+            "or --force to start again (the old one is kept)"
+        )
+
+    path = out / EXPERIMENT_FILE
+
+    if not path.exists():
+        return f"{out} has no {EXPERIMENT_FILE}, so it cannot be resumed; use --force"
+
+    recorded = json.loads(path.read_text())["spec"]
+
+    if recorded != spec:
+        changed = sorted(k for k in set(recorded) | set(spec) if recorded.get(k) != spec.get(k))
+        return f"--resume with a different grid: {', '.join(changed)} changed"
+
+    return None
+
+
 def run_one(out, strategy, robots, seed, orders, export, orders_file=None):
-    run_dir = out / strategy / f"r{robots}_s{seed}"
+    run_dir = run_dir_of(out, strategy, robots, seed)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [
@@ -177,47 +259,98 @@ def main() -> int:
         help="seeded: one generated order file per seed, shared by every "
         "strategy (default); reference: the committed order file",
     )
+    parser.add_argument("--resume", action="store_true", help="run only what is missing or failed")
+    parser.add_argument("--force", action="store_true", help="start again; the old directory is kept, renamed")
     args = parser.parse_args()
+
+    if args.resume and args.force:
+        parser.error("--resume and --force exclude each other")
 
     out = ROOT / args.out / args.name
     paired = args.workloads == "seeded"
     grid = list(runs_for(args.strategies, args.robots, args.seeds, paired))
-    files = write_workloads(out, args.seeds, args.workload_orders) if paired else {}
 
-    print(f"EXPERIMENT {args.name}: {len(grid)} runs, {args.jobs} at a time -> {out}")
+    # What defines the experiment; --resume must find exactly this.
+    spec = {
+        "strategies": list(args.strategies),
+        "robots": list(args.robots),
+        "seeds": list(args.seeds),
+        "orders": args.orders,
+        "workloads": args.workloads,
+        "workload_orders": args.workload_orders if paired else None,
+    }
+
+    refusal = prepare(out, spec, args.resume, args.force)
+
+    if refusal is not None:
+        print(f"refused: {refusal}")
+        return 2
+
+    out.mkdir(parents=True, exist_ok=True)
+    record_path = out / EXPERIMENT_FILE
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    if record_path.exists():
+        record = json.loads(record_path.read_text())
+        record.setdefault("resumed", []).append({"at": now, "git": git_state(ROOT)})
+    else:
+        record = {
+            "name": args.name,
+            "spec": spec,
+            "runs": [list(run) for run in grid],
+            "created": now,
+            "git": git_state(ROOT),
+        }
+
+    record_path.write_text(json.dumps(record, indent=2))
+
+    files = write_workloads(out, args.seeds, args.workload_orders) if paired else {}
+    pending = [run for run in grid if not finished(run_dir_of(out, *run))]
+
+    print(
+        f"EXPERIMENT {args.name}: {len(grid)} runs, {len(grid) - len(pending)} already "
+        f"done, {len(pending)} to run, {args.jobs} at a time -> {out}"
+    )
 
     if paired:
         print(f"  workloads: {len(files)} seeds x {args.workload_orders} orders in {out / 'workloads'}")
 
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        done = list(
-            pool.map(
-                lambda spec: run_one(
-                    out, *spec, args.orders, args.export, files.get(spec[2])
+        done = dict(
+            zip(
+                pending,
+                pool.map(
+                    lambda run: run_one(
+                        out, *run, args.orders, args.export, files.get(run[2])
+                    ),
+                    pending,
                 ),
-                grid,
             )
         )
 
     rows = []
 
-    for run_dir, code in done:
-        path = run_dir / "metrics.json"
+    for run in grid:
+        run_dir = run_dir_of(out, *run)
 
-        if code != 0 or not path.exists():
+        if not finished(run_dir):
+            code = done[run][1] if run in done else "?"
             print(f"  no metrics from {run_dir} (exit {code}); see run.log")
             continue
 
-        # The workload each run really executed, from its own manifest,
-        # so compare_paired.py can check that a pair shares one.
+        # What each run really executed, from its own manifest, so
+        # compare_paired.py can check the pairs and the experiment.
         manifest = json.loads((run_dir / "run.json").read_text())
         where = run_dir.relative_to(ROOT) if run_dir.is_relative_to(ROOT) else run_dir
 
         rows.append(
-            json.loads(path.read_text())
+            json.loads((run_dir / "metrics.json").read_text())
             | {
                 "workload": args.workloads,
                 "orders_sha256": manifest["orders_sha256"],
+                "line_items": manifest["line_items"],
+                "window_width": manifest["window_width"],
+                "settings_sha256": settings_signature(manifest),
                 "run_dir": str(where),
             }
         )

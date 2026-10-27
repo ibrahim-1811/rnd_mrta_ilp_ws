@@ -51,7 +51,10 @@ from mrta_core.warehouse_map import ZoneType  # noqa: E402
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx  # noqa: E402
 from simulation_env.fleet import build_fleet  # noqa: E402
 from simulation_env.workload_executor import WorkloadExecutor  # noqa: E402
-from task_management.allocation_strategy import get_batch_strategy  # noqa: E402
+from task_management.allocation_strategy import (  # noqa: E402
+    BATCH_STRATEGIES,
+    get_batch_strategy,
+)
 
 
 CONFIG = "src/simulation_env/config/warehouse.yaml"
@@ -150,6 +153,12 @@ def main() -> int:
     )
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument(
+        "--quantum",
+        type=float,
+        default=None,
+        help="dispatch quantum in s (default: the config's), as run_workload.py",
+    )
+    parser.add_argument(
         "--strategy",
         action="append",
         default=[],
@@ -163,15 +172,14 @@ def main() -> int:
     if args.robots:
         config = replace(config, robot_count=args.robots)
 
+    if args.quantum is not None:
+        config = replace(config, dispatch_quantum_s=args.quantum)
+
     warehouse = load_warehouse_xlsx(config.map_path)
 
     seed = config.seed if args.seed is None else args.seed
 
-    strategies = args.strategy or [
-        "nearest_astar",
-        "nearest_manhattan",
-        "random",
-    ]
+    strategies = args.strategy or sorted(BATCH_STRATEGIES)
 
     orders = args.orders or len(load_orders_csv(config.orders_path, warehouse))
 
