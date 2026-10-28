@@ -46,3 +46,37 @@ Canonicalization: compare parsed records and declared schema, not Parquet contai
 - Read-only historical JSON/header inventory: 20 manifests, 17 metrics (16 v1 + 1 v2), no experiment manifests. No historical files regenerated.
 - Focused existing pairing tests and final documentation/preservation validation are recorded in the final verification section below after execution.
 - No simulation, ROS/Gazebo launch, server, GUI/backend implementation, install, large test suite, commit or push in Stage 0. Initial unqualified python attempt failed because command absent; explicit interpreters resolved the audit tooling without installing anything.
+
+## Final Stage 0 verification
+
+The nine selected test functions (one parameterized eight ways) passed: **16 passed in 0.43 s**. Only pure comparison/signature/completeness tests ran; no simulation fixture or end-to-end test ran. Command used the existing `.pixi/envs/default/bin/python -m pytest -q -p no:cacheprovider`, with `PYTHONDONTWRITEBYTECODE=1` and the three source packages on PYTHONPATH. Selected nodes:
+
+```text
+test_experiment_integrity.py::test_runs_of_one_experiment_share_a_signature
+test_experiment_integrity.py::test_a_changed_setting_changes_the_signature
+test_experiment_integrity.py::test_a_complete_experiment_passes
+test_experiment_integrity.py::test_a_missing_run_is_refused
+test_experiment_integrity.py::test_mixed_settings_are_refused
+test_paired_seeds.py::test_interval_is_the_paired_t_interval
+test_paired_seeds.py::test_one_pair_has_no_interval
+test_paired_seeds.py::test_pairs_that_ran_different_workloads_are_refused
+test_paired_seeds.py::test_a_seed_run_twice_is_refused
+```
+
+The builder review found no important unanswered planning questions. Source-reference existence, balanced Markdown fences, required five filenames and file-content preservation were checked.
+
+### Concurrent repository changes during this audit
+
+The initial baseline remains recorded in BASELINE_INVENTORY.md. During final verification, HEAD was observed to advance from `aaf0ab97e8ad35592dc23454332106ac18c60c20` through `aa77ee0` to `badbc59671acd06fdcaf513060175ab74aeccc3d`; branch remained traffic/rmf-integration. Commit subjects were “checkpoint traffic control, strategies and experiment framework” and “checkpoint MRTA dashboard development”. The five newly authored documents became tracked. This agent issued no commit, stage, push, rename or deletion command; these were concurrent external repository changes and were not undone.
+
+The original `MRTA_CONTROL_CENTER_CODEX_PLAN (1).md` path disappeared and `MRTA_CONTROL_CENTER_CODEX_PLAN.md` appeared with the **identical SHA-256 contents**. All other 238 files from the initial 239-file snapshot retained identical contents. All 168 historical run files retained identical hashes. The first strict preservation check correctly failed on the missing original plan path; the follow-up distinguished the byte-identical rename from any overwritten content. Thus file contents were preserved, but unchanged HEAD/status cannot be claimed. Final verification notes themselves are additive edits to this Stage 0 document after the external checkpoint.
+
+Final observed git status after adding these notes:
+
+```text
+ M src/dashboard_GUI/docs/control_center/SCIENTIFIC_PARITY.md
+ D "src/dashboard_GUI/MRTA_CONTROL_CENTER_CODEX_PLAN (1).md"
+?? .codex/
+```
+
+No Stage 1 work started. Stop here for the user's Stage 0 review.
