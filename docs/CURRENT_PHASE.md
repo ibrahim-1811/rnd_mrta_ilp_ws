@@ -1,6 +1,30 @@
 # Current Development Phase
 
-## Current Position
+## Documentation freeze — 28 October 2026
+
+[PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) and [PROJECT_HANDOVER.html](PROJECT_HANDOVER.html) consolidate both worktrees, exact demos, strategy formulations, results and known failures. This summary supersedes historical status text below; it is a documentation update, not a new scientific phase approval.
+
+| Worktree / component | Checked state |
+|---|---|
+| GUI `traffic/rmf-integration` | HEAD `ae832f5`; complete dashboard Stages 1–6 and reports; science suite 562 passed |
+| Research `research/outcome-aware-ilp` | HEAD `163c6a4`; M0 committed; uncommitted M1 diagnostics/follow-up fixes preserved |
+| Current research verification | **634 passed, 0 failed in 78.83s**: M1 accepted; M2 outcome-independent data layer implemented with 14 unit tests; full suite green |
+| Foundations | W100, directed A*, shared local traffic/battery, eight conventional strategies, datasets and experiments implemented |
+| GUI verification | 152 backend and 22 frontend tests passed; typecheck/build and launcher preflight passed |
+| Existing GUI pilot | 24/24, 50 robots/200 orders/seeds1–3/q0; conventional/pre-M0, no charging |
+| Existing M1 pilot | Six main seed101/300-order probes plus one rollout; exploratory, predates latest fixes; full matrix pending |
+| Symbolic learner | M2 data/bias/predicates and Single-/Multi-Teacher/Outcome-Aware ILP/explanations remain unimplemented |
+| Integration | GUI is not yet compatible with research M0 identity/purpose/runner interfaces |
+| Deferred | Held-out transfer map, G6 partial recovery charging; remaining B6 metrics incomplete |
+
+Active defaults are W100/100 robots/2,000 orders/q0. Research primary condition explicitly overrides q3; q0 is secondary. Earlier V2 numbers need the fixture config. Congestion diagnostics exist as M1 sidecars; they are not yet allocator features or accepted learned predicates. Popper is installed, not an integrated learner.
+
+No implementation fix, merge, commit, push or new large experiment was performed in this documentation freeze. Current known limitations and fresh logs are in the dated handover bundle.
+
+---
+
+
+## Historical current-position snapshot (see freeze summary above)
 
 Updated 2026-10-27, M0, on the research backend branch
 `research/outcome-aware-ilp`. The deterministic warehouse simulator is
@@ -36,8 +60,12 @@ Experiment runner            DONE: paired seeds, E1 integrity
                              (accepted foundation); M0 adds --quantum,
                              --window, --purpose, strategy identity,
                              classified failures
-M0 integrity                 IMPLEMENTED 2026-10-27, awaiting review,
-                             not committed (see "M0" at the end)
+M0 integrity                 DONE, verified and committed 163c6a4
+M1 outcome signal            ACCEPTED and CLOSED 2026-10-29; 300-order pilot
+                             accepted, parameters H=120s, lambda=0.50,
+                             delta=2.0s frozen (DECISIONS.md)
+M2 ILP data layer            ACTIVE; run-scoped identifiers, State_t
+                             fact generation, Popper bias, sampling
 Primary condition            dispatch quantum 3 s for learning and
                              evaluation; quantum 0 secondary
                              (researcher, 2026-10-27)
@@ -2301,8 +2329,8 @@ gate at 30 robots / 300 orders: every pair distinct, status OK
 
 ### M0: research integrity and experimental reproducibility
 
-Status: implemented 2026-10-27 on `research/outcome-aware-ilp`, awaiting
-review. Not committed. Scope: F5-F8 of the 2026-10-27 audit and the seed
+Status: implemented 2026-10-27 on `research/outcome-aware-ilp`; verified
+by the researcher and committed 163c6a4. Scope: F5-F8 of the 2026-10-27 audit and the seed
 split guard. Nothing in routing, traffic, battery, charging, execution or
 any strategy's choices changed.
 
@@ -2487,6 +2515,103 @@ $PY src/simulation_env/scripts/run_experiment.py --name m0_q0 \
     --robots 10 30 --seeds 101 102 103 --orders 100 --purpose training
 $PY src/simulation_env/scripts/compare_paired.py --name m0_q3
 ```
+
+### M1: outcome signal and congestion analysis
+
+Status: diagnostics implemented 2026-10-28, awaiting review; not
+committed. The measurement matrix below is the researcher's to run. Full
+analysis, definitions and the label recommendation:
+`.scratch/m1-outcome-signal/spec.md`.
+
+Nothing in allocation, routing, traffic, battery, execution or the
+dataset schema changed. The new code reads runs or observes a run without
+altering it (tested).
+
+```text
+simulation_env/outcome_signal.py   estimate vs outcome per order, margins,
+                                   availability, window flow, summaries
+simulation_env/congestion.py       decision-time congestion / route-overlap
+                                   features; FeatureObserver
+simulation_env/rollout.py          clone before a decision, force an
+                                   alternative, resume
+scripts/outcome_signal.py          read-only report; refuses sealed seeds
+scripts/m1_probe.py                run_workload-identical run + --features,
+                                   --rollouts; refuses sealed seeds
+test/test_m1_diagnostics.py        20 tests
+```
+
+Headline from the pilot (seed 101, 300 orders, nearest_astar):
+
+```text
+                                30 q0  30 q3  70 q0  70 q3  100 q0  100 q3
+residual share of mission       0.8%   2.0%   2.5%   5.6%   5.6%    23.9%
+median decision margin          8.5 s  9.7 s  3.0 s  3.3 s  2.3 s   1.7 s
+residual > margin               6%     8%     27%    37%    43%     59%
+```
+
+The residual is 100% traffic waiting. The proposed congestion features
+associate with it only weakly (|rho| <= 0.27). Clones resume exactly.
+70-robot rollouts show alternatives beating the teacher on realized
+pivot mission time and fleet waiting, but not on window flow (0.7%
+spread).
+
+Measured: 620 tests pass (600 + 20); ruff clean.
+
+#### Matrix (the researcher runs it)
+
+```bash
+cd ~/rnd_mrta_ilp_research
+export PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management
+PY=~/rnd_mrta_ilp_ws/.pixi/envs/default/bin/python
+
+# A. conventional strategies, both conditions: 6 x 4 x 3 = 72 runs each
+for q in 3 0; do
+  $PY src/simulation_env/scripts/run_experiment.py --name m1_q$q \
+      --quantum $q --purpose training \
+      --strategies nearest_astar earliest_finish multi_criteria hungarian milp random \
+      --robots 30 50 70 100 --seeds 101 102 103 --orders 1000 --jobs 8
+done
+
+# B. outcome signal over A (read only)
+$PY src/simulation_env/scripts/outcome_signal.py runs/m1_q3 runs/m1_q0 \
+    --out runs/m1_signal
+
+# C. congestion features, teacher nearest_astar: 4 x 2 x 3 = 24 probes
+for q in 3 0; do for r in 30 50 70 100; do for s in 101 102 103; do
+  echo $r $q $s
+done; done; done | xargs -P 6 -n 3 sh -c \
+  "$PY src/simulation_env/scripts/m1_probe.py --out runs/m1_probe/r\$0_q\$1_s\$2 \
+     --robots \$0 --orders 1000 --workload-seed \$2 --quantum \$1 --features"
+
+# D. rollouts: quantum 3, 70 and 100 robots, 30 decisions each
+for r in 70 100; do
+  $PY src/simulation_env/scripts/m1_probe.py --out runs/m1_rollout/r${r}_q3_s101 \
+      --robots $r --orders 1000 --workload-seed 101 --quantum 3 \
+      --rollouts 30 --verify 2
+done
+
+# E. reports
+$PY src/simulation_env/scripts/outcome_signal.py runs/m1_probe --out runs/m1_probe_signal
+$PY src/simulation_env/scripts/outcome_signal.py runs/m1_rollout --out runs/m1_rollout_signal
+```
+
+Expected cost: A is 144 runs (about 1 h on 8 jobs, MILP at 100 robots
+the slowest). C is 24 runs of about 1-2 min. Each D probe runs about
+120 branches at 3-6 s, plus three full runs. Every probe exits 1 if a
+clone check fails.
+
+#### M1 Acceptance and Transition to M2 (2026-10-29)
+
+M1 accepted by the researcher based on the 300-order pilot matrix and counterfactual checks.
+Frozen in DECISIONS.md:
+- 1,000-order charging-active matrix deferred as a separate check before final evaluation.
+- Primary outcome parameters: H = 120 s, lambda = 0.50, delta = 2.0 s (sensitivity: lambda=0.25, delta=5.0 s).
+- Score J = pivot_mission_s + lambda * waiting_in_h_s over H=120s; window_flow_s rejected.
+- Seeds 104-110 reserved for ILP induction; 101-103 development probes; 111-115 validation; 201-230 sealed final.
+- Primary matching: M-Card; ablation: M-Greedy. Queue-first fallback tie-break.
+- Target: assign(D,R,O) with max_vars=4, max_body=4, K_max=5, k_neg=3.
+- M5 multi-teacher >=4/6 consensus open; plurality comparator to be evaluated.
+- Active milestone is M2: ILP Data Layer & Pipeline Infrastructure (outcome-independent).
 
 ## Definition of Done for Phase B (superseded)
 

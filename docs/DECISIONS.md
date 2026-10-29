@@ -1617,18 +1617,16 @@ therefore an experiment, never a second config.
 
 ## Seed Split
 
-Decided by the researcher 2026-10-27 (training, validation); the final
-set is a proposal. Enforced by `simulation_env/seed_split.py`.
+Decided by the researcher 2026-10-27 (training, validation); frozen and refined 2026-10-29 (M1 Review):
 
 ```text
-training      101-110    ILP examples come from these runs only
-validation    111-115    learner settings are chosen on these
-evaluation    1-30       the frozen main study
-final         201-230    PROPOSED: a sealed set, never run until the
-                         final campaign; reserved by the guard now
-development   any other seed (42, the reference workload): debugging
-                         only, never training, tuning or a reported
-                         result
+training      101-110    ILP training runs only
+  exploratory 101-103    M1 outcome-signal diagnostics and development probes
+  induction   104-110    primary ILP rule induction pool (M3-M6)
+validation    111-115    learner settings (thresholds, bias, limits) chosen here
+evaluation    1-30       the frozen conventional main study (pre-M0 exploratory)
+final         201-230    sealed evaluation set; never run until final campaign
+development   any other seed (42, the reference workload): debugging only
 ```
 
 `run_experiment.py --purpose training|validation|evaluation|final`
@@ -1636,6 +1634,10 @@ refuses any seed outside that role; without a purpose, the reserved
 final seeds are refused. The purpose is recorded in the experiment spec,
 so the ILP pipeline (M2) can refuse to learn from an experiment that is
 not a training experiment.
+
+Adopted by the researcher 2026-10-27 (M1 brief): 201-230 are the
+sealed final evaluation seeds; 101-103 are the M1 development seeds,
+inside the training role. Whether seeds 1-30 keep a role is open.
 
 Why a final set is proposed: seeds 1-30 have already been looked at
 during development (E1 used 1-3, the paired-seed check 1-5, the fleet
@@ -1696,3 +1698,52 @@ exact deterministic tie-breaks
 ```
 
 They must not become learned semantic predicates.
+
+## M1 Acceptance Record and Outcome Signal Freeze (2026-10-29)
+
+Accepted by the researcher on 2026-10-29 following review of the M1 Pilot v2 matrix (18 probes + 2 counterfactual rollout runs + 2 repeatability checks across training seeds 101-103):
+
+```text
+1. M1 Closure:
+   - The completed 300-order congestion-signal study is accepted as the frozen M1 pilot.
+   - The 1,000-order charging-active experiment is deferred to a separate research check before final Outcome-Aware ILP evaluation.
+   - robot_soc_percent is rejected as a congestion predictor (established as a monotonic run-clock proxy on non-charging 300-order horizons; restricted to energy feasibility).
+
+2. Outcome Supervision Parameters:
+   - Primary evaluation settings: H = 120 s, lambda = 0.50, delta = 2.0 s.
+   - Sensitivity settings: lambda = 0.25, delta = 5.0 s.
+   - Composite causal objective: J(b) = pivot_mission_s(b) + lambda * waiting_in_h_s(b) over fixed horizon [t_d, min tick >= t_d + 120 s].
+   - window_flow_s is rejected as a per-decision labeling objective due to 1/W dilution and unassigned-order queue wait confounding.
+   - Treatment of unfinished & censored outcomes:
+     * A counterfactual rollout branch where the pivot mission fails to complete inside H, or where a rollout terminates abnormally/stalls, cannot be scored as an improvement.
+     * Censored/failed rollouts never generate positive or negative outcome labels; they are marked unverified/censored and excluded from supervision.
+
+3. Seed Partition Freeze:
+   - 104-110: Primary ILP rule induction pool (7 seeds).
+   - 101-103: Development and exploratory probes (M1 signal verification).
+   - 111-115: Validation pool (learner settings, bias constraints, clause selection).
+   - 201-230: Sealed untouched final evaluation set.
+   - 1-30: Baseline conventional strategy reference sweep.
+
+4. M2 Matching Semantics:
+   - Primary quantum-3 batch matching mechanism: M-Card (linear_sum_assignment min-cost max-cardinality over rule-covered pairs).
+   - Ablation matching mechanism: M-Greedy (deterministic lexicographic greedy pairing).
+   - Learned Rule Integrity: Learned rules must genuinely determine assignments; deterministic matching or fallback logic must not silently override learned preferences.
+   - Tie-breaking: Queue-first order (tier, clause_rank, fifo_position, c_static_m, est_finish_s, robot_id) ensures an empty or tautological rule collapses to naive FIFO rather than secretly executing nearest_astar.
+
+5. ILP Representation and Bias Budget:
+   - Target predicate: unary assign(D, R, O).
+   - Bias constraints: max_vars = 4, max_body = 4, K_max = 5 learned clauses.
+   - Negative example sampling: k_neg = 3 sampled negatives per choice-bearing decision (half hard negatives, half uniform negatives) while retaining 100% of feasible pairs in bk.pl.
+   - Inference candidate pool: Evaluated against 100% of feasible candidate pairs (eligible == True).
+
+6. M5 Multi-Teacher Supervision Direction:
+   - >= 4/6 consensus is NOT frozen as the sole primary supervision method.
+   - First quantify teacher agreement coverage, decision diversity, and evaluate against a deterministic plurality comparator that retains decisions lacking a 4-teacher consensus.
+
+7. Congestion Predicate Whitelist for ILP:
+   - Tier 1 Survivors: occupied_now, st_conflict_robots, st_conflicts_30s, st_conflicts.
+   - Tier 2 Survivors: local_density, overlap_ratio.
+   - Within-decision relative delta predicates (f(r,o) - min_o' f(r,o')) preferred to eliminate t=0 simultaneous launch cold-start distortion.
+   - Pruned from active ILP vocabulary: route_cells (collinear with c_static_m), overlap_cells (inverted/confounded), shelf_load (sparse/null), dropoff_load (null in 5/6 conditions).
+```

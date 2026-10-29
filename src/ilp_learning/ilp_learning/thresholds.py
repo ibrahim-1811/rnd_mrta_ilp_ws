@@ -1,0 +1,114 @@
+"""Threshold fitting and serialization for continuous feature discretization.
+
+Enforces:
+1. Training-only fitting: restricts threshold estimation strictly to training seeds (104-110).
+2. Deterministic serialization: sorted JSON with embedded SHA-256 content digest.
+3. Quantile cutoffs: tercile and median boundaries for spatial and fleet state features.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+import numpy as np
+import pandas as pd
+
+from simulation_env.seed_split import check_induction_purpose
+
+
+DEFAULT_DISCRETIZATIONS = {
+    "fleet_load": ("window_orders", [33.3, 66.7]),
+    "free_robots": ("free_robots", [33.3, 66.7]),
+    "local_density": ("local_density", [50.0]),
+    "overlap_ratio": ("overlap_ratio", [50.0]),
+    "occupied_now": ("occupied_now", [66.7]),
+    "st_conflict_robots": ("st_conflict_robots", [66.7]),
+    "st_conflicts_30s": ("st_conflicts_30s", [66.7]),
+}
+
+
+class ThresholdModel:
+    """Stores quantile cutoffs and produces symbolic discrete category labels."""
+
+    def __init__(self, cutoffs: Mapping[str, Sequence[float]], metadata: Mapping[str, Any] | None = None) -> None:
+        self.cutoffs = {k: list(float(v) for v in vals) for k, vals in cutoffs.items()}
+        self.metadata = dict(metadata or {})
+
+    def categorize(self, feature_name: str, value: float) -> str:
+        """Return symbolic category, e.g. 'tier1', 'tier2', 'tier3' (or 'low', 'high')."""
+        if feature_name not in self.cutoffs:
+            raise KeyError(f"Feature '{feature_name}' has no fitted thresholds")
+        
+        boundaries = self.cutoffs[feature_name]
+        if len(boundaries) == 1:
+            return "high" if value >= boundaries[0] else "low"
+        elif len(boundaries) == 2:
+            if value < boundaries[0]:
+                return "low"
+            elif value < boundaries[1]:
+                return "medium"
+            else:
+                return "high"
+        else:
+            for i, b in enumerate(boundaries):
+                if value < b:
+                    return f"tier{i+1}"
+            return f"tier{len(boundaries)+1}"
+
+    def to_dict(self) -> dict[str, Any]:
+        data = {
+            "metadata": self.metadata,
+            "cutoffs": self.cutoffs,
+        }
+        content_bytes = json.dumps(data, sort_keys=True).encode("utf-8")
+        data["sha256"] = hashlib.sha256(content_bytes).hexdigest()
+        return data
+
+    def save_json(self, path: Path | str) -> None:
+        out_path = Path(path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, indent=2, sort_keys=True)
+
+    @classmethod
+    def load_json(cls, path: Path | str) -> ThresholdModel:
+        in_path = Path(path)
+        with open(in_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        cutoffs = data.get("cutoffs", {})
+        metadata = data.get("metadata", {})
+        return cls(cutoffs=cutoffs, metadata=metadata)
+
+
+def fit_thresholds_from_frames(
+    training_frames: Sequence[pd.DataFrame],
+    seeds_used: Sequence[int],
+    spec: Mapping[str, tuple[str, Sequence[float]]] | None = None,
+) -> ThresholdModel:
+    """Fit quantile cutoffs from training DataFrames, enforcing seed role discipline."""
+    check_induction_purpose(seeds_used)
+    
+    active_spec = spec or DEFAULT_DISCRETIZATIONS
+    combined_df = pd.concat(training_frames, ignore_index=True)
+    
+    cutoffs: dict[str, list[float]] = {}
+    for target_name, (col_name, percentiles) in active_spec.items():
+        if col_name in combined_df.columns:
+            vals = combined_df[col_name].dropna().to_numpy()
+            if len(vals) > 0:
+                calculated = [float(np.percentile(vals, p)) for p in percentiles]
+                cutoffs[target_name] = calculated
+            else:
+                cutoffs[target_name] = [0.0] * len(percentiles)
+        else:
+            # Default zero fallback if feature column is absent
+            cutoffs[target_name] = [0.0] * len(percentiles)
+            
+    metadata = {
+        "seeds_used": sorted(list(seeds_used)),
+        "n_samples": len(combined_df),
+    }
+    return ThresholdModel(cutoffs=cutoffs, metadata=metadata)

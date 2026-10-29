@@ -27,7 +27,7 @@ clingo = ">=5.8.2,<6"
 setuptools = "<81"
 
 [tasks]
-test = "PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management python -m pytest src/mrta_core/tests src/simulation_env/test src/task_management/test -q"
+test = "PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management:src/ilp_learning python -m pytest src/mrta_core/tests src/simulation_env/test src/task_management/test src/ilp_learning/test -q"
 lint = "ruff check ."
 format = "ruff format ."
 tree = "find . -maxdepth 4 -type f -not -path \"./.git/*\" -not -path \"./.pixi/*\" -not -path \"./.pytest_cache/*\" | sort"
