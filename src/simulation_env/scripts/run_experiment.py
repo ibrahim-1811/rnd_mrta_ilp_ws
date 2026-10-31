@@ -99,7 +99,7 @@ for package in PACKAGES:
 from simulation_env.dataset import git_state  # noqa: E402
 from simulation_env.failures import read_failure  # noqa: E402
 from simulation_env.paired import settings_signature  # noqa: E402
-from simulation_env.seed_split import ROLES, SeedLeakageError, check_purpose  # noqa: E402
+from simulation_env.seed_split import ROLES, SUBROLES, SeedLeakageError, check_purpose  # noqa: E402
 from simulation_env.workload_executor import WorkloadExecutor  # noqa: E402
 from task_management.allocation_strategy import (  # noqa: E402
     get_batch_strategy,
@@ -234,7 +234,7 @@ def strategy_identities(strategies) -> dict:
 
 def workload_command(
     run_dir, strategy, robots, seed, orders, export,
-    orders_file=None, quantum=None, window=None,
+    orders_file=None, quantum=None, window=None, purpose=None,
 ) -> list:
     """The run_workload.py command line of one run.
 
@@ -261,6 +261,9 @@ def workload_command(
     if window is not None:
         cmd += ["--window", str(window)]
 
+    if purpose is not None:
+        cmd += ["--purpose", purpose]
+
     if orders_file is not None:
         cmd += ["--orders-file", str(orders_file)]
 
@@ -272,13 +275,13 @@ def workload_command(
 
 def run_one(
     out, strategy, robots, seed, orders, export,
-    orders_file=None, quantum=None, window=None,
+    orders_file=None, quantum=None, window=None, purpose=None,
 ):
     run_dir = run_dir_of(out, strategy, robots, seed)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = workload_command(
-        run_dir, strategy, robots, seed, orders, export, orders_file, quantum, window
+        run_dir, strategy, robots, seed, orders, export, orders_file, quantum, window, purpose
     )
 
     started = time.perf_counter()
@@ -341,7 +344,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--purpose",
-        choices=sorted(ROLES),
+        choices=sorted({*ROLES, *SUBROLES}),
         default=None,
         help="the seed role this experiment serves; every seed must belong "
         "to it (docs/DECISIONS.md, 'Seed Split'). Omitted: development, "
@@ -434,6 +437,7 @@ def main() -> int:
                     lambda run: run_one(
                         out, *run, args.orders, args.export, files.get(run[2]),
                         quantum=args.quantum, window=args.window,
+                        purpose=args.purpose,
                     ),
                     pending,
                 ),

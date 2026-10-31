@@ -33,6 +33,7 @@ for package in ("mrta_core", "simulation_env", "task_management"):
     if str(ROOT / "src" / package) not in sys.path:
         sys.path.insert(0, str(ROOT / "src" / package))
 
+from simulation_env.dataset import sha256_of  # noqa: E402
 from simulation_env.dataset_export import read_run  # noqa: E402
 from simulation_env.outcome_signal import (  # noqa: E402
     FEATURES_FILE,
@@ -42,6 +43,12 @@ from simulation_env.outcome_signal import (  # noqa: E402
     summarize,
 )
 from simulation_env.seed_split import sealed_inputs  # noqa: E402
+
+# The tracked development workloads, the only ones with no seed in their name.
+REFERENCE_WORKLOADS = (
+    ROOT / "src" / "simulation_env" / "config" / "orders.csv",
+    ROOT / "src" / "simulation_env" / "test" / "fixtures" / "orders.csv",
+)
 
 HEADLINE = (
     "strategy",
@@ -95,13 +102,18 @@ def main() -> int:
         return 1
 
     orders, summaries = [], []
+    reference_workloads = {sha256_of(path) for path in REFERENCE_WORKLOADS}
 
     for run_dir in runs:
         # The seeds first, from the manifest alone: a sealed run's tables
         # are never read. Both the strategy seed and the workload file.
         head = json.loads((run_dir / "run.json").read_text())
+        # A reference workload is recognised by content: a name would
+        # let a renamed sealed workload through.
         sealed = sealed_inputs(
-            strategy_seed=head.get("seed"), orders_path=head.get("orders_path", "")
+            strategy_seed=head.get("seed"),
+            orders_path=head.get("orders_path", ""),
+            require_known_workload=head.get("orders_sha256") not in reference_workloads,
         )
         if sealed:
             print(f"refused: {run_dir} has {', '.join(sealed)}")

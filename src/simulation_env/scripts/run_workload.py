@@ -37,6 +37,13 @@ from simulation_env.failures import (
     write_failure,
 )
 from simulation_env.fleet import build_fleet, home_stations
+from simulation_env.seed_split import (
+    ROLES,
+    SUBROLES,
+    SeedLeakageError,
+    check_purpose,
+    workload_seed_of,
+)
 from simulation_env.workload_executor import (
     PerfBudget,
     WorkloadExecutor,
@@ -115,6 +122,13 @@ def main() -> int:
         "(default: the configured simulation.seed)",
     )
     parser.add_argument(
+        "--purpose",
+        choices=sorted({*ROLES, *SUBROLES}),
+        default=None,
+        help="the seed role this run belongs to; without one, the sealed "
+        "final seeds are refused (docs/DECISIONS.md, 'Seed Split')",
+    )
+    parser.add_argument(
         "--dataset",
         default=None,
         metavar="DIR",
@@ -132,12 +146,42 @@ def main() -> int:
             "Prolog bk.pl/exs.pl beside the Parquet tables"
         ),
     )
+    parser.add_argument(
+        "--rule-artifact",
+        default=None,
+        metavar="JSON",
+        help="rule artifact for --strategy ilp; recorded through the "
+        "strategy's identity, and with --dataset a rule_trace.parquet "
+        "is written beside the tables",
+    )
+    parser.add_argument(
+        "--rule-matching",
+        choices=("iterative", "cardinality", "greedy"),
+        default=None,
+        help="rule execution for --strategy ilp (default: iterative)",
+    )
     parser.add_argument("--quiet", action="store_true")
 
     args = parser.parse_args()
 
     if args.orders < 0:
         parser.error("--orders must be 0 (all) or a positive number of orders")
+
+    # Only the learned strategy takes these, so every other strategy is
+    # constructed exactly as before.
+    strategy_options = {}
+
+    if args.strategy == "ilp":
+        if not args.rule_artifact:
+            parser.error("--strategy ilp needs --rule-artifact")
+
+        strategy_options["rule_artifact"] = args.rule_artifact
+
+        if args.rule_matching:
+            strategy_options["matching"] = args.rule_matching
+
+    elif args.rule_artifact or args.rule_matching:
+        parser.error("--rule-artifact and --rule-matching are for --strategy ilp")
 
     config = load_sim_config(args.config)
 
@@ -197,7 +241,23 @@ def main() -> int:
     # and a deterministic one simply ignores it.
     seed = config.seed if args.seed is None else args.seed
 
-    allocator = get_batch_strategy(args.strategy, seed=seed)
+    # A direct run obeys the seed roles exactly as an experiment does:
+    # both seeds a run has, the strategy's and the workload's.
+    workload_seed = workload_seed_of(config.orders_path)
+    run_seeds = [seed] if workload_seed is None else [seed, workload_seed]
+
+    if args.purpose is not None and workload_seed is None:
+        parser.error(
+            f"--purpose {args.purpose}: workload {config.orders_path} "
+            "does not identify its seed"
+        )
+
+    try:
+        check_purpose(run_seeds, args.purpose)
+    except SeedLeakageError as refused:
+        parser.error(str(refused))
+
+    allocator = get_batch_strategy(args.strategy, seed=seed, **strategy_options)
 
     # The manifest is built before the run, from the inputs only, so
     # the run_id names what is about to be measured rather than what
@@ -443,6 +503,10 @@ def main() -> int:
             run_metrics(executor, strategy=args.strategy, seed=seed, wall_s=wall),
         )
         print(f"  metrics          : {metrics.name}")
+
+        if args.strategy == "ilp":
+            trace = allocator.write_rule_trace(run_dir, manifest["run_id"])
+            print(f"  rule trace       : {trace.name}")
 
         if args.export:
             from simulation_env.dataset_export import write_csv, write_prolog

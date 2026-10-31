@@ -526,3 +526,40 @@ def test_partial_association_removes_a_shared_cause():
 
     assert frame[["x", "y"]].corr(method="spearman").iloc[0, 1] > 0.8
     assert abs(partial_spearman(frame, "x", "y", "z")) < 0.1
+
+
+def test_a_direct_run_refuses_the_sealed_final_seeds():
+    script = str(Path(__file__).parents[1] / "scripts" / "run_workload.py")
+    refused = subprocess.run(
+        [sys.executable, script, "--strategy", "nearest_astar", "--seed", "205", "--orders", "1"],
+        capture_output=True,
+        text=True,
+    )
+    assert refused.returncode != 0
+    assert "reserved for the final evaluation" in refused.stderr
+
+
+def test_a_declared_purpose_needs_a_workload_of_known_seed(tmp_path):
+    script = str(Path(__file__).parents[1] / "scripts" / "run_workload.py")
+    unnamed = tmp_path / "renamed.csv"
+    unnamed.write_text((Path(__file__).parents[1] / "config" / "orders.csv").read_text())
+    refused = subprocess.run(
+        [sys.executable, script, "--strategy", "nearest_astar", "--seed", "104",
+         "--purpose", "training", "--orders-file", str(unnamed)],
+        capture_output=True,
+        text=True,
+    )
+    assert refused.returncode != 0
+    assert "does not identify its seed" in refused.stderr
+
+
+def test_the_backup_validation_pool_is_sealed():
+    from simulation_env.seed_split import SeedLeakageError, check_purpose, sealed_inputs
+
+    with pytest.raises(SeedLeakageError, match="backup validation pool"):
+        check_purpose([116], None)
+
+    check_purpose([116], "backup")
+    assert sealed_inputs(strategy_seed=None, orders_path="a/orders_s120.csv") == [
+        "workload seed 120 (backup)"
+    ]

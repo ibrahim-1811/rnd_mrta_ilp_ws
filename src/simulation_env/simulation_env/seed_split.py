@@ -10,9 +10,14 @@ workload it is later evaluated on, so every seed has at most one role
                            are chosen on these, never on evaluation
     evaluation   1-30      the frozen main study
                            (EXPERIMENT_PROTOCOL.md, "Seeds")
+    backup       116-120   a fresh validation pool, reserved 2026-10-31;
+                           refused unless a run declares --purpose backup
     final        201-230   the sealed final evaluation set (adopted by
                            the researcher 2026-10-27); refused unless an
                            experiment declares --purpose final
+
+Training is further split (DECISIONS.md, "Seed Partition Freeze"): rules
+are induced on 104-110; 101-103 stay exploratory after M1 inspected them.
 
 Any other seed -- 42, the reference workload, among them -- is a
 development seed: fine for debugging, never for training, tuning or a
@@ -31,12 +36,14 @@ TRAINING_EXPLORATORY = range(101, 104)  # M1 diagnostic & exploratory developmen
 TRAINING_INDUCTION = range(104, 111)    # Primary ILP rule induction pool (M3-M6)
 VALIDATION = range(111, 116)
 EVALUATION = range(1, 31)
+BACKUP_RESERVED = range(116, 121)       # Fresh validation pool, researcher approval only
 FINAL_RESERVED = range(201, 231)
 
 ROLES = {
     "training": TRAINING,
     "validation": VALIDATION,
     "evaluation": EVALUATION,
+    "backup": BACKUP_RESERVED,
     "final": FINAL_RESERVED,
 }
 
@@ -59,9 +66,33 @@ def check_induction_purpose(seeds) -> None:
     """Enforce that seeds belong strictly to the frozen induction pool (104-110).
 
     Refuses exploratory seeds (101-103), validation seeds (111-115),
-    and evaluation seeds (1-30, 201-230).
+    and evaluation seeds (1-30, 201-230). Refuses an empty list too: a
+    fit that names no seed has not shown where its data came from.
     """
+    seeds = list(seeds)
+    if not seeds:
+        raise SeedLeakageError("no seeds declared; induction data must name its seeds")
     check_purpose(seeds, purpose="induction")
+
+
+def check_run_is_induction(manifest) -> None:
+    """Enforce the induction pool on a recorded run, from its manifest.
+
+    Fails closed: the workload must identify its seed, since a safe
+    strategy seed says nothing about the workload it executed.
+    """
+
+    workload = workload_seed_of(manifest.get("orders_path", ""))
+    if workload is None:
+        raise SeedLeakageError(
+            f"workload {manifest.get('orders_path')!r} does not identify its seed"
+        )
+
+    strategy = manifest.get("seed")
+    if strategy is None:
+        raise SeedLeakageError("run manifest does not record its strategy seed")
+
+    check_induction_purpose([workload, strategy])
 
 
 def role_of(seed: int) -> str | None:
@@ -78,7 +109,7 @@ def check_purpose(seeds, purpose: str | None) -> None:
     """Refuse seeds that do not belong to the experiment's purpose.
 
     ``purpose`` None is development work: any seed except the reserved
-    final set. Otherwise every seed must belong to that role or sub-role.
+    final and backup sets. Otherwise every seed must belong to that role or sub-role.
     """
 
     if purpose is None:
@@ -88,6 +119,14 @@ def check_purpose(seeds, purpose: str | None) -> None:
             raise SeedLeakageError(
                 f"seeds {sealed} are reserved for the final evaluation; "
                 "declare --purpose final to use them"
+            )
+
+        backup = sorted(seed for seed in seeds if seed in BACKUP_RESERVED)
+
+        if backup:
+            raise SeedLeakageError(
+                f"seeds {backup} are the reserved backup validation pool; "
+                "declare --purpose backup to use them"
             )
 
         return
@@ -106,7 +145,7 @@ def check_purpose(seeds, purpose: str | None) -> None:
         )
 
 
-SEALED = ("evaluation", "final")
+SEALED = ("validation", "backup", "evaluation", "final")
 
 _WORKLOAD_FILE = re.compile(r"orders_s(\d+)\.csv$")
 
@@ -122,16 +161,21 @@ def workload_seed_of(orders_path) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def sealed_inputs(*, strategy_seed, orders_path) -> list[str]:
-    """What, if anything, makes a run an evaluation or final run.
+def sealed_inputs(*, strategy_seed, orders_path, require_known_workload=False) -> list[str]:
+    """What, if anything, makes a run off limits to diagnostics.
 
     Both seeds a run has are checked, separately: the strategy's random
     stream, and the workload it executes. A safe strategy seed says
-    nothing about the workload.
+    nothing about the workload. The seed of a workload is known only
+    from its file name, so ``require_known_workload`` makes any other
+    name a refusal: a renamed sealed workload must not read as clean.
     """
 
     found = []
     workload = workload_seed_of(orders_path)
+
+    if workload is None and require_known_workload:
+        found.append(f"workload {orders_path} of unknown seed")
 
     if workload is not None and role_of(workload) in SEALED:
         found.append(f"workload seed {workload} ({role_of(workload)})")

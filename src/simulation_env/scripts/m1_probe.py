@@ -197,7 +197,11 @@ def main() -> int:
     else:
         origin, orders_path = "config", config.orders_path
 
-    sealed = sealed_inputs(strategy_seed=strategy_seed, orders_path=orders_path)
+    sealed = sealed_inputs(
+        strategy_seed=strategy_seed,
+        orders_path=orders_path,
+        require_known_workload=origin == "orders_file",
+    )
 
     if sealed:
         parser.error(f"{', '.join(sealed)}: M1 must not look at it")
