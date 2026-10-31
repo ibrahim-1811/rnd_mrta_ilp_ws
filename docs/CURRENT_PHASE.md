@@ -1,5 +1,21 @@
 # Current Development Phase
 
+## Sprint 0 status — 31 October 2026
+
+Uncommitted on `research/outcome-aware-ilp` at `bf5c8d7`, awaiting review. Details, classification and proposed commits: [.scratch/sprint0/status.md](../.scratch/sprint0/status.md).
+
+| Check | Command | Measured |
+|---|---|---|
+| Research suite, HEAD `bf5c8d7` in a git checkout | `pixi run test` | 646 passed, 1 skipped (`runs/` absent) |
+| Research suite, working tree with `runs/m2_acceptance` and M3 code | `pixi run test` | 813 passed |
+| Lint | `pixi run lint-src` | clean; `ruff check .` also reports 52 in untracked handover scripts |
+| GUI backend, `ae832f5` | see `.github/workflows/gui.yml` on the GUI branch | 152 passed; needs root `.pixi` |
+| Frontend, `ae832f5` | `npm test`, `npm run build` | 22 passed; build and typecheck pass |
+
+Run tests in a shell without ROS sourced: the `launch_testing` pytest plugin aborts startup otherwise. A tree without `.git` fails one provenance test by design. Gazebo, colcon and the C++ test are not covered by these checks.
+
+M2: six corrections and the permitted-column firewall are implemented with regression tests. D1 was approved on 2026-10-31 (DECISIONS.md, "M3 Execution Semantics Amendment"), and the matcher implements it as `iterative` mode. The M3 learner code is implemented and tested: `train_rules.py`, the rule compiler, artifact and trace, and `ILPAllocationStrategy` (`ilp`). No learned rule has been evaluated yet: `runs/m3_dev` holds `nearest_astar` teacher runs only, validation seeds 111-115 are unused, and the G5 and G8 values in [.scratch/m3-popper-learner/preregistration.md](../.scratch/m3-popper-learner/preregistration.md) are not final, so that pre-registration has not taken effect.
+
 ## Documentation freeze — 28 October 2026
 
 [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) and [PROJECT_HANDOVER.html](PROJECT_HANDOVER.html) consolidate both worktrees, exact demos, strategy formulations, results and known failures. This summary supersedes historical status text below; it is a documentation update, not a new scientific phase approval.

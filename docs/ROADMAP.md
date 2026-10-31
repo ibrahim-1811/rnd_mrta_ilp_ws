@@ -1,5 +1,7 @@
 # Phasewise Development Roadmap
 
+> **Updated 31 October 2026.** Current measured status: [CURRENT_PHASE.md](CURRENT_PHASE.md). Demo commands: [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md). M0 and M1 are closed; M2 is corrected; M3 code is implemented, with no learned rule evaluated yet; M4–M9 remain pending. Earlier phase text below is a dated development record, not a new completion claim.
+
 ## Milestone plan to 20 December 2026
 
 Set 2026-10-27 after the read-only audit, on the research backend branch
@@ -9,12 +11,13 @@ structure; these milestones are the working schedule through them.
 ```text
 M0  Oct 27-30   integrity and reproducibility: F5 decision linkage,
                 F6 failure classes, F7 quantum/window per experiment,
-                F8 strategy identity, seed split       IMPLEMENTED,
-                                                       awaiting review
+                F8 strategy identity, seed split       DONE, 163c6a4
 M1  Oct 30-Nov 2  measure the outcome signal at 70/100 robots;
                 decision-time congestion / route-overlap proposal;
                 F9 statistics, F10 outcome attribution, F12 workload
-                variant scoped
+                variant scoped                         diagnostics DONE
+                                                       2026-10-28; matrix
+                                                       pending
 M2  Nov 2-7     ILP data layer: learner-side predicates, run-scoped
                 atoms, sampling, bias, offline teacher relabelling
 M3  Nov 7-12    Phase 10: reproduce nearest_astar with Popper; rules
