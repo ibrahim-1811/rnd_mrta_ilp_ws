@@ -34,7 +34,12 @@ def test_real_mrta_dataset_end_to_end_pipeline(tmp_path):
     assert len(eligible_df) > 0
 
     # 3. Fit permitted symbolic thresholds on induction seed 104
-    thresh_model = fit_thresholds_from_frames([feat_df], seeds_used=[104])
+    # Both tables: the default cutoffs read columns of each.
+    key = ["decision_id", "robot_id", "order_id"]
+    both = dec_df.merge(
+        feat_df[key + [c for c in feat_df.columns if c not in dec_df.columns]], on=key, how="left"
+    )
+    thresh_model = fit_thresholds_from_frames([both], seeds_used=[104])
     thresh_json_path = tmp_path / "thresholds.json"
     thresh_model.save_json(thresh_json_path)
 
@@ -96,10 +101,13 @@ def test_real_mrta_dataset_end_to_end_pipeline(tmp_path):
     rule_str = " ".join(result.rules)
     assert "assign(" in rule_str
 
-    # Parse learned rule coverage on background facts
+    # The learned program must be the mutual-nearest conjunction, not one
+    # robot-side literal: order-side and tie-inclusive facts make it expressible.
+    assert "nearest_static(" in rule_str and "best_cost_for_order(" in rule_str
+
+    # Coverage of that conjunction on background facts
     nearest = set()
-    high_conf = set()
-    low_dens = set()
+    best_for_order = set()
 
     for fact in facts:
         m = re.match(r"([a-z_]+)\((.*)\)\.", fact)
@@ -108,17 +116,10 @@ def test_real_mrta_dataset_end_to_end_pipeline(tmp_path):
         pred, args = m.group(1), [a.strip() for a in m.group(2).split(",")]
         if pred == "nearest_static":
             nearest.add((args[0], args[1], args[2]))
-        elif pred == "high_conflict_robots":
-            high_conf.add((args[0], args[1], args[2]))
-        elif pred == "low_local_density":
-            low_dens.add((args[0], args[1]))
+        elif pred == "best_cost_for_order":
+            best_for_order.add((args[0], args[1], args[2]))
 
-    # Rule clauses learned:
-    # 1. assign(V0,V1,V2):- high_conflict_robots(V0,V1,V2),nearest_static(V0,V1,V2).
-    # 2. assign(V0,V1,V2):- nearest_static(V0,V1,V2),low_local_density(V0,V1).
-    c1_pairs = {(d, r, o) for (d, r, o) in nearest if (d, r, o) in high_conf}
-    c2_pairs = {(d, r, o) for (d, r, o) in nearest if (d, r) in low_dens}
-    covered_pairs = c1_pairs | c2_pairs
+    covered_pairs = nearest & best_for_order
 
     tp = 0
     fp = 0
@@ -144,7 +145,7 @@ def test_real_mrta_dataset_end_to_end_pipeline(tmp_path):
     precision = tp / (tp + fp)
     candidate_coverage = (tp + fp) / (tp + fp + tn + fn)
 
-    # Note: 52% is positive-pair recall (TP / (TP + FN)), measuring rule coverage over
+    # Note: this is positive-pair recall (TP / (TP + FN)), measuring rule coverage over
     # positive training candidates. Actual online allocation matching fidelity is reserved for M3.
     assert positive_pair_recall >= 0.50
     assert precision >= 0.70

@@ -45,9 +45,10 @@ def test_seed_isolation_ranges():
 
 def test_threshold_fitting_enforces_induction_seed():
     df = pd.DataFrame({"local_density": [1.0, 2.0, 3.0]})
+    spec = {"local_density": ("local_density", [50.0])}
 
     # Valid induction seed: passes
-    model = fit_thresholds_from_frames([df], seeds_used=[104, 105])
+    model = fit_thresholds_from_frames([df], seeds_used=[104, 105], spec=spec)
     assert model is not None
 
     # Exploratory seed 101: rejected
@@ -72,7 +73,7 @@ def test_supervision_builder_enforces_induction_seed():
             "c_static_m": 10.0,
             "selected": True,
             "eligible": True,
-            "t": 0.0,
+            "sim_time": 0.0,
         },
         {
             "decision_id": 0,
@@ -81,7 +82,7 @@ def test_supervision_builder_enforces_induction_seed():
             "c_static_m": 20.0,
             "selected": False,
             "eligible": True,
-            "t": 0.0,
+            "sim_time": 0.0,
         },
     ])
     tracker = ProvenanceTracker()
@@ -91,7 +92,7 @@ def test_supervision_builder_enforces_induction_seed():
         run_id="run_104",
         decisions_df=df,
         tracker=tracker,
-        workload_seed=104,
+        run_manifest={"seed": 104, "orders_path": "a/orders_s104.csv"},
     )
     assert len(exs) == 2
 
@@ -101,6 +102,6 @@ def test_supervision_builder_enforces_induction_seed():
             run_id="run_101",
             decisions_df=df,
             tracker=tracker,
-            workload_seed=101,
+            run_manifest={"seed": 101, "orders_path": "a/orders_s101.csv"},
         )
 

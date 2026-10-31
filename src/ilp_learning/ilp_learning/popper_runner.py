@@ -14,6 +14,16 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
+
+
+# Solver budget, M2 spec section 5.5. Popper's own defaults (1200 s, 0.001 s,
+# 40 literals) are not the settings the spec sized the search for.
+DEFAULT_TIMEOUT_S = 300
+DEFAULT_EVAL_TIMEOUT_S = 0.05
+DEFAULT_MAX_LITERALS = 24
+# Popper checks its timeout between search steps; this bounds a stuck worker.
+WORKER_GRACE_S = 60
 
 
 @dataclass(frozen=True)
@@ -24,6 +34,7 @@ class PopperResult:
     datalog: bool
     total_time_s: float
     raw_output: str
+    timed_out: bool = False
 
 
 _WORKER_SCRIPT = """
@@ -32,11 +43,13 @@ import sys
 from popper.loop import learn_solution
 from popper.util import Settings, format_prog
 
-def run(kbpath, timeout, noisy):
+def run(kbpath, timeout, noisy, eval_timeout, max_literals):
     settings = Settings(
         kbpath=kbpath,
         noisy=noisy,
         timeout=timeout,
+        eval_timeout=eval_timeout,
+        max_literals=max_literals,
         solver="rc2",
         quiet=True,
         show_stats=False,
@@ -58,14 +71,23 @@ def run(kbpath, timeout, noisy):
     print("POPPER_RESULT_JSON:" + json.dumps(out))
 
 if __name__ == "__main__":
-    run(sys.argv[1], int(sys.argv[2]), sys.argv[3] == "1")
+    run(sys.argv[1], int(sys.argv[2]), sys.argv[3] == "1", float(sys.argv[4]), int(sys.argv[5]))
 """
+
+
+def popper_version() -> str:
+    """Version of the installed Popper, for rule provenance."""
+    from importlib.metadata import version
+
+    return version("popper-ilp")
 
 
 def run_popper(
     kbpath: Path | str,
-    timeout: int = 15,
-    noisy: bool = False,
+    timeout: int = DEFAULT_TIMEOUT_S,
+    noisy: bool = True,
+    eval_timeout: float = DEFAULT_EVAL_TIMEOUT_S,
+    max_literals: int = DEFAULT_MAX_LITERALS,
     python_bin: Path | str | None = None,
 ) -> PopperResult:
     """Run Popper on a knowledge base directory in an isolated, deterministic subprocess."""
@@ -86,9 +108,26 @@ def run_popper(
         str(kb_dir),
         str(timeout),
         "1" if noisy else "0",
+        str(eval_timeout),
+        str(max_literals),
     ]
 
-    proc = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
+    started = time.monotonic()
+    try:
+        proc = subprocess.run(
+            cmd, env=env, capture_output=True, text=True, check=False, timeout=timeout + WORKER_GRACE_S
+        )
+    except subprocess.TimeoutExpired as expired:
+        return PopperResult(
+            success=False,
+            rules=[],
+            score=None,
+            datalog=False,
+            total_time_s=time.monotonic() - started,
+            raw_output=str(expired.stdout or ""),
+            timed_out=True,
+        )
+    elapsed_s = time.monotonic() - started
 
     if proc.returncode != 0:
         return PopperResult(
@@ -110,6 +149,9 @@ def run_popper(
                 datalog=data["datalog"],
                 total_time_s=float(data["total_time_s"]),
                 raw_output=proc.stdout,
+                # Popper returns its best program so far at the budget, so a
+                # truncated search still reports success; say so explicitly.
+                timed_out=elapsed_s >= timeout,
             )
 
     return PopperResult(

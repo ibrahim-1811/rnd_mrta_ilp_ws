@@ -18,6 +18,7 @@ BASE_PREDICATES = [
     ("candidate_robot", 2, "(decision,robot)", "(in,in)"),
     ("candidate_order", 2, "(decision,order)", "(in,in)"),
     ("nearest_static", 3, "(decision,robot,order)", "(in,in,in)"),
+    ("best_cost_for_order", 3, "(decision,robot,order)", "(in,in,in)"),
     ("second_nearest_static", 3, "(decision,robot,order)", "(in,in,in)"),
     ("earliest_static_finish", 3, "(decision,robot,order)", "(in,in,in)"),
     ("second_earliest_static_finish", 3, "(decision,robot,order)", "(in,in,in)"),

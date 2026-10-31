@@ -1,45 +1,107 @@
 """Background knowledge (bk.pl) compiler enforcing State_t decision-time firewall.
 
+Tier A facts come from ilp_learning.predicates, the implementation rule execution
+also uses, so bk.pl and an executed rule read one set of definitions.
+
 Enforces:
-1. Strict State_t firewall: zero access to outcomes, rollouts, or future ticks.
+1. Strict State_t firewall: an explicit permitted-column schema, so outcomes, rollouts,
+   and the behaviour policy's own selection cannot reach a fact.
 2. Hard eligibility gate: only eligible candidate pairs enter candidate_pair/3.
 3. Pure symbolic Datalog: zero raw floating point literals (rejected by Clingo 5.8.2).
 4. Relative ranking & comparison predicates: Tier A1 ranks, Tier A2 order comparisons,
-   and Tier B M1-screened congestion predicates.
+   and Tier B M1-screened congestion predicates. Ranks are tie-inclusive and comparisons
+   strict, so no fact depends on the arbitrary order of equal values.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 import pandas as pd
 
 from ilp_learning.atoms import ProvenanceTracker
+from ilp_learning.predicates import (
+    TIE_TOLERANCE,
+    TIER_A_SIGNATURES,
+    CandidatePair,
+    TierAFacts,
+)
 from ilp_learning.thresholds import ThresholdModel
 
 
-FORBIDDEN_OUTCOME_COLUMNS = {
-    "mission_s",
-    "waiting_s",
-    "realized_distance_m",
-    "pivot_mission_s",
-    "waiting_in_h_s",
-    "completed_in_h",
-    "completed_at",
-    "retreat_finished_at",
-    "residual_s",
-    "window_flow_s",
-}
+# Every column the builder may read: what a run knows at the decision, from
+# decisions.parquet and features.parquet (M2 spec 3.1). A permitted list, so a
+# new or renamed outcome column is refused instead of slipping past a blocklist.
+ALLOWED_DECISION_COLUMNS = frozenset({
+    "run_id", "decision_id", "sim_time", "sim_time_exact",
+    "window", "window_width", "dispatch_quantum_s",
+    "free_robots", "window_orders", "choice_bearing",
+    "pending_orders", "robots_busy", "robots_charging",
+    "robot_id", "order_id", "robot_x", "robot_y",
+    "robot_soc_percent", "robot_soc_exact",
+    "fifo_position", "order_shelf_count", "order_dropoff_id",
+    "c_static_m", "route_reachable", "route_cells",
+    "predicted_travel_energy_percent", "predicted_service_energy_percent",
+    "predicted_charger_distance_m", "predicted_charger_energy_percent",
+    "reserve_percent", "required_soc_percent", "required_soc_exact",
+    "energy_margin_percent", "energy_margin_exact",
+    "nearest_charger_id", "battery_eligible", "eligible",
+    "est_finish_s",
+})
+ALLOWED_FEATURE_COLUMNS = frozenset({
+    "decision_id", "robot_id", "order_id", "route_cells",
+    "overlap_cells", "overlap_ratio", "occupied_now",
+    "st_conflicts", "st_conflict_robots", "st_conflicts_30s",
+    "dropoff_load", "shelf_load", "local_density",
+    "robot_soc_percent",
+})
+# Recorded at the decision, but they are the behaviour policy's own action and
+# identity: legal input to drop, never to read, or the teacher leaks into bk.pl.
+POLICY_COLUMNS = frozenset({"selected", "strategy"})
+
+REQUIRED_DECISION_COLUMNS = (
+    "decision_id", "robot_id", "order_id", "eligible", "sim_time", "c_static_m", "fifo_position",
+)
 
 
-def _verify_firewall(columns: Sequence[str]) -> None:
-    found = set(columns).intersection(FORBIDDEN_OUTCOME_COLUMNS)
-    if found:
+def _project_decision_time(df: pd.DataFrame, allowed: frozenset[str]) -> pd.DataFrame:
+    """Keep the permitted columns; refuse any column not known to be decision-time."""
+    unknown = set(df.columns) - allowed - POLICY_COLUMNS
+    if unknown:
         raise ValueError(
-            f"State_t firewall violation: input contains outcome columns {sorted(list(found))}. "
-            "Background knowledge must be constructed strictly from decision-time state."
+            f"State_t firewall violation: input contains columns outside the permitted schema "
+            f"{sorted(unknown)}. Background knowledge must be constructed strictly from "
+            "decision-time state."
         )
+    return df[[c for c in df.columns if c in allowed]]
+
+
+def derive_est_finish_s(df: pd.DataFrame, run_manifest: Mapping[str, Any] | None) -> pd.Series:
+    """Nominal mission time, the offline form of DecisionTiming.finish_s.
+
+    Route length over speed, one pick per shelf, one drop-off, and no waiting:
+    decisions.parquet does not record this estimate, so it is rebuilt from what
+    that decision knew rather than being treated as absent.
+    """
+    needed = ("speed_mps", "shelf_pick_s", "dropoff_s")
+    absent = [k for k in needed if run_manifest is None or k not in run_manifest]
+    if absent or "order_shelf_count" not in df.columns:
+        raise ValueError(
+            f"cannot derive est_finish_s: manifest lacks {absent}, "
+            f"order_shelf_count present: {'order_shelf_count' in df.columns}"
+        )
+    return (
+        df["c_static_m"] / run_manifest["speed_mps"]
+        + df["order_shelf_count"] * run_manifest["shelf_pick_s"]
+        + run_manifest["dropoff_s"]
+    )
+
+
+def candidate_pairs(rows: pd.DataFrame) -> list[CandidatePair]:
+    """One decision's rows as the pair set the Tier A predicates are defined over."""
+    columns = ["robot_id", "order_id", "c_static_m", "est_finish_s", "fifo_position"]
+    return [CandidatePair(*row) for row in rows[columns].itertuples(index=False, name=None)]
 
 
 class BKBuilder:
@@ -58,6 +120,28 @@ class BKBuilder:
         args_str = ",".join(args)
         self.facts.append(f"{predicate}({args_str}).")
 
+    @staticmethod
+    def _lowest(rows: pd.DataFrame, column: str, entity: str) -> list[str]:
+        """Every entity at the column's minimum: a tie is fact, not a choice to make."""
+        known = rows[rows[column].notna()]
+        return list(known.loc[known[column] <= known[column].min() + TIE_TOLERANCE, entity])
+
+    def _add_tier_a_facts(
+        self,
+        d_atom: str,
+        r_atoms: Mapping[str, str],
+        o_atoms: Mapping[str, str],
+        rows: pd.DataFrame,
+    ) -> None:
+        """Emit the shared Tier A relations of one decision as ground facts."""
+        atoms = {"robot": r_atoms, "order": o_atoms}
+        facts = TierAFacts(candidate_pairs(rows))
+        for name, kinds in TIER_A_SIGNATURES.items():
+            for values in facts.relation(name):
+                self.add_fact(
+                    name, d_atom, *(atoms[kind][v] for kind, v in zip(kinds, values))
+                )
+
     def build_from_frames(
         self,
         run_id: str,
@@ -66,9 +150,16 @@ class BKBuilder:
         run_manifest: Mapping[str, Any] | None = None,
     ) -> list[str]:
         """Compile a run's decision-time state into Datalog facts."""
-        _verify_firewall(decisions_df.columns)
+        decisions_df = _project_decision_time(decisions_df, ALLOWED_DECISION_COLUMNS)
+        missing = [c for c in REQUIRED_DECISION_COLUMNS if c not in decisions_df.columns]
+        if missing:
+            raise ValueError(f"decision table lacks required columns {missing}")
+        if "est_finish_s" not in decisions_df.columns:
+            decisions_df = decisions_df.assign(
+                est_finish_s=derive_est_finish_s(decisions_df, run_manifest)
+            )
         if features_df is not None:
-            _verify_firewall(features_df.columns)
+            features_df = _project_decision_time(features_df, ALLOWED_FEATURE_COLUMNS)
 
         # Merge decision-time features if present
         if features_df is not None:
@@ -83,14 +174,12 @@ class BKBuilder:
             df = decisions_df.copy()
 
         # Hard eligibility gate: drop ineligible rows
-        if "eligible" in df.columns:
-            df = df[df["eligible"] == True].copy()  # noqa: E712
+        df = df[df["eligible"]].copy()
 
         grouped = df.groupby("decision_id")
 
         for dec_id, g in grouped:
-            tick = g["t"].iloc[0] if "t" in g.columns else 0.0
-            d_atom = self.tracker.get_or_create_decision(run_id, int(dec_id), tick)
+            d_atom = self.tracker.get_or_create_decision(run_id, int(dec_id), g["sim_time"].iloc[0])
             self.add_fact("decision", d_atom)
 
             # Global decision-level properties
@@ -109,7 +198,6 @@ class BKBuilder:
             r_atoms: dict[str, str] = {}
             for r_id in robots:
                 r_atoms[r_id] = self.tracker.get_or_create_robot(run_id, int(dec_id), str(r_id))
-                self.add_fact("candidate_robot", d_atom, r_atoms[r_id])
 
                 # Robot-level local density (Tier 2 survivor)
                 if self.thresholds and "local_density" in g.columns:
@@ -122,21 +210,10 @@ class BKBuilder:
             o_atoms: dict[str, str] = {}
             for o_id in orders:
                 o_atoms[o_id] = self.tracker.get_or_create_order(run_id, int(dec_id), str(o_id))
-                self.add_fact("candidate_order", d_atom, o_atoms[o_id])
 
-            # FIFO ordering across orders in the decision
-            if "fifo_position" in g.columns:
-                order_fifo = g.groupby("order_id")["fifo_position"].min().sort_values()
-                if len(order_fifo) > 0:
-                    oldest_o = order_fifo.index[0]
-                    self.add_fact("oldest_fifo", d_atom, o_atoms[oldest_o])
-                    # Pairwise FIFO comparisons
-                    order_list = list(order_fifo.index)
-                    for i in range(len(order_list)):
-                        for j in range(i + 1, min(i + 4, len(order_list))):  # limit comparison depth
-                            self.add_fact("prior_fifo", d_atom, o_atoms[order_list[i]], o_atoms[order_list[j]])
+            self._add_tier_a_facts(d_atom, r_atoms, o_atoms, g)
 
-            # Per-robot candidate ordering and relative ranking
+            # Per-robot Tier B congestion ranking
             for r_id in robots:
                 r_atom = r_atoms[r_id]
                 r_group = g[g["robot_id"] == r_id].copy()
@@ -144,44 +221,10 @@ class BKBuilder:
                 if len(r_group) == 0:
                     continue
 
-                for _, row in r_group.iterrows():
-                    o_atom = o_atoms[row["order_id"]]
-                    self.add_fact("candidate_pair", d_atom, r_atom, o_atom)
-
-                # Tier A1 & A2: Static cost ranking (c_static_m)
-                if "c_static_m" in r_group.columns:
-                    sorted_by_c = r_group.sort_values(by=["c_static_m", "fifo_position"] if "fifo_position" in r_group.columns else ["c_static_m"])
-                    orders_by_c = list(sorted_by_c["order_id"])
-
-                    if len(orders_by_c) >= 1:
-                        self.add_fact("nearest_static", d_atom, r_atom, o_atoms[orders_by_c[0]])
-                    if len(orders_by_c) >= 2:
-                        self.add_fact("second_nearest_static", d_atom, r_atom, o_atoms[orders_by_c[1]])
-
-                    # Closer static pairwise comparisons
-                    for i in range(min(3, len(orders_by_c))):
-                        for j in range(i + 1, min(i + 3, len(orders_by_c))):
-                            self.add_fact("closer_static", d_atom, r_atom, o_atoms[orders_by_c[i]], o_atoms[orders_by_c[j]])
-
-                # Static finish ranking (est_finish_s)
-                if "est_finish_s" in r_group.columns:
-                    sorted_by_est = r_group.sort_values(by=["est_finish_s", "fifo_position"] if "fifo_position" in r_group.columns else ["est_finish_s"])
-                    orders_by_est = list(sorted_by_est["order_id"])
-
-                    if len(orders_by_est) >= 1:
-                        self.add_fact("earliest_static_finish", d_atom, r_atom, o_atoms[orders_by_est[0]])
-                    if len(orders_by_est) >= 2:
-                        self.add_fact("second_earliest_static_finish", d_atom, r_atom, o_atoms[orders_by_est[1]])
-
-                    for i in range(min(3, len(orders_by_est))):
-                        for j in range(i + 1, min(i + 3, len(orders_by_est))):
-                            self.add_fact("earlier_static_finish", d_atom, r_atom, o_atoms[orders_by_est[i]], o_atoms[orders_by_est[j]])
-
                 # Tier B M1-screened congestion predicates
                 if "occupied_now" in r_group.columns and r_group["occupied_now"].notna().any():
-                    min_occ_idx = r_group["occupied_now"].idxmin()
-                    min_occ_o = r_group.loc[min_occ_idx, "order_id"]
-                    self.add_fact("lowest_occupied_for_robot", d_atom, r_atom, o_atoms[min_occ_o])
+                    for o_id in self._lowest(r_group, "occupied_now", "order_id"):
+                        self.add_fact("lowest_occupied_for_robot", d_atom, r_atom, o_atoms[o_id])
 
                     if self.thresholds:
                         for _, row in r_group.iterrows():
@@ -190,9 +233,8 @@ class BKBuilder:
                                     self.add_fact("high_occupied_now", d_atom, r_atom, o_atoms[row["order_id"]])
 
                 if "st_conflict_robots" in r_group.columns and r_group["st_conflict_robots"].notna().any():
-                    min_cr_idx = r_group["st_conflict_robots"].idxmin()
-                    min_cr_o = r_group.loc[min_cr_idx, "order_id"]
-                    self.add_fact("fewest_conflict_robots_for_robot", d_atom, r_atom, o_atoms[min_cr_o])
+                    for o_id in self._lowest(r_group, "st_conflict_robots", "order_id"):
+                        self.add_fact("fewest_conflict_robots_for_robot", d_atom, r_atom, o_atoms[o_id])
 
                     if self.thresholds:
                         for _, row in r_group.iterrows():
@@ -201,9 +243,8 @@ class BKBuilder:
                                     self.add_fact("high_conflict_robots", d_atom, r_atom, o_atoms[row["order_id"]])
 
                 if "st_conflicts_30s" in r_group.columns and r_group["st_conflicts_30s"].notna().any():
-                    min_c30_idx = r_group["st_conflicts_30s"].idxmin()
-                    min_c30_o = r_group.loc[min_c30_idx, "order_id"]
-                    self.add_fact("fewest_conflicts_for_robot", d_atom, r_atom, o_atoms[min_c30_o])
+                    for o_id in self._lowest(r_group, "st_conflicts_30s", "order_id"):
+                        self.add_fact("fewest_conflicts_for_robot", d_atom, r_atom, o_atoms[o_id])
 
                 if self.thresholds and "overlap_ratio" in r_group.columns:
                     for _, row in r_group.iterrows():

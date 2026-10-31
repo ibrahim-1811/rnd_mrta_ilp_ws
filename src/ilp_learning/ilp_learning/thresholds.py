@@ -16,7 +16,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-from simulation_env.seed_split import check_induction_purpose
+from simulation_env.seed_split import check_induction_purpose, workload_seed_of
 
 
 DEFAULT_DISCRETIZATIONS = {
@@ -27,6 +27,12 @@ DEFAULT_DISCRETIZATIONS = {
     "occupied_now": ("occupied_now", [66.7]),
     "st_conflict_robots": ("st_conflict_robots", [66.7]),
     "st_conflicts_30s": ("st_conflicts_30s", [66.7]),
+}
+
+
+# The cutoffs the decision table alone can fit. Tier B cutoffs need features.parquet.
+DECISION_DISCRETIZATIONS = {
+    name: DEFAULT_DISCRETIZATIONS[name] for name in ("fleet_load", "free_robots")
 }
 
 
@@ -67,6 +73,10 @@ class ThresholdModel:
         data["sha256"] = hashlib.sha256(content_bytes).hexdigest()
         return data
 
+    @property
+    def sha256(self) -> str:
+        return self.to_dict()["sha256"]
+
     def save_json(self, path: Path | str) -> None:
         out_path = Path(path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -83,6 +93,15 @@ class ThresholdModel:
         return cls(cutoffs=cutoffs, metadata=metadata)
 
 
+def induction_seeds_of(manifests: Sequence[Mapping[str, Any]]) -> list[int]:
+    """Every seed the runs used, read from their manifests rather than declared."""
+    seeds: set[int] = set()
+    for manifest in manifests:
+        seeds.add(int(manifest["seed"]))
+        seeds.add(int(workload_seed_of(manifest["orders_path"])))
+    return sorted(seeds)
+
+
 def fit_thresholds_from_frames(
     training_frames: Sequence[pd.DataFrame],
     seeds_used: Sequence[int],
@@ -96,17 +115,13 @@ def fit_thresholds_from_frames(
     
     cutoffs: dict[str, list[float]] = {}
     for target_name, (col_name, percentiles) in active_spec.items():
-        if col_name in combined_df.columns:
-            vals = combined_df[col_name].dropna().to_numpy()
-            if len(vals) > 0:
-                calculated = [float(np.percentile(vals, p)) for p in percentiles]
-                cutoffs[target_name] = calculated
-            else:
-                cutoffs[target_name] = [0.0] * len(percentiles)
-        else:
-            # Default zero fallback if feature column is absent
-            cutoffs[target_name] = [0.0] * len(percentiles)
-            
+        if col_name not in combined_df.columns:
+            raise ValueError(f"cannot fit '{target_name}': column '{col_name}' is absent")
+        vals = combined_df[col_name].dropna().to_numpy()
+        if len(vals) == 0:
+            raise ValueError(f"cannot fit '{target_name}': column '{col_name}' has no values")
+        cutoffs[target_name] = [float(np.percentile(vals, p)) for p in percentiles]
+
     metadata = {
         "seeds_used": sorted(list(seeds_used)),
         "n_samples": len(combined_df),

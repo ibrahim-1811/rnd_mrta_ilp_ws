@@ -25,7 +25,9 @@ def test_fit_thresholds_and_save(tmp_path):
     df2 = pd.DataFrame({"local_density": [2.0, 4.0, 6.0, 8.0, 10.0]})
 
     # Valid induction training seeds
-    model = fit_thresholds_from_frames([df1, df2], seeds_used=[104, 105])
+    model = fit_thresholds_from_frames(
+        [df1, df2], seeds_used=[104, 105], spec={"local_density": ("local_density", [50.0])}
+    )
     assert "local_density" in model.cutoffs
     assert len(model.cutoffs["local_density"]) == 1
 
@@ -42,3 +44,19 @@ def test_seed_leakage_rejected():
     with pytest.raises(SeedLeakageError):
         fit_thresholds_from_frames([df], seeds_used=[205])
 
+
+
+def test_an_absent_column_is_refused_rather_than_fitted_to_zero():
+    df = pd.DataFrame({"local_density": [1.0, 2.0]})
+    with pytest.raises(ValueError, match="column 'overlap_ratio' is absent"):
+        fit_thresholds_from_frames(
+            [df], seeds_used=[104], spec={"overlap_ratio": ("overlap_ratio", [50.0])}
+        )
+
+
+def test_a_column_with_no_values_is_refused():
+    df = pd.DataFrame({"local_density": [None, None]}, dtype=float)
+    with pytest.raises(ValueError, match="has no values"):
+        fit_thresholds_from_frames(
+            [df], seeds_used=[104], spec={"local_density": ("local_density", [50.0])}
+        )

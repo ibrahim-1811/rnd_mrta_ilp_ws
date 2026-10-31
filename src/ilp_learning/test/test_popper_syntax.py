@@ -20,7 +20,7 @@ def test_popper_end_to_end_syntax_and_learning(tmp_path):
             "fifo_position": 0,
             "selected": True,
             "eligible": True,
-            "t": 0.0,
+            "sim_time": 0.0,
         },
         {
             "decision_id": 0,
@@ -31,7 +31,7 @@ def test_popper_end_to_end_syntax_and_learning(tmp_path):
             "fifo_position": 1,
             "selected": False,
             "eligible": True,
-            "t": 0.0,
+            "sim_time": 0.0,
         },
         # Decision 1: R02 chooses O010 (distance 12m vs O011 30m)
         {
@@ -43,7 +43,7 @@ def test_popper_end_to_end_syntax_and_learning(tmp_path):
             "fifo_position": 0,
             "selected": True,
             "eligible": True,
-            "t": 3.0,
+            "sim_time": 3.0,
         },
         {
             "decision_id": 1,
@@ -54,7 +54,7 @@ def test_popper_end_to_end_syntax_and_learning(tmp_path):
             "fifo_position": 1,
             "selected": False,
             "eligible": True,
-            "t": 3.0,
+            "sim_time": 3.0,
         },
     ])
 
@@ -72,7 +72,7 @@ def test_popper_end_to_end_syntax_and_learning(tmp_path):
     write_exs_pl(examples, tmp_path / "exs.pl")
 
     # Run Popper in isolated subprocess
-    result = run_popper(tmp_path, timeout=10)
+    result = run_popper(tmp_path, timeout=10, noisy=False)
 
     assert result.success is True, f"Popper failed: {result.raw_output}"
     assert result.datalog is True

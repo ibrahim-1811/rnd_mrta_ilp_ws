@@ -14,7 +14,7 @@ def _make_candidate_df():
             "c_static_m": 10.0,
             "selected": True,
             "eligible": True,
-            "t": 0.0,
+            "sim_time": 0.0,
         },
         {
             "decision_id": 1,
@@ -23,7 +23,7 @@ def _make_candidate_df():
             "c_static_m": 12.0,
             "selected": True,
             "eligible": True,
-            "t": 3.0,
+            "sim_time": 3.0,
         },
         {
             "decision_id": 1,
@@ -32,7 +32,7 @@ def _make_candidate_df():
             "c_static_m": 15.0,
             "selected": False,
             "eligible": True,
-            "t": 3.0,
+            "sim_time": 3.0,
         },
         {
             "decision_id": 1,
@@ -41,7 +41,7 @@ def _make_candidate_df():
             "c_static_m": 18.0,
             "selected": False,
             "eligible": True,
-            "t": 3.0,
+            "sim_time": 3.0,
         },
         {
             "decision_id": 1,
@@ -50,7 +50,7 @@ def _make_candidate_df():
             "c_static_m": 22.0,
             "selected": False,
             "eligible": True,
-            "t": 3.0,
+            "sim_time": 3.0,
         },
     ])
 

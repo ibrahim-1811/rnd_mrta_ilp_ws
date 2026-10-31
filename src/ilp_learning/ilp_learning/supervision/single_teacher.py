@@ -3,25 +3,32 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Mapping
+
 import pandas as pd
 
 from ilp_learning.atoms import ProvenanceTracker
-from ilp_learning.sampler import GroundAtomExample, StratifiedExampleSampler, write_exs_pl
-from simulation_env.seed_split import check_induction_purpose
+from ilp_learning.sampler import (
+    DEFAULT_CORPUS_SEED,
+    GroundAtomExample,
+    StratifiedExampleSampler,
+    write_exs_pl,
+)
+from simulation_env.seed_split import check_run_is_induction
 
 
 def build_single_teacher_supervision(
     run_id: str,
     decisions_df: pd.DataFrame,
     tracker: ProvenanceTracker,
+    *,
+    run_manifest: Mapping[str, Any],
     k_neg: int = 3,
-    seed: int = 42,
-    workload_seed: int | None = None,
+    seed: int = DEFAULT_CORPUS_SEED,
     out_path: Path | str | None = None,
 ) -> list[GroundAtomExample]:
     """Generate ground positive and negative assignment examples from teacher selections."""
-    if workload_seed is not None:
-        check_induction_purpose([workload_seed])
+    check_run_is_induction(run_manifest)
 
     sampler = StratifiedExampleSampler(k_neg=k_neg, seed=seed)
     examples = sampler.sample_examples_from_decisions(

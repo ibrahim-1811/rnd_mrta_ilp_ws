@@ -30,6 +30,22 @@ class Assignment:
     est_finish_s: float
 
 
+REQUIRED_COLUMNS = ("robot_id", "order_id", "c_static_m", "est_finish_s", "fifo_position")
+
+
+class MissingDecisionDataError(ValueError):
+    """A tie-break input is absent; a fabricated default would change the matching."""
+
+
+def _require_tie_break_data(df: pd.DataFrame) -> None:
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise MissingDecisionDataError(f"candidate batch lacks required columns {missing}")
+    blank = [c for c in REQUIRED_COLUMNS if df[c].isna().any()]
+    if blank:
+        raise MissingDecisionDataError(f"candidate batch has missing values in {blank}")
+
+
 class BatchMatcher:
     """Solves 1-to-1 matching from candidate scores and learned rule coverage."""
 
@@ -60,6 +76,8 @@ class BatchMatcher:
         if len(valid_df) == 0:
             return []
 
+        _require_tie_break_data(valid_df)
+
         # Compute tier and rule_rank for each candidate pair
         tiers = []
         rule_ranks = []
@@ -84,15 +102,7 @@ class BatchMatcher:
     def _match_greedy(self, df: pd.DataFrame) -> list[Assignment]:
         """Ablation: deterministic greedy matching sorted by anti-circularity tie-break."""
         sort_cols = ["tier", "rule_rank", "fifo_position", "c_static_m", "est_finish_s", "robot_id"]
-        clean_df = df.copy()
-        if "fifo_position" not in clean_df.columns:
-            clean_df["fifo_position"] = 0
-        if "c_static_m" not in clean_df.columns:
-            clean_df["c_static_m"] = 0.0
-        if "est_finish_s" not in clean_df.columns:
-            clean_df["est_finish_s"] = 0.0
-
-        sorted_df = clean_df.sort_values(by=sort_cols)
+        sorted_df = df.sort_values(by=sort_cols)
 
         assigned_robots: set[str] = set()
         assigned_orders: set[str] = set()
@@ -110,9 +120,9 @@ class BatchMatcher:
                         order_id=o,
                         tier=int(row["tier"]),
                         rule_rank=int(row["rule_rank"]),
-                        fifo_position=int(row.get("fifo_position", 0)),
-                        c_static_m=float(row.get("c_static_m", 0.0)),
-                        est_finish_s=float(row.get("est_finish_s", 0.0)),
+                        fifo_position=int(row["fifo_position"]),
+                        c_static_m=float(row["c_static_m"]),
+                        est_finish_s=float(row["est_finish_s"]),
                     )
                 )
 
@@ -129,9 +139,9 @@ class BatchMatcher:
         n_r = len(robots)
         n_o = len(orders)
 
-        d_max = max(float(df["c_static_m"].max()), 0.0) if "c_static_m" in df.columns and len(df) > 0 else 0.0
-        f_max = max(float(df["est_finish_s"].max()), 0.0) if "est_finish_s" in df.columns and len(df) > 0 else 0.0
-        fifo_max = max(float(df["fifo_position"].max()), 0.0) if "fifo_position" in df.columns and len(df) > 0 else 0.0
+        d_max = max(float(df["c_static_m"].max()), 0.0)
+        f_max = max(float(df["est_finish_s"].max()), 0.0)
+        fifo_max = max(float(df["fifo_position"].max()), 0.0)
 
         # Infeasible edge penalty M:
         # Feasible edge costs are guaranteed to be in [0.0, 2.0).
@@ -152,9 +162,9 @@ class BatchMatcher:
 
             tier = int(row["tier"])
             rule_rank = int(row["rule_rank"])
-            fifo = int(row.get("fifo_position", 0))
-            c_static = float(row.get("c_static_m", 0.0))
-            est_finish = float(row.get("est_finish_s", 0.0))
+            fifo = int(row["fifo_position"])
+            c_static = float(row["c_static_m"])
+            est_finish = float(row["est_finish_s"])
 
             # Exact anti-circularity nested lexicographic cost:
             # Level 6: robot_id deterministic tie-break
