@@ -1,0 +1,26 @@
+{
+  "pilot_summary": {
+    "path": "/home/ibrahim/rnd_mrta_ilp_ws/src/dashboard_GUI/var/runs/experiments/pilot_r50_o200_20261028_123625/summary.csv",
+    "sha256": "a36419d1248547d5f222907143c82eab0cb3a90169cd732e950a0db61edf12aa"
+  },
+  "pilot_paired": {
+    "path": "/home/ibrahim/rnd_mrta_ilp_ws/src/dashboard_GUI/var/runs/experiments/pilot_r50_o200_20261028_123625/paired.csv",
+    "sha256": "2524d208bcf656670b5c357d5db937c196e83adebe92b4b5a4e3b36294b50cb8"
+  },
+  "pilot_experiment": {
+    "path": "/home/ibrahim/rnd_mrta_ilp_ws/src/dashboard_GUI/var/runs/experiments/pilot_r50_o200_20261028_123625/experiment.json",
+    "sha256": "23bd410149ac743a4fbdf1d6e3714df8e4da6c659362a401bcc535d19d8589f9"
+  },
+  "m1_signal": {
+    "path": "/home/ibrahim/rnd_mrta_ilp_research/runs/m1_pilot/signal/summary.csv",
+    "sha256": "a7075725691917f57eab8084bc8304b1276101bb5c096c8100778f10d832a36d"
+  },
+  "m1_rollout_signal": {
+    "path": "/home/ibrahim/rnd_mrta_ilp_research/runs/m1_pilot/rollout_signal/summary.csv",
+    "sha256": "e9c510f1570d92cd332aecd7bbdba16e4fa485f3ad20d1faff3e3057113d1cc8"
+  },
+  "legacy_fleet_sweep": {
+    "path": "/home/ibrahim/rnd_mrta_ilp_ws/runs/fleet_sweep/summary.csv",
+    "sha256": "6c836b1b30558bc5319d09795ef0b603ab069baad0327f1a04d540a6d9fe25ae"
+  }
+}

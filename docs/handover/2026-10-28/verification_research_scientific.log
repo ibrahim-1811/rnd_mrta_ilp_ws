@@ -1,0 +1,65 @@
+........................................................................ [ 11%]
+........................................................................ [ 23%]
+........................................................................ [ 34%]
+........................................................................ [ 46%]
+........................................................................ [ 58%]
+..F..................................................................... [ 69%]
+........................................................................ [ 81%]
+........................................................................ [ 92%]
+............................................                             [100%]
+=================================== FAILURES ===================================
+_______________ test_the_probe_records_what_run_workload_records _______________
+
+tmp_path = PosixPath('/tmp/pytest-of-ibrahim/pytest-37/test_the_probe_records_what_ru0')
+
+    def test_the_probe_records_what_run_workload_records(tmp_path):
+        common = ["--config", str(FIXTURE), "--orders", "30", "--quantum", "3"]
+    
+        plain = run("run_workload.py", *common, "--quiet", "--progress", "0", "--dataset", str(tmp_path / "plain"))
+        assert plain.returncode == 0, plain.stdout + plain.stderr
+    
+        probed = run("m1_probe.py", *common, "--out", str(tmp_path / "probe"), "--features")
+        assert probed.returncode == 0, probed.stdout + probed.stderr
+    
+        a = json.loads((tmp_path / "plain" / "run.json").read_text())
+        b = json.loads((tmp_path / "probe" / "run.json").read_text())
+        assert a["run_id"] == b["run_id"]
+    
+        for table in ("decisions.parquet", "outcomes.parquet"):
+            assert pd.read_parquet(tmp_path / "plain" / table).equals(
+                pd.read_parquet(tmp_path / "probe" / table)
+            )
+    
+        assert len(pd.read_parquet(tmp_path / "probe" / "features.parquet")) > 0
+    
+        report = run("outcome_signal.py", str(tmp_path / "probe"), "--out", str(tmp_path / "signal"))
+>       assert report.returncode == 0, report.stdout + report.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "/home/ibrahim/rnd_mrta_ilp_research/src/simulation_env/scripts/outcome_signal.py", line 151, in <module>
+E             raise SystemExit(main())
+E                              ^^^^^^
+E           File "/home/ibrahim/rnd_mrta_ilp_research/src/simulation_env/scripts/outcome_signal.py", line 121, in main
+E             summary.update(feature_associations(rows, pd.read_parquet(run_dir / FEATURES_FILE)))
+E                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ibrahim/rnd_mrta_ilp_research/src/simulation_env/simulation_env/outcome_signal.py", line 376, in feature_associations
+E             result[f"rho_partial_{name}"] = partial_spearman(joined, name, "residual_s", "est_finish_s")
+E                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ibrahim/rnd_mrta_ilp_research/src/simulation_env/simulation_env/outcome_signal.py", line 342, in partial_spearman
+E             data = frame[[x, y, z]].dropna().rank()
+E                    ~~~~~^^^^^^^^^^^
+E           File "/home/ibrahim/rnd_mrta_ilp_research/.pixi/envs/default/lib/python3.12/site-packages/pandas/core/frame.py", line 4384, in __getitem__
+E             indexer = self.columns._get_indexer_strict(key, "columns")[1]
+E                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ibrahim/rnd_mrta_ilp_research/.pixi/envs/default/lib/python3.12/site-packages/pandas/core/indexes/base.py", line 6302, in _get_indexer_strict
+E             self._raise_if_missing(keyarr, indexer, axis_name)
+E           File "/home/ibrahim/rnd_mrta_ilp_research/.pixi/envs/default/lib/python3.12/site-packages/pandas/core/indexes/base.py", line 6355, in _raise_if_missing
+E             raise KeyError(f"{not_found} not in index")
+E         KeyError: "['route_cells'] not in index"
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/ibrahim/rnd_mrta_ilp_research/.pixi/envs/default/bin/python', '/home/ibrahim/rnd_mrta_il..., in _raise_if_missing\n    raise KeyError(f"{not_found} not in index")\nKeyError: "[\'route_cells\'] not in index"\n').returncode
+
+src/simulation_env/test/test_m1_diagnostics.py:376: AssertionError
+=========================== short test summary info ============================
+FAILED src/simulation_env/test/test_m1_diagnostics.py::test_the_probe_records_what_run_workload_records
+1 failed, 619 passed in 81.87s (0:01:21)

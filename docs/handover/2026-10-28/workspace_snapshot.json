@@ -1,0 +1,14 @@
+{
+  "gui": {
+    "root": "/home/ibrahim/rnd_mrta_ilp_ws",
+    "branch": "traffic/rmf-integration",
+    "head": "ae832f5d445b84683050365b2a239d950ca4111d",
+    "status_before_docs": "?? .codex/\n?? 26.2.2\n"
+  },
+  "research": {
+    "root": "/home/ibrahim/rnd_mrta_ilp_research",
+    "branch": "research/outcome-aware-ilp",
+    "head": "163c6a473aa1673176243a8a03a3bde5b0b8540b",
+    "status_before_docs": " M README.md\n M docs/CURRENT_PHASE.md\n M docs/DECISIONS.md\n M docs/ROADMAP.md\n M src/simulation_env/simulation_env/seed_split.py\n?? .scratch/m1-outcome-signal/\n?? .scratch/m1-review/\n?? docs/figures/m1_outcome_signal_and_scaling.png\n?? scripts/\n?? src/simulation_env/scripts/m1_probe.py\n?? src/simulation_env/scripts/outcome_signal.py\n?? src/simulation_env/simulation_env/congestion.py\n?? src/simulation_env/simulation_env/outcome_signal.py\n?? src/simulation_env/simulation_env/rollout.py\n?? src/simulation_env/test/test_m1_diagnostics.py\n"
+  }
+}

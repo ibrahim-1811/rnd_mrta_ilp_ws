@@ -1,0 +1,10 @@
+{
+  "small_validation_grid": "nearest_astar/random/milp x robots2 x seeds101/102 x 3orders",
+  "ros_runs": 6,
+  "all_non_computational_metrics_equal": true,
+  "paired_comparison": "passed",
+  "html_report": "6/6 validated",
+  "gazebo_opened_for_validation": false,
+  "full_100_robot_campaign_run": false,
+  "production_sources_modified": false
+}

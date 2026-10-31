@@ -1,767 +1,193 @@
-# Outcome-Aware ILP for Explainable Grid-Aware Task Allocation in Multi-Robot Warehouse Systems
+# Outcome-aware ILP research backend — current foundation and status
 
-A deterministic warehouse simulator built to answer one question:
+A deterministic warehouse research platform for **Outcome-Aware Inductive Logic Programming for Explainable Grid-Aware Task Allocation in Multi-Robot Warehouse Systems**.
 
-> Can a multi-robot task allocation policy use **real warehouse geometry**
-> and **realized execution outcomes** to learn symbolic allocation rules
-> that are both effective and explainable?
+The simulator, eight conventional baselines, recording/experiment pipeline and GUI are implemented. **The symbolic ILP learner, outcome-aware learned policy and learned-rule explanations are not implemented.** MILP is an existing optimization baseline and is a different method.
 
-Everything in this repository exists to make that question answerable.
-The simulator is not the contribution — it is the controlled apparatus
-that makes a claim about allocation policy defensible.
+Read the **[complete handover and demo guide](docs/PROJECT_HANDOVER.md)** or open the **[single-page offline HTML](docs/PROJECT_HANDOVER.html)**. They cover both worktrees, every demo command, all eight formulations, experiment evidence, file/log locations, limitations and questions for 29 October. The HTML embeds its charts and full source catalogue.
 
-> **New here?** Go to **[docs/START_HERE.md](docs/START_HERE.md)** —
-> from an empty computer to running all three strategies on the research
-> map **W100**, with 10 to 100 robots. To draw a warehouse of your own in
-> Excel, see [docs/MAKE_A_MAP.md](docs/MAKE_A_MAP.md).
->
-> **What is where?** Open [docs/REPO_ATLAS.html](docs/REPO_ATLAS.html) in a browser:
-> every package, module, data flow and state machine on one page, kept up to date.
-> The same code map as text, every file, class and function linked to its
-> source line, is [docs/CODE_MAP.md](docs/CODE_MAP.md).
->
-> Want to understand what was built and why? Read on.
+The handover now includes four architecture/flow diagrams and an editable [four-sheet XMind map](docs/PROJECT_HANDOVER.xmind).
 
----
-
-## The one idea that shapes the whole repo
-
-Everything is split in two. One half is held fixed so that the other
-half can be measured.
-
-```mermaid
-flowchart TB
-    S["<b>RESEARCH VARIABLE</b><br/>the MRTA allocation policy<br/><br/>Random · Nearest Manhattan · Nearest A*<br/>Earliest Finish · Auction · Hungarian · MILP<br/>Single-Teacher → Multi-Teacher → Outcome-Aware ILP"]
-
-    F["<b>FIXED INFRASTRUCTURE</b> — identical for every strategy<br/><br/>warehouse geometry · one-way lane topology · directed A*<br/>traffic controller · robot execution · service behaviour<br/>battery model · charging scheduler · Gazebo mirror"]
-
-    O["<b>OUTCOME</b><br/>realized distance, waiting, energy, completion time"]
-
-    S -->|"robot → order assignment"| F
-    F -->|"execution"| O
-    O -.->|"learning signal<br/>never a decision-time feature"| S
-
-    style S fill:#dbeafe,stroke:#2f6fb4,stroke-width:3px
-    style F fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
-    style O fill:#dcfce7,stroke:#2f9b6f,stroke-width:2px
-```
-
-A strategy may **choose**. It may not change routing, traffic
-arbitration, battery drain, charger policy, speed, or service duration.
-If two strategies produce different makespans, that difference has
-exactly one cause.
-
-This is enforced in code, not by convention: every strategy runs through
-the same `WorkloadExecutor`, the same router, and the same engine.
-
----
-
-## What we built, and why
-
-### 1. A warehouse where direction matters
-
-Straight-line and Manhattan distance are not costs in a one-way
-warehouse. The map is a real 17 × 35 grid with semantic cells, loaded
-from XLSX:
+## What the system does
 
 ```text
-       01234567890123456          # wall / blocked
-    0  #################          . open transit floor
-    1  #################          S shelf       (service terminal)
-    2  ####ChhChhChhCh##          D dropoff     (service terminal)
-    3  ##D............D#          P stage zone  (shared parking)
-    4  ##D............D#          C charging    (service terminal)
-    5  ##D............D#          h holding     (charge queue)
-    6  ##D.S..S..S..S.D#
-    7  ##D.S..S..S..S.D#          72 shelf cells
-    8  ##D.S..S..S..S.D#          36 dropoff cells
-    9  ##D.S..S..S..S.D#          22 stage zone cells
-   10  ##D.S..S..S..S.D#           8 charging cells
-   11  ##D.S..S..S..S.D#          14 holding cells
-   12  P...S..S..S..S..P
-   13  P...S..S..S..S..P         309 transit core cells
-   14  P...S..S..S..S..P         152 terminal cells
-   15  P...............P         485 directed core edges
-   16  P...............P           0 two-way core edges
-   17  P...............P
-   18  P...............P
-   19  P...............P
-   20  P...S..S..S..S..P
-   21  P...S..S..S..S..P
-   22  P...S..S..S..S..P
-   23  ##D.S..S..S..S.D#
-   24  ##D.S..S..S..S.D#
-   25  ##D.S..S..S..S.D#
-   26  ##D.S..S..S..S.D#
-   27  ##D.S..S..S..S.D#
-   28  ##D.S..S..S..S.D#
-   29  ##D............D#
-   30  ##D............D#
-   31  ##D............D#
-   32  ####ChhChhChhCh##
-   33  #################
-   34  #################
+XLSX warehouse + YAML config + order CSV
+  → free robots / FIFO candidate window / directed A* costs / battery mask
+  → allocation strategy chooses robot → order
+  → shared traffic, motion, service, battery and charging execution
+  → decisions + outcomes + metrics + provenance
+  → dashboard / paired analysis / offline graphs
 ```
 
-Every transit aisle is **one-way**. Rendered from the production edge
-set — the same edges the router and the RMF graph use:
+Only allocation changes between strategies. Every policy uses the same map, legal routes, traffic, battery, charging, speed and service model. The scientific engine is the source of truth; Gazebo mirrors it. RMF graph/route checks exist, but a native RMF fleet adapter does not control the production allocation loop.
 
-```text
-       01234567890123456
-    2  ####ChhChhChhCh##     > east    < west
-    3  ##Dv<<<<<<<<<<<D#     v south   ^ north
-    4  ##D>>>>>>>>>>>^D#
-    5  ##Dv<<<<<<<<<<<D#     Alternating one-way rows, with
-    6  ##DvS^<S^<S^<S^D#     columns lifting traffic between
-    7  ##DvS^<S^<S^<S^D#     bands. Shelf columns are fed from
-    8  ##DvS^<S^<S^<S^D#     the row, never from a neighbour.
-    9  ##DvS^<S^<S^<S^D#
-   10  ##DvS^<S^<S^<S^D#     Structural head-on deadlock is
-   11  ##DvS^<S^<S^<S^D#     impossible by construction, not by
-   12  Pv+vS^<S^<S^<S>vP     arbitration.
-   13  Pv<vS^<S^<S^<S>vP
-   14  Pv<vS^<S^<S^<S>vP     Waiting, queueing, merge and
-   15  Pv<>>>>>>>>>>>>vP     vertex contention remain, and are
-   16  Pv<v<<<<<<<<<<^vP     valid realized outcomes.
-   17  Pv<>>>>>>>>>>>>vP
-   18  Pv<v<<<<<<<<<<^vP
-   19  Pv<>>>>>>>>>>>>vP
-   20  Pv<vS^<S^<S^<S>vP
-   21  Pv<vS^<S^<S^<S>vP
-   22  P>^<S^<S^<S^<S^<P
-   23  ##DvS^<S^<S^<S^D#
-   ...
-   29  ##D>>>>>>>>>>>^D#
-   30  ##Dv<<<<<<<<<<<D#
-   31  ##D>>>>>>>>>>>^D#
-   32  ####ChhChhChhCh##
-```
+Active scenario: **W100, 40 × 54 cells**, 1 m/cell, up to 100 robots, 552 shelves, 36 dropoffs, 24 chargers and 12 holding cells. Default config is **100 robots, all 2,000 orders, q=0**. Use explicit small limits for demos. V2 is a separate 22-robot test fixture.
 
-The consequence that matters scientifically:
+Orders use `order_id,item_id,shelf_id,quantity,dropoff_id`; several lines can form one logical order. No release times, deadlines or priorities are part of this model.
 
-```text
-d(A, B) != d(B, A)      for 90.9% of shelf pairs
-```
+## Two worktrees of one repository
 
-So Manhattan distance is permitted **only** as an A* heuristic or as a
-deliberately naive experimental baseline. Allocation cost is the legal
-directed route, `C_static`, in metres.
+| Folder | Branch / audited HEAD | Purpose |
+|---|---|---|
+| `/home/ibrahim/rnd_mrta_ilp_ws` | `traffic/rmf-integration` · `ae832f5` | Complete GUI, supported visual demo, pre-M0 science, historical runs |
+| `/home/ibrahim/rnd_mrta_ilp_research` | `research/outcome-aware-ilp` · `163c6a4` | Committed M0 integrity and uncommitted M1 diagnostics |
 
-**Terminals are not shortcuts.** Shelves, dropoffs, stage zones,
-chargers and holding cells are leg endpoints only. A robot drives in to
-be served and retreats to the aisle; it never cuts through a shelf
-column. Regenerate either diagram yourself — both are derived from the
-map, so neither can drift:
+The GUI is **not integrated with research M0**. Research adds manifest/strategy identity, seed purpose and matrix quantum/window interfaces; the GUI observer pins the older runner. There is no launcher workspace selector. Source, ignored results and environments remain separate. Both local Pixi environments now exist.
 
-```bash
-PYTHONPATH=$PP $PY src/simulation_env/scripts/check_map_topology.py \
-    --config src/simulation_env/test/fixtures/v2_reference.yaml
-```
+## Current state
 
-### 2. One routing implementation for both prediction and execution
-
-The allocator predicts with the same router the engine executes with.
-That is what makes "predicted vs realized" a meaningful comparison
-rather than two unrelated numbers — and it is measurable:
-
-![predicted vs realized](docs/figures/predicted_vs_realized.png)
-
-Predicted distance lies exactly on the realized diagonal for all 100
-orders. Waiting is where the two legitimately diverge: it is an
-uncertain outcome of traffic, and is never a decision-time feature.
-
-### 3. A battery model that constrains every strategy equally
-
-Battery V1 is deterministic and frozen. State of charge is an exact
-rational ledger, not a float.
-
-```text
-initial SOC          100%          charge rate   +1% per simulated s
-travel drain         1% per 20 m   reserve       10%
-service drain        1% per 60 s   charge due    SOC <= 10%
-waiting/idle drain   1% per 300 s
-```
-
-Energy eligibility is a **hard mask applied before the strategy runs**,
-so no strategy can win by taking a job it cannot finish:
-
-```text
-order travel energy + service energy + A* energy to a charger + reserve
-```
-
-Realized future waiting is deliberately excluded from that test —
-waiting is an outcome, and putting it in a decision-time condition would
-be leakage.
-
-```mermaid
-stateDiagram-v2
-    [*] --> AVAILABLE
-    AVAILABLE --> BUSY: assigned an order
-    BUSY --> AVAILABLE: order complete, still energy-eligible
-    BUSY --> CHARGE_DUE: SOC <= 10%, finishes current order first
-    AVAILABLE --> CHARGE_DUE: SOC <= 10%
-    CHARGE_DUE --> RESERVED: claims a free charger
-    CHARGE_DUE --> HOLDING: all chargers taken
-    RESERVED --> CHARGING: arrives, charges to 100%
-    HOLDING --> RESERVED: promoted when a charger frees (lowest SOC first)
-    CHARGING --> LEAVING: preempted (highest SOC) or full
-    LEAVING --> AVAILABLE: physically clear of the cell
-    LEAVING --> HOLDING: preempted and not energy-eligible
-```
-
-### 4. S0: making the decision *have* a decision in it
-
-This one is subtle and it was blocking the entire research programme.
-
-The allocator was handed a FIFO window sized by the number of free
-robots. Under continuous dispatch robots come free one at a time, so
-**62 of 71 allocation calls were 1 robot × 1 order**. Every strategy
-returns the same answer on a 1×1 decision. Hungarian, MILP and a greedy
-nearest rule would have produced *identical* output, and any comparison
-between them would have been meaningless.
-
-```text
-BEFORE (legacy)                      AFTER (S0)
-window = free robots                 window = fleet size
-
-  free: [r7]                           free: [r7]
-  window: [o12]                        window: [o12 o13 o14 ... o33]
-     |                                    |
-     v                                    v
-  only one pairing exists              22 pairings exist
-  -> every strategy agrees             -> strategies can disagree
-```
-
-Two fixes, both strategy-independent infrastructure:
-
-- **Candidate window `W = fleet_size`** — the order side of the decision
-- **Dispatch quantum** — briefly holds freed robots so several are
-  allocated together, fixing the robot side
-
-![decision shape](docs/figures/decision_shape.png)
-
-Forced decisions fall from **87.3% to 1.6%**, and with a measured 3.0 s
-quantum to **zero**, at no makespan cost. On 500 orders: 343/411 forced
-becomes 1/409.
-
-A liveness rule comes with it: if the FIFO prefix contains no assignable
-pair at all — say the head order is one no free robot can afford — the
-window extends down the queue until it finds one. Without it an
-unaffordable head order hides every feasible order behind it and the run
-stalls. No strategy ever chooses to skip an order; the infrastructure
-decides what is offered.
-
-### 5. Phase 8: the dataset that makes any of this evidence
-
-A simulator that prints a makespan is not a research platform. Every
-scored candidate pair is now recorded at decision time, and every order's
-realized outcome is recorded after execution, joined by `decision_id`.
-
-```mermaid
-flowchart LR
-    subgraph T["decision time t — knowable now"]
-        ST["State_t<br/>positions, SOC, queue, free robots"]
-        C["every scored candidate pair<br/>C_static, energy, eligibility"]
-        D["Decision_t<br/>selected = true/false"]
-    end
-
-    subgraph X["execution — the future"]
-        EX["traffic, waiting, charging, service"]
-    end
-
-    subgraph O["outcome — knowable only afterwards"]
-        OC["realized distance, waiting,<br/>energy, completion time"]
-    end
-
-    ST --> C --> D --> EX --> OC
-    OC -. "join on decision_id" .-> D
-
-    B1["decisions.parquet<br/>1973 rows x 39 cols"]
-    B2["outcomes.parquet<br/>100 rows x 22 cols"]
-
-    D --> B1
-    OC --> B2
-
-    style T fill:#dbeafe,stroke:#2f6fb4,stroke-width:2px
-    style O fill:#dcfce7,stroke:#2f9b6f,stroke-width:2px
-    style X fill:#f3f4f6,stroke:#6b7280
-```
-
-**The no-leakage boundary is proven, not documented.** A decision row is
-built before any mission is planned and is never touched again. The
-truncation test aborts a run immediately after a decision and asserts its
-decision rows are byte-identical to the same run carried through to
-completion. A leaked realized value could not survive that comparison.
-
-The dataset is deliberately **raw**: every feature is a number in its
-natural unit, never a discretized predicate like `battery_high`. Where a
-threshold goes is the learner's experiment, and freezing one into the
-dataset would mean re-running every experiment whenever it moved.
-
-Because the clock and the SOC ledger are exact rationals and Parquet has
-no rational type, exact values are stored twice — a `float64` column for
-analysis and a `"numerator/denominator"` string beside it. That is the
-difference between a run that is reproducible and one that is merely
-plottable.
-
----
-
-## Where the project actually stands
-
-Honest status. Nothing below claims a capability the repo does not have.
-
-```mermaid
-flowchart LR
-    P1["1-4 Simulator<br/>traffic, A*, Gazebo"]:::done
-    P6["6 Battery V1<br/>B0-B5"]:::done
-    P6b["6b S0<br/>window + quantum"]:::review
-    P8["8 Dataset<br/>decisions + outcomes"]:::review
-    P7["7 MRTA baselines<br/>slice 1 of 2"]:::review
-    P9["9 Experiment runner"]:::todo
-    P10["10-13 ILP<br/>Popper, outcome-aware"]:::todo
-    P14["14-16 Explanations<br/>evaluation, report"]:::todo
-
-    P1 --> P6 --> P6b --> P8 --> P7 --> P9 --> P10 --> P14
-
-    classDef done fill:#dcfce7,stroke:#2f9b6f,stroke-width:2px
-    classDef review fill:#fef3c7,stroke:#b4812f,stroke-width:2px
-    classDef next fill:#dbeafe,stroke:#2f6fb4,stroke-width:2px
-    classDef todo fill:#f3f4f6,stroke:#9ca3af
-```
-
-<sub>green = done and committed · amber = implemented, awaiting approval ·
-blue = next · grey = not started</sub>
-
-| Component | Status |
+| Component | State |
 |---|---|
-| Deterministic simulator, directed A*, one-way traffic | **done**, verified |
-| Gazebo / RMF mirror | **done**, verified |
-| Battery V1 (B0–B5: SOC, eligibility, charging, holding, preemption) | **done**, committed |
-| Battery V1 B6a (`order_makespan` split) | **done**, committed |
-| Battery V1 B6 rest (battery decision/outcome metrics) | not started |
-| G6 end-of-work partial charging; held-out transfer map | deferred requirements |
-| S0 candidate window + dispatch quantum | **done**, committed |
-| Decision/outcome dataset (Phase 8) | **done**, committed; accepted foundation |
-| MRTA strategies, slice 1 (`random`, `nearest_manhattan`, `nearest_astar`) | **done**, committed; accepted foundation |
-| MRTA strategies, slice 2 (Earliest Finish, Multi-Criteria, Auction, Hungarian, MILP) | **done**, committed; accepted foundation |
-| Experiment runner (paired seeds, E1 integrity) | **done**, committed |
-| M0: decision linkage, failure classes, quantum/window per experiment, strategy identity, seed split | implemented, awaiting review |
-| Holm / Wilcoxon statistics, spatial workload variants | not started |
-| Popper / ILP / learned rules | **not started** — Popper v4.4.0 installed and smoke-tested |
-| Explanations | `strategy.explain()` returns one line |
-| Any map, drawn in Excel with its own one-way lanes | **done**, awaiting approval — see [MAKE_A_MAP.md](docs/MAKE_A_MAP.md) |
-| Breaking a deadlock once robots form a waiting circle | **done** for a rotation inside one movement batch (rotation right-of-way, aa77ee0); a cycle through a robot outside the batch still stalls |
+| Directed A*, deterministic execution, one-way local traffic, W100 | Implemented |
+| Battery B0–B5 and B6a order/recovery accounting | Implemented; remaining B6 metrics pending |
+| Eight conventional allocation strategies | Implemented |
+| Decision/outcome tables, raw CSV/Prolog export | Implemented |
+| Matrix runner, paired workloads and 95% paired t intervals | Implemented; Holm/Wilcoxon pending |
+| GUI Stages 1–6, observation/history/experiments/reports | Delivered in GUI worktree |
+| Research M0 | Committed `163c6a4` |
+| Research M1 | Local partial diagnostics; **current feature-report test fails** |
+| M2 data/bias/predicates, single-/multi-teacher and outcome-aware ILP | Pending |
+| Held-out transfer map and G6 end-of-work partial charging | Deferred requirements |
 
-> **About the ICAPS'26 talk.** The ILP results presented there
-> (makespan tables for fleet sizes 5/10/15/20) came from an **earlier,
-> different workspace**. They are **not reproducible from this
-> repository**, which does not yet contain an ILP implementation. This
-> repo is the grid-aware, outcome-aware successor being built to make
-> such results reproducible.
+M1 currently fails on duplicate `route_cells` columns during feature association reporting. Latest full research verification: **619 passed, 1 failed**. Existing M1 pilots predate the latest reliability changes and remain exploratory.
 
-### The strategies that exist
+## Run headless
 
-| Strategy | Ranks pairs by | Role |
-|---|---|---|
-| `nearest_astar` | `C_static`, the legal directed route | the grid-aware baseline |
-| `nearest_manhattan` | Manhattan chain, ignoring walls and lanes | the deliberately naive control |
-| `random` | a seeded shuffle | the lower bound |
-
-All three are the same greedy sweep over a different ordering, so they
-differ by their ranking and by nothing else. On 22 robots / 100 orders
-/ seed 42:
-
-| Strategy | Makespan | Distance | Waiting |
-|---|---|---|---|
-| `nearest_astar` | 268.6667 s | **5798.0 m** | 305.3333 s |
-| `nearest_manhattan` | 265.3333 s | 5974.0 m | 325.3333 s |
-| `random` | 266.6667 s | 6488.0 m | 258.0000 s |
-
-Distance orders exactly as theory predicts — grid-aware beats naive
-beats none, by +3.0% and +11.9%. **Makespan does not order the same
-way**, and that is a finding, not a defect: the printed makespan
-includes end-of-work recovery and is set by whichever robot finishes
-last after traffic, so on a single seed it is a noisy signal for
-allocation quality. Distance is the clean one.
-
-A strategy is accepted only after the distinctness gate, which measures
-a counterfactual — one strategy drives the run and each rival is asked
-the same question at every decision:
+Requires the locked Pixi environment (`pixi install` on a fresh checkout). From either repository root:
 
 ```bash
-PYTHONPATH=$PP $PY src/simulation_env/scripts/check_strategy_distinctness.py
+export PY="$PWD/.pixi/envs/default/bin/python"
+export PYTHONPATH="$PWD/src/mrta_core:$PWD/src/simulation_env:$PWD/src/task_management"
+"$PY" src/simulation_env/scripts/run_workload.py \
+  --robots 6 --orders 12 --strategy nearest_astar \
+  --quantum 0 --seed 42 --quiet --progress 0
 ```
 
-Every pair currently diverges on 60–97% of choice-bearing decisions,
-against a 5% threshold.
+Verified W100: **12/12 complete, 6/6 parked, 1,402 m, zero waiting/violations**. Printed makespan 212.3333 s is **fleet settled time**, including recovery.
 
-### Measured baselines
-
-All three are the same orders, same map, same fleet, same strategy
-(`nearest_astar`). Only the decision shape differs:
-
-![baseline trade-off](docs/figures/baseline_tradeoff.png)
-
-| Configuration | Makespan | Distance | Waiting | Forced 1×1 |
-|---|---|---|---|---|
-| `legacy` (pre-S0 window) | 282.0000 s | 6430.0 m | 264.6667 s | 62/71 (87.3%) |
-| `fleet_size`, continuous | 268.6667 s | 5798.0 m | 305.3333 s | 1/64 (1.6%) |
-| `fleet_size`, 3.0 s quantum | 264.6667 s | 5716.0 m | 376.3333 s | 0/33 (0%) |
-
-Batching buys decision quality and costs waiting time — robots stand
-still on purpose while the window fills. Continuous dispatch stays the
-default and the headline configuration; the batched scenario is a
-separate config, not a new default.
-
-Every figure above is generated from recorded datasets by
-`scripts/plot_dataset.py`, so no number in this README is hand-typed.
-
----
-
-## Run it in five minutes
-
-### Prerequisites
-
-- [pixi](https://pixi.sh) for the headless science environment
-- ROS 2 Jazzy + Gazebo for the live visualization (optional)
-
-Two interpreters are in play and **mixing them is the most common
-mistake**:
-
-| Interpreter | Use for | Why |
-|---|---|---|
-| `.pixi/envs/default/bin/python` | headless science, every `scripts/*.py` | has numpy / scipy / pyarrow |
-| ROS 2 Jazzy python | anything started with `ros2` | needs `rclpy` |
+Record a fresh dataset:
 
 ```bash
-cd ~/rnd_mrta_ilp_ws
-
-export PY=.pixi/envs/default/bin/python
-export PP=src/mrta_core:src/simulation_env:src/task_management
+RUN="runs/demo_$(date +%Y%m%d_%H%M%S)"
+"$PY" src/simulation_env/scripts/run_workload.py \
+  --robots 10 --orders 50 --strategy nearest_astar \
+  --quantum 0 --seed 42 --dataset "$RUN" --export --quiet --progress 0
 ```
 
-### 1. Does it work?
+Writes `run.json`, `metrics.json`, decision/outcome tables and optional CSV/Prolog exports. `order_makespan_s` is final dropoff; `fleet_recovery_time_s` / legacy `makespan_s` includes recovery. Always use a fresh output directory. `--seed` changes allocation randomness, not the workload file.
+
+## Gazebo and dashboard demo
+
+Run these from the **GUI worktree**. Detailed prerequisites/build/recording/topic/shutdown instructions are in the [handover](docs/PROJECT_HANDOVER.md).
 
 ```bash
-pixi run test      # 317 tests
-pixi run lint      # ruff
-```
-
-### 2. Run a workload headless
-
-No ROS, no Gazebo — the execution path on its own:
-
-```bash
-PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py
-```
-
-22 robots, 100 orders. Expect `makespan 268.6667 s`, `5798.0 m`, 100/100
-completed. It is deterministic: the same command always prints the same
-numbers.
-
-Useful variations:
-
-```bash
-# smaller and faster
-PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py --orders 12 --robots 6
-
-# reproduce the pre-S0 baseline exactly
-PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py --window legacy
-
-# batched dispatch: every decision becomes choice-bearing
-PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py --quantum 3.0
-```
-
-### 3. Record a dataset
-
-```bash
-PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
-    --quiet --progress 0 --dataset runs/astar --export
-```
-
-Writes `runs/astar/`:
-
-```text
-decisions.parquet   one row per scored (robot, order) candidate pair
-outcomes.parquet    one row per order
-run.json            provenance; run_id, input hashes, git state
-decisions.csv       --export: the same tables as text
-outcomes.csv
-bk.pl               --export: ground facts for an ILP learner
-exs.pl              --export: pos/neg examples
-```
-
-Recording is observation only — the makespan must be identical to a run
-without `--dataset`. Check the ILP input:
-
-```bash
-grep -c '^pos(' runs/astar/exs.pl    # 100, one per order
-grep -c '^neg(' runs/astar/exs.pl    # 1873 eligible pairs passed over
-head -20 runs/astar/bk.pl
-```
-
-### 4. Regenerate the figures in this README
-
-The committed figures compare three configurations, so all three have to
-be recorded first — pass fewer and you will overwrite them with a
-narrower picture:
-
-```bash
-PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
-    --quiet --progress 0 --window legacy --dataset runs/legacy
-PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
-    --quiet --progress 0 --dataset runs/astar
-PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
-    --quiet --progress 0 \
-    --quantum 3.0 \
-    --dataset runs/batched
-
-MPLBACKEND=Agg PYTHONPATH=$PP $PY src/simulation_env/scripts/plot_dataset.py \
-    --run legacy=runs/legacy \
-    --run continuous=runs/astar \
-    --run batched=runs/batched \
-    --totals legacy=282.0,6430.0,264.6667 \
-    --totals continuous=268.6667,5798.0,305.3333 \
-    --totals batched=264.6667,5716.0,376.3333 \
-    --out docs/figures
-```
-
-Totals are passed on the command line because makespan, distance and
-waiting are properties of the *run*, not of a decision or an order, so
-they are not dataset columns. They come from each run's own `RESULT`
-block.
-
-### 5. Watch it in Gazebo
-
-```bash
+cd /home/ibrahim/rnd_mrta_ilp_ws
 source /opt/ros/jazzy/setup.bash
-colcon build --packages-select \
-    mrta_core task_management simulation_env rmf_grid_traffic \
-    robot_interfaces gazebo_fleet_pose_transport
 source install/setup.bash
-
-ros2 launch simulation_env warehouse_sim.launch.py orders:=true
-
-# only the first 50 logical orders, as headless --orders 50
-ros2 launch simulation_env warehouse_sim.launch.py orders:=true order_limit:=50
-```
-
-Gazebo is a **mirror**, never a second planner. The scientific engine
-remains the source of truth, and the live path records the same dataset:
-
-```bash
 ros2 launch simulation_env warehouse_sim.launch.py \
-    orders:=true dataset:=runs/live
-
-cmp runs/live/decisions.csv runs/astar/decisions.csv   # identical
+  orders:=true robots:=10 order_limit:=50 strategy:=nearest_astar \
+  quantum:=0 verbose:=false progress:=10.0
 ```
 
-The node runs on the system interpreter where pyarrow is usually absent,
-so a live run writes CSV instead of Parquet. That is expected; the
-manifest records which format was used and both are lossless.
+`orders:=true` is required. The ROS node remains alive after completion; Ctrl+C stops the launch. Starting Gazebo can close an existing matching world/partition. `headless:=true` means Gazebo server without a GUI; `run_workload.py` is the no-ROS path. The old `real_warehouse_gazebo_demo.py` imports a removed module and is not a supported entry point.
 
-### 6. Run the verification gates
+In a separate terminal:
 
 ```bash
-for f in src/simulation_env/scripts/check_*.py; do
-    PYTHONPATH=$PP $PY "$f" || echo "FAILED: $f"
-done
-
-PYTHONPATH=$PP $PY src/simulation_env/scripts/check_map_topology.py \
-    --config src/simulation_env/test/fixtures/v2_reference.yaml
+cd /home/ibrahim/rnd_mrta_ilp_ws
+python3 src/dashboard_GUI/scripts/launch_control_center.py check
+python3 src/dashboard_GUI/scripts/launch_control_center.py start
 ```
 
-`check_map_topology.py` needs `--config`;
-`verify_nav_graph.py` needs `--config` and `--graph`.
+Open [127.0.0.1:5173](http://127.0.0.1:5173/). Operations launches/previews jobs; History inspects tables; Experiments reads grids and comparisons. Captured-sample playback is separate from scientific re-execution. **Ctrl+C in the launcher terminal stops both services**; there is no `stop` subcommand.
 
-> One known pre-existing failure:
-> `rmf_grid_traffic/scripts/real_warehouse_traffic_demo.py` aborts with
-> "No synchronous conflict found". Its premise is stale — one-way aisles
-> removed the head-on conflicts it searches for. The behaviour it
-> visualises is still covered by three passing validators. Tracked in
-> `.scratch/traffic-demos/issues/01-...md`.
+## Eight allocation strategies
 
----
+Let C be legal whole-order directed route distance, T=C/speed+configured service, and N per-decision min–max normalization. All use shared route/energy eligibility and matching constraints.
 
-## How a run actually works
-
-```mermaid
-sequenceDiagram
-    participant Q as OrderQueue (FIFO)
-    participant W as WorkloadExecutor
-    participant A as Allocation strategy
-    participant R as Directed A* router
-    participant E as FleetSimulationEngine
-    participant D as RunRecorder
-
-    E->>W: tick — robots are free
-    W->>W: dispatch quantum: hold briefly to batch
-    W->>Q: candidate window (W = fleet_size)
-    Q-->>W: FIFO orders, extended if none assignable
-    W->>R: score every (robot, order) pair
-    R-->>W: C_static, route, energy requirement
-    W->>W: battery eligibility mask (hard constraint)
-    W->>D: record every candidate — before anything is planned
-    W->>A: choose among eligible pairs
-    A-->>W: assignment
-    W->>E: assign missions as one batch
-    E->>E: traffic arbitration, service, battery drain
-    E-->>W: order complete at the dropoff
-    W->>E: retreat to the aisle
-    E-->>W: robot retired
-    W->>D: record the realized outcome
-```
-
-Two details that are easy to get wrong, and that the tests pin:
-
-**Why the outcome is recorded at retirement, not at the dropoff.**
-`C_static` includes the post-dropoff retreat because the energy equation
-requires it. Recording the outcome at the dropoff made every order read
-exactly 1 m short of its prediction — a constant bias on every
-predicted-vs-realized comparison. `completed_at` is still the dropoff
-instant, because that is when the order is fulfilled;
-`retreat_finished_at` records the rest.
-
-**Why per-order distances sum to less than the fleet total.** 5269.0 m
-of 5798.0 m. The difference is travel between orders — end-of-run
-parking trips and charger trips — which belongs to no order and is
-correctly excluded.
-
----
-
-## Repository layout
-
-```text
-src/
-  mrta_core/            the science, no ROS
-    warehouse_map*.py     Excel map loading: zones, walls, drawn lanes
-    map_builder.py        make maps: blank, example, export with arrows
-    map_check.py          the drawing checker (dead ends, rotaries, ...)
-    warehouse_routing.py  one-way lane policy, directed A*, missions
-    order_queue.py        FIFO queue and the candidate window
-    orders.py             order schema and lifecycle
-    sim_config.py         one config object drives everything
-  simulation_env/       simulation and execution
-    workload_executor.py  orchestration: window, quantum, dispatch
-    fleet_engine.py       the clock, events, booking
-    battery_ledger.py     the one SOC record
-    dataset.py            Phase 8 schemas, RunRecorder, manifest
-    dataset_export.py     CSV and ground Prolog facts
-    fleet_node.py         the ROS node (mirror, not a planner)
-    scripts/              everything you run; see scripts/README.md
-    maps/                 the Excel map (W100); new maps go here too
-    config/               scenario configs and order lists
-  task_management/      allocation_strategy.py — the registry
-  rmf_grid_traffic/     RMF nav graph generated from the lane rules
-  robot_interfaces/     ROS messages
-  gazebo_fleet_pose_transport/
-
-docs/                   START_HERE, MAKE_A_MAP, the contract; old docs in archive/
-.scratch/               local issue tracker
-```
-
-### Adding a strategy
-
-```python
-from task_management.allocation_strategy import (
-    BatchAllocationStrategy,
-    OrderAssignment,
-    register_batch,
-)
-
-
-@register_batch
-class MyStrategy(BatchAllocationStrategy):
-    name = "my_strategy"
-
-    def assign(self, warehouse, robots, orders, fifo_position,
-               cache=None, battery=None):
-        # score() is shared by every strategy: one routing
-        # implementation, so costs are comparable across strategies.
-        candidates = [
-            c
-            for c in self.score(
-                warehouse, robots, orders, fifo_position, cache, battery
-            )
-            if c.eligible          # the battery mask is not negotiable
-        ]
-
-        # ... choose among them, at most one order per robot ...
-        return [OrderAssignment(...)]
-```
-
-Then `--strategy my_strategy`. Three rules the executor enforces rather
-than trusts:
-
-- **Never re-score the route.** Use the shared `score()`, or costs stop
-  being comparable between strategies.
-- **Only `eligible` pairs.** The executor re-checks every returned pair
-  and raises rather than execute an ineligible one.
-- **Be deterministic.** Break ties on `(cost, fifo_position, robot_id)`,
-  never on dict iteration order.
-
-A new strategy must also produce behaviour **meaningfully distinct**
-from the existing ones on at least one controlled scenario — two names
-for the same behaviour is not a comparison.
-
----
-
-## Documentation: what to read, in what order
-
-To use it: [docs/START_HERE.md](docs/START_HERE.md), then
-[docs/MAKE_A_MAP.md](docs/MAKE_A_MAP.md).
-
-The development contract — treat these as authoritative:
-
-| Document | What it is |
+| CLI strategy | Actual selection rule |
 |---|---|
-| [docs/CURRENT_PHASE.md](docs/CURRENT_PHASE.md) | **the exact implementation state** and the current acceptance report |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | frozen research and engineering choices, with the reasoning |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | phase plan and gates |
-| [docs/EXPERIMENT_PROTOCOL.md](docs/EXPERIMENT_PROTOCOL.md) | fair experimental methodology |
-| [CLAUDE.md](CLAUDE.md) | agent development rules; also the clearest statement of the project's boundaries |
+| `random` | Canonical eligible-edge list, seeded shuffle, greedy matching |
+| `nearest_manhattan` | Greedy on minimum Manhattan shelf-chain; still drives legal A* routes |
+| `nearest_astar` | Greedy on directed distance C |
+| `earliest_finish` | Greedy on estimated mission finish T, without future waiting |
+| `multi_criteria` | Greedy on 0.5N(T)+0.2N(FIFO)+0.2N(-energy margin)+0.1N(charger distance) |
+| `auction` | FIFO sequential single-item auction, cheapest eligible free robot bids C |
+| `hungarian` | Maximum-cardinality matching, then minimum total C |
+| `milp` | Maximum-cardinality matching, minimum latest T, then minimum total T |
 
-Going deeper:
+See [section 9 of the handover](docs/PROJECT_HANDOVER.md#9-eight-strategies-exact-formulation-and-implementation) for constraints, tie-breakers and the two-stage MILP. Optimizers solve each current decision, not the entire future workload. q=0 frequently gives one free robot; q=3 provides richer batches. Research’s primary planned condition is q=3, secondary q=0. The GUI matrix runner uses its config q=0.
 
-| Document | What it is |
+## Recent recorded experiments and graphs
+
+### Completed 50-robot pilot — conventional strategies, q=0
+
+W100 · 200 orders · seeds 1–3 · eight strategies · **24/24 complete**, matched workload hashes/settings, zero reservation violations. The two saved pilot repetitions have the same scientific values; they do not provide six independent seeds.
+
+| Strategy | Mean order makespan (simulated s) |
+|---|---:|
+| nearest_astar | 393.22 |
+| milp | 396.56 |
+| earliest_finish | 398.22 |
+| hungarian | 402.22 |
+| multi_criteria | 403.56 |
+| auction | 412.89 |
+| nearest_manhattan | 416.44 |
+| random | 427.89 |
+
+![Measured pilot and paired differences](docs/figures/handover_pilot_r50.png)
+
+Three seeds do not establish a general winner. These are exploratory pre-M0/dirty-source GUI results. **No charging sessions occurred**; minimum SOC exceeded about 65.8%. Left graph ranges are min–max; right graph intervals are paired 95% t intervals without multiple-comparison correction.
+
+Latest local study: `src/dashboard_GUI/var/runs/experiments/pilot_r50_o200_20261028_123625/`. The [pilot result snapshot](docs/handover/2026-10-28/pilot_summary.csv) is included in the documentation. The full offline pilot report remains in the GUI worktree’s ignored `var/reports/` folder; its exact open command is in the handover.
+
+### Stored M1 diagnostics — exploratory, no learned policy
+
+![Stored M1 residuals and static margins](docs/figures/handover_m1_diagnostics.png)
+
+Six conditions use **Nearest A*, seed 101, 300 orders** (30/70/100 robots × q=0/3). At 100/q3 the realized residual accounts for 23.93% of mission duration; 58.7% of comparable selected cases exceed their static margin. **This does not prove ranking reversal, learnability or policy improvement.** The 70/q3 pooled residual share is 5.60%. No charging occurred. Stored artifacts predate the latest diagnostic fixes, and the current feature reporter fails.
+
+The older hardcoded overview plot is preserved but is superseded for current claims by these CSV-derived figures.
+
+### Historical sustained workload
+
+![Historical 2,000-order fleet sweep](docs/figures/handover_legacy_fleet_sweep.png)
+
+15 historical runs cover 30/40/50 robots: three A*, three Manhattan and nine Random runs (allocation RNG seeds 1–3), with charging activity. Their version-1 makespan includes recovery; they lack order-makespan accounting and are not a current repeated-workload M0 study. Old manifests also retain seed 42 while summary/directory RNG labels use 1–3; retain this provenance limitation.
+
+Graphs’ input summaries/manifests and SHA256 provenance are retained in [the evidence bundle](docs/handover/2026-10-28/figure_provenance.json), so the README does not depend on ignored local datasets for its numeric overview.
+
+## ILP status and next research work
+
+Popper v4.4.0 (`860cd0de…`), SWI-Prolog, Clingo and Janus are installed and imports were checked. Raw `bk.pl` / `exs.pl` exports exist. They are **teacher-choice facts**, not learned rules or outcome labels. No production Popper training command or learned allocator exists yet.
+
+Next research work: restore the M1 report gate, regenerate valid diagnostics, freeze labels/splits, build run-scoped predicates/bias/sampling (M2), reproduce Nearest A* with Popper (M3), then single-teacher, multi-teacher, outcome-aware learning and explanations. Training seeds 101–110, validation 111–115, evaluation 1–30; preserve reserved final 201–230. The existing plan targets 20 December 2026.
+
+Prior ICAPS ILP charts came from a different workspace and cannot be reproduced as learner results from this repository.
+
+## Files, results and logs
+
+| Location | Contents |
 |---|---|
-| [docs/00_RUNBOOK.md](docs/00_RUNBOOK.md) | **every command**, executed and verified |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | how the code is wired: execution path, component map, invariants, file index |
-| [docs/18_TRAFFIC_TOPOLOGY.md](docs/18_TRAFFIC_TOPOLOGY.md) | the one-way lane policy: why, and what it costs |
-| [docs/19_MAP_V2_MIGRATION.md](docs/19_MAP_V2_MIGRATION.md) | how the V2 map was built |
-| [docs/README.md](docs/README.md) | index of all documents |
+| `src/mrta_core/` | Maps/config/orders, routing, energy and shared models |
+| `src/task_management/` | Candidate features and eight allocators |
+| `src/simulation_env/` | Execution, traffic/charging, data/metrics, CLI scripts and ROS/Gazebo launch |
+| `src/rmf_grid_traffic/`, `src/gazebo_fleet_pose_transport/` | RMF static checks/demos and pose transport |
+| `src/dashboard_GUI/` | GUI backend/frontend/launcher/docs on the integration branch |
+| `runs/` | CLI scientific datasets/experiments, ignored |
+| `src/dashboard_GUI/var/` | App runs/jobs/recordings/logs/reports/SQLite, ignored |
+| `log/` | Colcon build logs; live ROS logs are under `~/.ros/log/` |
+| `.scratch/` | Research issue/spec/review records |
+| `docs/handover/2026-10-28/` | 606-file catalogue, 2,582-output index, 181 manifest records, selected CSV evidence and audit logs |
 
-The older documents `01`–`17` and the 2026-08-29 audit are in
-`docs/archive/`. They describe the repository as it was then and
-several of their claims are now wrong; [docs/README.md](docs/README.md)
-lists which. **Do not learn the system from them.**
+Git does not transfer ignored datasets/reports/environments. [The full catalogue](docs/handover/2026-10-28/FILE_CATALOG.md) maps each project-owned file to its role and entry points. [The handover](docs/PROJECT_HANDOVER.md) explains each run artifact, exact output paths, failure semantics and troubleshooting.
 
----
+## Verification and documentation authority
 
-## What comes next
+Fresh audit: GUI scientific suite **562 passed**; research **619 passed, 1 failed**; GUI backend **152 passed**; frontend **22 passed**, typecheck/build passed. Small W100/V2 runs, topology, RMF static checks and transport parser were checked. No new live Gazebo/dashboard session or large campaign was launched for this documentation task. No production code changed or commit was made.
 
-1. **Phase 7, slice 1** — Random and Nearest Manhattan. The first real
-   strategy comparison, and the first use of the dataset as evidence.
-2. **Phase 9** — the experiment runner: map × fleet × workload ×
-   strategy × seed, with manifests.
-3. **Phase 10+** — Popper integration, Single-Teacher → Multi-Teacher →
-   Outcome-Aware ILP, then explanations.
+Use the current README, [freeze summary](docs/CURRENT_PHASE.md) and [handover](docs/PROJECT_HANDOVER.md) first. Older sections in runbooks/stage diaries are historical and may use superseded defaults/counts.
 
-The project will not claim to be outcome-aware until outcome-derived
-labels or weighting are actually implemented and evaluated.
-
----
-
-## Conventions worth knowing
-
-- **Scientific time is simulated time.** Never wall-clock. Planning CPU
-  time is reported separately and never enters a result.
-- **`robot_id` is traceability only.** It may break a tie when every
-  meaningful value is equal. It is never a scientific predicate or a
-  learned feature.
-- **Order schema is frozen**: `order_id,item_id,shelf_id,quantity,dropoff_id`.
-  No priority, release time, deadline or battery fields without an
-  approved scope change.
-- **Determinism is a property, not a hope.** The same command produces
-  byte-identical datasets. Two runs of the same configuration were
-  compared with `cmp` to confirm it.
+- [Documentation index](docs/README.md)
+- [Frozen decisions](docs/DECISIONS.md) · [Research plan](docs/ROADMAP.md) · [Experimental protocol](docs/EXPERIMENT_PROTOCOL.md)
+- [Architecture](docs/ARCHITECTURE.md) · [Map authoring](docs/MAKE_A_MAP.md)

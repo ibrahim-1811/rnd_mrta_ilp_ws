@@ -1,0 +1,38 @@
+digraph allocation {
+rankdir=TB;
+graph [fontname="DejaVu Sans",fontsize=18,bgcolor="white",pad="0.25",nodesep="0.30",ranksep="0.48",splines=polyline];
+node [shape=box,style="rounded,filled",fillcolor="#edf5fc",color="#83aac5",fontcolor="#183044",fontname="DejaVu Sans",fontsize=15,margin="0.18,0.12",penwidth=1.3];
+edge [color="#54758c",fontcolor="#3e5d73",fontname="DejaVu Sans",fontsize=11,arrowsize=0.75];
+
+start [label="Decision trigger
+free robot / dispatch quantum reached",shape=oval];
+window [label="Offer FIFO candidate window
+W = fleet size by default"];
+features [label="Score every robot–order pair
+C_static · estimated finish · energy requirement"];
+mask [label="Any reachable and
+energy-eligible pair?",shape=diamond,fillcolor="#f8f2e5"];
+extend [label="Extend FIFO prefix when possible
+otherwise defer / shared charging workflow"];
+choose [label="Selected allocation strategy
+Random · Manhattan · A* · Earliest Finish
+Multi Criteria · Auction · Hungarian · MILP"];
+decision [label="Capture decision-time record
+candidate features + selected flag
+BEFORE mission execution",fillcolor="#eef8f2",color="#91b6a0"];
+check [label="Validate returned ownership
+one order per robot; eligible pairs only"];
+execute [label="Shared mission execution
+legal route → traffic → shelf service
+→ dropoff → final retreat"];
+outcome [label="Capture realized outcome at retirement
+travel · waiting · service · energy
+join to the original deciding decision",fillcolor="#eef8f2",color="#91b6a0"];
+next [label="Still pending / active work?",shape=diamond,fillcolor="#f8f2e5"];
+settle [label="Settle fleet / finish recovery
+write successful artifacts and metrics",shape=oval];
+start -> window -> features -> mask;
+mask -> extend [label="No"];extend -> window [label="later decision",style=dashed];
+mask -> choose [label="Yes"];choose -> decision -> check -> execute -> outcome -> next;
+next -> start [label="Yes",style=dashed];next -> settle [label="No"];
+}

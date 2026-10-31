@@ -1,5 +1,7 @@
 # Start here
 
+> **28 October 2026 documentation freeze:** use [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) for current headless, Gazebo and dashboard demos. This older guide contains historical three-strategy/default/test-count references. Current code has eight strategies; research M1 has one failing report test.
+
 From an empty computer to robots running in Gazebo, in plain steps.
 Every command was run on 2026-10-23 and its real output is shown, so
 you can tell whether yours worked.

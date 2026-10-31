@@ -1,0 +1,607 @@
+workspace,path,bytes,sha256,purpose
+gui,.claude/agents/phase-coder.md,3086,03791c4469a8613bcf5631db64fca0297697d39826f178b42ceec3ec62cc1671,Repository support file; inspect linked source
+gui,.claude/settings.local.json,1527,2b3c7a68cd642e39509d06ec9249d3418f2d2e661b0c9111c2bf540da9ffc8bc,Repository support file; inspect linked source
+gui,.codex/agents/phase-coder.toml,3084,c6a3afe7deb4b9cc8e2dd88dbbc5ba507b5a7c5c1bed5f023c01f75bb444566c,Repository support file; inspect linked source
+gui,.gitignore,496,7af163558394497d46803cc49acc06102de5c565343a7b648f9e3a3340b770b0,Repository support file; inspect linked source
+gui,.scratch/traffic-demos/issues/01-real-warehouse-traffic-demo-finds-no-conflict.md,2350,c44b53bad6a255e2c37c505c6fc41f98866d75dac5a06f5dfb7af2f6aacb70cd,Repository support file; inspect linked source
+gui,.scratch/traffic-liveness/issues/01-cyclic-deadlock-under-scattered-allocation.md,9801,e09d2e18d80b0ac1e61d4fb8aa546954f8d30681f6d9bd69c5aa8197b9152644,Repository support file; inspect linked source
+gui,26.2.2,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,Repository support file; inspect linked source
+gui,AGENTS.md,8407,fe9f06ccd92570b39c07881edeef8d414e02bfec5d14df08d8a56b1a782cba2f,Repository development contract; current task is documentation only
+gui,CLAUDE.md,8407,83bad375fa4be76c315bcbfd14c075ab4fc104e6a8a1943c73b94b94eb6ba9bf,Repository development contract; current task is documentation only
+gui,ICAPS 26 PlanRob Presentation.zip,1555433,b793975400cf929ec54b25bc8244271974e6149f08b93cd44ab837f7dec06b56,Repository support file; inspect linked source
+gui,README.md,29397,1fdfdffbd81e7b620c4eb47c7f650b9407f1e5c8091f5872c8efae7c8ce256dd,Repository support file; inspect linked source
+gui,docs/00_RUNBOOK.md,49298,c4510ab60cc2f24271df6de44901ecb25d3cd8cec23232c5bda498f16f2eacaa,Project documentation / architecture / decision or operating record
+gui,docs/18_TRAFFIC_TOPOLOGY.md,6954,6111ae819fdf35bd1ebb8663baeb6edf589c87744a03038634f8c9187334edab,Project documentation / architecture / decision or operating record
+gui,docs/19_MAP_V2_MIGRATION.md,15169,1aa731396f8790e53ee5dd3bc36ef6895b201c3d28a03d141219263d4118d8e4,Project documentation / architecture / decision or operating record
+gui,docs/ARCHITECTURE.md,36678,13bc48f86839ef69674e18812cf8d2af56990f7d4cb2c0010f1fec7859b31e5a,Project documentation / architecture / decision or operating record
+gui,docs/CODE_MAP.md,318740,e85aedc2010c9c19e7af447bbd2e3abda3569359277af4148c5fce7478e2e28b,Project documentation / architecture / decision or operating record
+gui,docs/CURRENT_PHASE.md,106750,c1ed7084b9a8863b4535c4a46a9b1111dd2f049b600a36c842ea1407e0c71d42,Project documentation / architecture / decision or operating record
+gui,docs/DECISIONS.md,55392,824f2b823cf41aecb72a687a85c4158e5aecdc9e5185f5f419821adb8d55dcc0,Project documentation / architecture / decision or operating record
+gui,docs/EXPERIMENT_PROTOCOL.md,13596,6058488dd44e4333840664a30b7b58598252d1810e6ebaef8f297c13738f347b,Project documentation / architecture / decision or operating record
+gui,docs/HOW_IT_WORKS.md,19938,4b184054d117240fa06bd9e4ec8e06aed214dd790d0b5e9a3d42aeb4727d057f,Project documentation / architecture / decision or operating record
+gui,docs/MAKE_A_MAP.md,11936,6ef226a2f4b5475aa0851f655e810e4976dece4f763c79dd7084e7bf7c194437,Project documentation / architecture / decision or operating record
+gui,docs/README.md,4054,cc001b54b2dd537fd2c9a0accc85de3187b182aed3f064576e25638f1a21b020,Project documentation / architecture / decision or operating record
+gui,docs/REPO_ATLAS.html,706040,23301976f2e4369c87787d0956b212e46c6d8db552a967c82f3774b78c8f6daa,Project documentation / architecture / decision or operating record
+gui,docs/REPO_MAP.xmind,66165,ba07dab0b9b8cf0aad7095f39a534eebd270b19888af1846f7176e73114848a0,Project documentation / architecture / decision or operating record
+gui,docs/RND_SYSTEM_EXPLORER.html,657154,55256f255f4ed0e18dbd44836a6ba691285fd0edcb948a7d1fc2806b56c6fbb1,Project documentation / architecture / decision or operating record
+gui,docs/ROADMAP.md,15966,4853e37f59bb25393ac86e2cbe5fa46c836508f51ed51d700a78af742e9535d2,Project documentation / architecture / decision or operating record
+gui,docs/START_HERE.md,21627,d140e11a4e9b55ed7e209276e2056ae064ac4bd193f8e2e6725b31e149e4e4fa,Project documentation / architecture / decision or operating record
+gui,docs/agents/domain.md,1832,aefa95a4589d4111c7d06aacc4bf99d0212b23aa63ad8f2687123251b214211f,Project documentation / architecture / decision or operating record
+gui,docs/agents/issue-tracker.md,1810,7dcda20a2eb4bdc89b95d1143423c0691309921cadae3132e6424f371030506e,Project documentation / architecture / decision or operating record
+gui,docs/agents/triage-labels.md,1045,4f53c9b40ce2651e3611aa090eaedbd6dbc9b71ef8c5f7e65eac0d8263190d0d,Project documentation / architecture / decision or operating record
+gui,docs/archive/01_PROJECT_OVERVIEW.md,3734,f1b4cedd8242601c95f30019c4db04b1fb0382828ce87c1b241ea6b653fc8199,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/02_SYSTEM_ARCHITECTURE.md,7466,bf5403bc2de2e625e7637b42bf739208efb4d9ecc2b27b559085a7b307b029f3,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/03_REPOSITORY_STRUCTURE.md,5628,a5ef90fac2859810cb27f2d4e8b012ee4c55f154507b4983528636ccc96ddcdb,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/04_ROS2_PACKAGES.md,7388,16679025e5b3665cc5a12eacb1abc964cd44745c8ee6aaad38647d0f7f8b9bdb,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/05_MRTA_ALGORITHMS.md,10856,c91c1c4de5d2b51ba84ff7db110bd1f28f57c318f581781c92394e8b1fd42834,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/06_OUTCOME_AWARE_ILP.md,7800,1fe52427e721198efa080eba58e96c7b8e541e14f13a2a9e233998c3b52e5d09,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/07_GRID_AND_PATH_COST.md,11353,237ffa6289b5ef53e7e2140e00294a1f44abfe250dc275258d8a914f3071204c,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/08_EXPLAINABILITY.md,6010,7a3b46598d90d569b329a6572f8e23c58addfbc092329ac6e2d973fadeed8367,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/09_BUILD_AND_INSTALL.md,5250,ec82fe77e911e93ba0a47e732a5c7d01b8d8b696c38276356ee1a8b9569af0b2,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/10_LAUNCH_GUIDE.md,9218,ea0c5e59c503a85b87b451da8c2261d140f97b13b68957cec8925ee369340154,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/11_SIMULATION_GUIDE.md,6271,f54fe9d4e9f1f7457acce06d8e79d67fdbe4dbe6a9135914fea671cc072e135d,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/12_EXPERIMENTS.md,9085,aba431837ee2050327d427f99e48f5aba8f8c79732a3635679bf70df1bf82d11,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/13_METRICS_AND_OUTPUTS.md,8765,49d47fb9c0bd94ad9af0664b287fe516a1a2ee372ef1a04c903a6f3729d4f2e9,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/14_TESTING.md,5377,d6b1133df4b0981ffde1a2b60875779b7c0f30ac76d9151d238919c7e95f0768,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/15_TROUBLESHOOTING.md,6021,175486160577f6a71d3e8749698d8766a6a51c636fc41c956aedfab93a29e58b,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/16_CURRENT_STATUS.md,7837,9798b26e7c77cb588e7c5b2c8a13c538910fd7de665224a1946a73a7dfc8d17b,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/17_RESEARCH_GAPS.md,11026,dbe512c4634d39b6534d9a4937a4821eb0440775ccdce7fef991868c981a4214,"Historical documentation; superseded, not current operating instructions"
+gui,docs/archive/AUDIT_2026_08_29.md,33347,bd2995f25ff50cc773b27d6b2791c53bb8547edcf3d53cbfae2169645b834873,"Historical documentation; superseded, not current operating instructions"
+gui,docs/code_map.json,727218,fdbd2cc56049b6edf8fa8a72a8067637c71e311410370a642b85d78356df6408,Project documentation / architecture / decision or operating record
+gui,docs/figures/baseline_tradeoff.png,59404,b750ef224e2313e44a639e89ba5f6623861b92d903472ed1b9ccc6b6bc72d6a9,Documentation chart; verify its experiment provenance
+gui,docs/figures/decision_shape.png,74632,fa30ad97eca93b50f4daac5ed638b9207e34a3a8c6ee14cc759864deccec46d0,Documentation chart; verify its experiment provenance
+gui,docs/figures/predicted_vs_realized.png,116787,fca71e965567fb6a496919cee84ea84117f1b31bb488d94c4b2bb84f8b478c29,Documentation chart; verify its experiment provenance
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 01_05_37 PM.png",1587801,708903dfce3b0d2c7e2bf62b7f9a3d17688d3fb42d56cfba486d40e97e6d6c26,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 01_09_04 PM.png",1151327,3f0eaec481fefeb965a57cd0d0067a5bd53cde277ae242ec85861d9288ec7eca,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 01_12_33 PM.png",1447652,fb70549d3d4fea9e2cf321baeca13cc40189aae285df651b5ddf08ee37505c68,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 01_31_49 PM (1).png",1769684,6c86a141aa1135c801a3f29ebd4f242938564419fc5176ba670f32480b5e3ed4,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 01_31_49 PM (2).png",1665540,e45003854c7c1f4993e16a7c1df8648d685eb9d4d0e55739677665f54cf7cb72,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 01_31_49 PM (3).png",1524323,27cf9597068a434864d81ef817d04de8ca5832733c291f34baf7c1704b4765a2,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_44 PM (1).png",1506887,97d347c2453f5ab2321f0c7a31f1e890bc6bfcc35eb00a40d0c5a28a24ffc7e1,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_44 PM (2).png",1486572,a81f8f80642c1bf2b2d21087d4de1380f4aae8afa704301421403da8f6bc8b2e,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_44 PM (3).png",1565522,9b829a56f2672081af31df84b820c2af4f8a711443fd907b18f8e3a2053cf9ac,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_44 PM (4).png",1648107,6cb60b5a6a0a2ba3f2c885f07879ac2a67dd91640aee332edf77353f3d98913a,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_45 PM (5).png",1414559,d005f818065593c59e9783a0cfad55ff99163e6590d91ead1d7e7639966b6390,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_45 PM (6).png",1391216,564e1525b1738000a91c3ad5f86ba1bcdffb5f3ac8e2016316b98df5e0d4b71f,Historical illustration asset
+gui,"docs/images/ChatGPT Image Sep 4, 2026, 12_49_22 PM.png",1609136,e1a8c14484c168b2dda0de791f0f37471d8407d000bc88283f9119ff2284e56c,Historical illustration asset
+gui,docs/papers/ICAPS 26 PlanRob Presentation/PlanRob-15.tex,12425,2955e01e9105a51675e3b8b7192253ab9d6bc646908e65df73cfb24ac724b1d7,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/figures/fig1_architecture.png,1144476,e4f775229564e3f8ca9949e3bf2a79b1f269d02492b91c4517202a354da435d0,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/figures/fig2_makespan.png,250426,6b8903d7aaec31fc064f290fdfeb58dafdd038a90f0a8b03fd1962a32a6e3039,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/figures/fig3_ranking.png,150839,2e97a8c39e0f767ebbbf7cb3cb47a6246ec86c0774fdf76d7970709b5440d46d,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/planrob26_talk.tex,14615,f3750ab46981037d1115779f1be6e5da452d54ac6a034d83fa27ec534d53c57b,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamercolorthemehbrs.sty,1396,5012f2058e3f1c3c045e58bbda3885d9cccbb102e6a62d7df807878c9487b8ce,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamerfontthemehbrs.sty,929,7c20791a90713d9090fe8770b98a4beaa04573b9256708024db4f38b0d529b48,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamerinnerthemehbrs.sty,231,82a7954fbb4848ab625c147d7786f6410e4947f7643dd8ebd23c433ae1a6d100,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamerouterthemehbrs.sty,5105,07dc8c32f2ebbf0a91bb67425c33848e277cdfdb2e1a612972e73fa166ece810,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamerthemehbrs.sty,647,b083e9c479d0905f9fab2cf939ae74085edff0cd519b62fb5f5333d414c18203,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/theme/images/Logo-HBRS-cyan.png,19351,3c89a9e95e66354eea2f179eb4399f2c767262e301a5d7d8620a81b04b6f8ea2,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS 26 PlanRob Presentation/theme/images/b-it.pdf,40658,ca912e5bf9b5ab7070bf89657eda86d748079358220ef5388530de3d3682f865,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS_26_PlanRob_Presentation.pdf,1739079,aad0b01731b0102c81b9829161da4a0b52bdeb0d981d4aecd6cc9305b71d51ad,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/ICAPS_26_PlanRob_Presentation_need chanmges.pdf,1739959,4c7fb57188a58480db162b7ba7522be6a51f6c9069006d36920600f8305b2a14,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/papers/Learning Interpretable Scheduling Policies for Online Multi-Robot Task Allocation via Inductive Logic Programming.pdf,1609017,dfc29ab2ce8781c1fd9be2051439a0977367dcd2328557ff37f690afb83874ef,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+gui,docs/tools/code_map.py,58251,df4845342ee409b52b6c12a1d23123c3ad57ca54372c013ad036a394105dfb40,"Build the code map: every source file, every class and function, who"
+gui,ilp_ws.zip,159823276,e07e28538df9604fd208bb0a79abfc9bc887c3175789366915a5be52565f07f0,Repository support file; inspect linked source
+gui,pixi.lock,135630,114c58f6ca2fdab7a51dbe6392aaedf71b4c802cb4af15d16723fc942cec7b4b,Locked scientific environment / dependency and task definition
+gui,pixi.toml,1104,8b77383f89f509de0a914bfd13e6f9c4800269673460ddf28a77585bcd820ec7,Locked scientific environment / dependency and task definition
+gui,src/dashboard_GUI/.gitignore,62,99781cdcb38cc825a187c639b39e7108a85f95abce9fbd573a8f63bc2d01b4bb,Repository support file; inspect linked source
+gui,src/dashboard_GUI/MRTA_CODEX_STAGE_0_PROMPT.txt,1946,12ea8128a855b35f08161683123d363949a4f130f05455d990de60ced6cd3ad0,Repository support file; inspect linked source
+gui,src/dashboard_GUI/MRTA_CONTROL_CENTER_CODEX_PLAN.md,33660,07b7b24a4e24ba68aa1d71ec0226b08daf33432057710d75514f982db30a86cb,Repository support file; inspect linked source
+gui,src/dashboard_GUI/README.md,21070,f8aba5c83eebf0c9752bba104c66205ef8b6d41249326edbb56b7741e04c8623,Repository support file; inspect linked source
+gui,src/dashboard_GUI/backend/README.md,8905,6df26d85b9a66ccf59086a5b9f9639c32e65cb6cd22d5ddd48c7a989a07cbf36,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/control_center/__init__.py,22,20c8e430ededc2143396e553a3c67aac4ec483ef54efdfcb18a31cb162ca0646,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/control_center/adapters/catalogue.py,2567,d403ba2e8499433cc9227c9d399a3b76ea852c19833318ae897aed0580c35f56,Read production declarations; never construct an allocator or executor.
+gui,src/dashboard_GUI/backend/control_center/adapters/commands.py,13404,e37388ca12505f2b905a687cb9dd4647cdee0a295abd8c1c351dbaf50d707f98,Read-only planning for the unchanged CLI runners.
+gui,src/dashboard_GUI/backend/control_center/adapters/experiments.py,8373,8c1e3caf12b91490e1dcdd43db2c03fe5f06c9845637826d7df8965bdbb3e2e1,Bounded read-only experiment views; original per-run artifacts and paired math.
+gui,src/dashboard_GUI/backend/control_center/adapters/inputs.py,2436,c7bd6403922b12167a0d16fa740ed9a4488e345678a34f49128d3beaf51929f8,"Validated content-addressed CSV copies, never reference workload edits."
+gui,src/dashboard_GUI/backend/control_center/adapters/observed_runner.py,6605,2249b08e98dba569ca0fc714e70fb12c86b1ebec941b6d00a3d77b752b8c5eb5,Explicit observed single-run mode. Original scientific modules stay unchanged.
+gui,src/dashboard_GUI/backend/control_center/adapters/tables.py,2440,8de6de1218812aa1e60bce13dcb61617dd3c95828bf80467ad7d1f48176e9754,"Streaming typed artifact readers, retaining physical row order and exact strings."
+gui,src/dashboard_GUI/backend/control_center/adapters/validation.py,3687,c29ee04926587a441823af79959ab93b22d48bf317aa25c7d1260829ecb0690b,Original manifest/loader semantics for job validation; no simulation or writes.
+gui,src/dashboard_GUI/backend/control_center/api/jobs.py,6190,d969bf33a1a1cbe0bb71193f67fd199131104b60d8ed0961a09f2fe1ce100a62,Explicit local job actions and reconnectable process-status/log transport.
+gui,src/dashboard_GUI/backend/control_center/api/research.py,1611,beaead3407a98576fea923e96308f8acfeb275f12012da62409c57eda233863e,Read-only research analysis and explicit validated CSV ingestion.
+gui,src/dashboard_GUI/backend/control_center/api/routes.py,9981,35b122a9559f926c8b672949e11fd8f6e7122abd229295ac467f4f42c0b0b369,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/control_center/app.py,3409,9222f183167a1941e29c59861598ff12f6bfa738f84dee4d60f0a01450df8878,Local ASGI application with explicit owned headless job actions.
+gui,src/dashboard_GUI/backend/control_center/reports.py,11834,bf94de2718d34be56d9abd045edb88c42eb0c9e662991f35d76d7ef7233dc69f,Presentation-only plots of validated source artifacts; no simulation changes.
+gui,src/dashboard_GUI/backend/control_center/schemas/jobs.py,2689,203496c3d34daeb1b984e40dff682415a222d056a8d2d4ac4eb9de795995a4df,Only fields the original runners support; no browser-supplied paths.
+gui,src/dashboard_GUI/backend/control_center/schemas/responses.py,401,cab299aa0c04b047b0c1ec540bf6b2f9eea5569ca45a4db45ac6eff2dd0e77a9,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/control_center/services/job_gate.py,1492,f23db93a60ac5159f27ae830086b80ca189944f1e9371da5612fea8af43bfe36,Fail-closed exec gate. No simulation setup: exec the original argv unchanged.
+gui,src/dashboard_GUI/backend/control_center/services/jobs.py,23662,ef18aafa98f9d0df56ded5ab9e410497c5691f5ef6113a6bd41dcb86f0655642,"One owned headless process group, original CLI, durable status and logs."
+gui,src/dashboard_GUI/backend/control_center/services/observation.py,8149,1cbbc1b03b9c8632e6bbb31e49386e9a98f38a5f44d6cc7aba9a261f75c337d2,Primitive post-tick copies and bounded recording; stdlib only in the child.
+gui,src/dashboard_GUI/backend/control_center/services/pagination.py,872,e5641c463622ae6676a44d3f15253faabe476d89063c5b028e8755226b79bac3,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/control_center/services/processes.py,2019,fae3e71572cb754cd35339bf16b18a08f8f686349d90eab346e97932a711ec37,Linux process identity and owned-session signals; never signal a PID alone.
+gui,src/dashboard_GUI/backend/control_center/services/telemetry.py,12941,22f5f73505c87d8c9ce7168feb67bad57dd6804a84a6065f2a8e148d03cf3a60,"Bounded, validated reads of app-owned sampled traces. Never advance science."
+gui,src/dashboard_GUI/backend/control_center/stage1.py,10889,57578444b78454f843e3ed1f7dd9049776d05e5543c5bf2c54fc71720f4b719c,Explicit Stage 1 ASGI entrypoint; no job lifecycle or runner imports.
+gui,src/dashboard_GUI/backend/control_center/storage/files.py,2819,81705557fab805c369eca95ec664d7d1f9d070eafa12ee69945e6f2f4adf10b8,"Descriptor-relative reads: no symlink in any component, including roots."
+gui,src/dashboard_GUI/backend/control_center/storage/index.py,10411,662d8b4766c3ebd12b0088871e662123935f00c3d2c64ba08016a99603d48753,Disposable operational SQLite cache. Scientific values are read from artifacts.
+gui,src/dashboard_GUI/backend/control_center/storage/jobs.py,3197,e2ab3dcfd2386318d80c3e65b6a467e006aa302cbb92b152ade8a3d7013ca1b0,"Durable operational jobs and bounded reconnect events, never research data."
+gui,src/dashboard_GUI/backend/mrta_control_center.egg-info/PKG-INFO,262,02d28797314ed69b7ad39abe36b4f28c361fd441dbda90c8fc1b2bfdeac7a418,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/mrta_control_center.egg-info/SOURCES.txt,593,3eaa31543ea0b6f77b5c834d497137babd780f2621058319af29bd6574a79022,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/mrta_control_center.egg-info/dependency_links.txt,1,01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/mrta_control_center.egg-info/entry_points.txt,64,b9b5511ee5e5fa9283b3617a373bee05eb756119c0d1a90c0385d27dc3b26fd6,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/mrta_control_center.egg-info/requires.txt,68,78af19cad66df4a72d62652242ae133231885e1edd47d1ee22ad70764dc73418,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/mrta_control_center.egg-info/top_level.txt,15,bb87cc636309cf6d61c62b8a20313f2e1de7f0eef6f05689f01ad7916548edfb,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/pyproject.toml,500,7529a9b800d9c8d6e6e0558c9b8c2ac64cb048e0495f468d3835a9a2dfe3a0c6,"Local API, artifact adapter, job/process supervision, persistence or reporting"
+gui,src/dashboard_GUI/backend/tests/test_backend.py,11731,ddf3c6867627a9c81bf377cfff5e7e96a079556c5a7f0d74268a44659f21bd15,Regression checks and fixtures for tests
+gui,src/dashboard_GUI/backend/tests/test_commands.py,5218,80cf2c183cbc6579720546cdb2b3f4d019a1e0466cd84b2e29194ee01c1e776a,Regression checks and fixtures for tests
+gui,src/dashboard_GUI/backend/tests/test_jobs.py,12173,c92ef4f4d296767623e2c0be0930f1cd90fc72910035eec1aa3d88454dcf3ed1,Tiny stand-in processes exercise lifecycle; no scientific workloads here.
+gui,src/dashboard_GUI/backend/tests/test_jobs_api.py,4370,cfe8b49e98e2131f3189ec4495feb72ec96036def4639ac9bc3fd35c9be6a3b2,Regression checks and fixtures for tests
+gui,src/dashboard_GUI/backend/tests/test_launcher.py,6044,2948e7236db12bd31048a3ba5741e709a884744be039f3640924406695e869cd,Launcher lifecycle fixtures; no scientific runs in these tests.
+gui,src/dashboard_GUI/backend/tests/test_observation.py,7946,de1e008015d2924b05af1a87321a578afb0fe066baf39b393bf1c15d92193632,Tiny parity and failure checks for observational copying and recording.
+gui,src/dashboard_GUI/backend/tests/test_observed_runner.py,4368,8eeed6776768cfd4a401af3921fee66205a2893da764397ef064cd62f46202fb,Explicit observed-mode planning and tiny original-CLI scientific parity.
+gui,src/dashboard_GUI/backend/tests/test_reports.py,2075,37188fa6ea01ea36a3fb0fa3880ea7b65659891fedb92923a5b6cdfb37060aef,Regression checks and fixtures for tests
+gui,src/dashboard_GUI/backend/tests/test_research.py,7459,a2b4513e05b0bcde4551730c599295b0717c238c29b9a1a8df653b4eadfb349f,Regression checks and fixtures for tests
+gui,src/dashboard_GUI/backend/tests/test_stage1.py,9661,00777795c2da394c5077207eec1526749fe8f492b2f7d2df3e82a7f26ed99c0d,"Stage 1 contract: real readers, no job manager or scientific execution."
+gui,src/dashboard_GUI/backend/tests/test_stage2_hardening.py,8113,5925e5379c511b2500c36fc39bc1948d6108b73b68465c923cb183f5794d1dee,Regressions for the Stage 2 review; fixtures never run a simulation.
+gui,src/dashboard_GUI/backend/tests/test_telemetry_api.py,12702,00023cb89470607c29280a36dd4aee0b6251f093aa6644a4e9022ec93f55eadd,Recorded-state transport uses genuine copied frames; no runner launches.
+gui,src/dashboard_GUI/docs/control_center/API_CONTRACT.md,9359,351fbbfb46b4d2144f117e8041f1ed0b1bf31ed77e2ad8b91b68f4a902c3bfd2,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/BASELINE_INVENTORY.md,17328,75a39eb0bea6f383dc0518187ad77adfe2875f648fd8ec279faee45175bf74c8,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/EVENT_SCHEMA.md,9399,22d918416d6c5b5a3c95345733c27b3cf8319a2b672f1eb5c517e4e43381a5b8,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/OPERATIONS.md,7611,e2d0ae28904549da615f1e5009ee4277a23101f25d75b57e19aa8a1a93cb59d6,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/PILOT_WALKTHROUGH.md,6995,7b71ad5d89c9c7ffd42dd5c8bfb9b6ddc1472b20272ce5daaf0180475c117a19,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/REPORT_AND_PILOT_PLAN.md,2317,6014f8650fd5dac94e1074c7b5ae53781f1d5c1f5d4bfaac3cc5ac5c5729b870,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/REPORT_AND_PILOT_RESULTS.md,4185,c09d6978e68ff549b55f65c319b87060c70d12c18249adb0d494d93ce5c82679,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/SCIENTIFIC_PARITY.md,10760,cc192f312b09031c679d872c4e517e34e33757bd769583b0d8c7c13b8bde2a11,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGED_PLAN.md,7523,e1e146d7a245a07f8b54d1038f1ac40f9a34da31f671d122ef545ecf7256d531,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_1_CONTINUATION_REPORT.md,8717,6417bc3eb9eebf5354be1905b0ec2e28f38470281b0e1df4539c4d052f7fd2b2,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_1_REPORT.md,9578,a866a637164ca942096b8ff6f9b87bce85c8d680e9cdc8a8ccd5a1f71635906d,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_1_STARTUP.md,8501,82c55492a5158e3f1b86c82b41ef12b811679af3126c16e763c136e8e9152c2d,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_2_CONTINUATION_REPORT.md,8336,d0913fe6fad1ab08e49194cd476505744ef601b16bb0a6161c306218b4ced3f2,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_2_PLAN.md,4180,75aa738539cab6f8ee2b92be272dcda3a15f354b5df2c1930772de7afd353416,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_2_REPORT.md,12559,2b6863d9373827584f6059dd48bf90cc60783dcc33d821764622542bf55748a1,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_2_STARTUP.md,11900,17594ca3a4afce84ba03cf45b8a3c7d340248dbbce64781a45416bd9c4a972e0,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_3_PLAN.md,5734,cc5e34c8ad23264bc45ddf566a09a3e10b5ef83bddb74f2fd113d41821ce77fc,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_3_REPORT.md,7569,c954c059197fc9da280fce5618bc56d77354b562f76aa772f67933984201b83e,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_3_STARTUP.md,10006,91677a2fe47602a18f565c4fb9dd41cae0849678dea6716ab629b66ef516b4c7,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_4_PLAN.md,2995,9e5a591525e4ca4d46d82b2f3e71be784ae2c9e54d4951cc5677ffbaf71cdd04,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_4_REPORT.md,4258,5c17c2df18003a2be369868decde40f7bca09299c78b92e335af7450fd5ad6ff,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_4_STARTUP.md,5487,ebba77a79a51b7e92a757cf8856395ac66e09da463783b6e16a84e575786f18c,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_5_PLAN.md,4349,985d6ce5c42c9aab19024bee950d85e4f6c2c1e2ff49f927f036a34d805bb866,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_5_REPORT.md,5915,823d6005c9cbab01cdea37d00cbc4ad11bda32ae6a7c732eee0e685bcf869cd7,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_6_PLAN.md,3226,84b504a999d8ff3864a111d2861b604f5f932ba983ee655cdfc88b7585e8c864,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/STAGE_6_REPORT.md,5296,50bbe1fb673c673588c7ad8b5db5df47330f92cefd66c870eb311a5485870579,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/docs/control_center/WORKSPACE_INTEGRATION.md,5843,0945dd42b0bd547f23cf154ed5cdfe4a84ea699ff2bae005775942a6dc2e1116,"Dashboard design, stage acceptance, or operator documentation"
+gui,src/dashboard_GUI/frontend/.gitignore,53,463b5f9362420aaa6bbf70c200b7cef361af47f34e60e6767851406f3091a39a,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/README.md,553,a14b51be70ec6dbece07567953dd3be5b0f2e13c899479dfb73d77cecb9f3cca,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/index.html,498,25c5573c3cfff583a44dee67c1589df2b69ebef521442a9cff75751a90589ffa,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/package-lock.json,79702,eebbff83aaebaee22d12dc598c7edbbb350665aaebd196289bdd53a8b2ae121f,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/package.json,725,71fd559c0e204e57744a09c6903edee3652c1857b8644850c15366a3483f31e6,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/App.tsx,22051,ee7599d60dccfa55b694d37a7a362a43d88548cae473356a8a9237a034fb58b1,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/DataInspector.tsx,4549,ad29b3fe95ae4dd596fe3fcdf7cc9b9739cfc525144db469e3bc3db99732b7b6,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/ExperimentSetup.tsx,7699,7b687f8c6974d189bb057acfeb77377a5bc2afae1021cfe40862c565953de13e,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/ExperimentsView.tsx,9491,18e2a7be95f8a41245d6347d3a31f492f8b334b0c1e87e2df37d425114ce8f20,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/HistoryView.tsx,8531,abc19755c10b38fddfe665a3a3231d84c4a946bb1eb0652cccd3a5a439aaa59d,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/InputPicker.test.tsx,1634,0912c153b14816961a1b540320f71aaab24d9c528890428cae038cbc0904dbd0,Regression checks and fixtures for src
+gui,src/dashboard_GUI/frontend/src/InputPicker.tsx,2089,741afb79f9123762487ed22bfba0ffceb38738d9799916aec74996f0b41a4f73,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/RunSetup.test.tsx,3063,e1e979718a87f5a1bde1030bd730da9bc682cc3a023407c8787faefbc4e8de5b,Regression checks and fixtures for src
+gui,src/dashboard_GUI/frontend/src/RunSetup.tsx,9706,95c747a08796308aaa7ab8a2aa0d6e38153f6dbde31e553875e3a3e31f86ad72,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/WarehouseMap.tsx,6730,eb0588097b2b9111c336830bd518724b184cc9a913d6f4bd2730e74630504774,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/api.test.ts,1375,6bdccf1949f67b3884f08fa3822ad21c0c15d28bef8634bdaf8d0a783d56d4f6,Regression checks and fixtures for src
+gui,src/dashboard_GUI/frontend/src/api.ts,1406,b63d72f1db2444eed8ee2452525b2d59aa379e6e3cb2c059fbf026d0f3bf0c31,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/main.tsx,154,c2e407303a7b23f69c4c62bae669686764391d8afec1a529fa64b12f8f17f086,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/model.test.ts,3203,d0974590ab6ccff0fa4bfaa2eeaa961eba19b87f4f81ef43ed79f09a5d1e9c9f,Regression checks and fixtures for src
+gui,src/dashboard_GUI/frontend/src/model.ts,4284,bb7b42ca423b120989defd14e21bb39bd30609f8e6f205f12433b483e97d9e5a,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/observations.test.tsx,5346,9315ca6617d05bec9278c452ee401b712f50a5e58438039eca8d4df1dd4f27d3,Regression checks and fixtures for src
+gui,src/dashboard_GUI/frontend/src/research.test.tsx,3508,138a7bb84d9d0342970859a099325c9bbccc8894ac9229ed6e3db63057430019,Regression checks and fixtures for src
+gui,src/dashboard_GUI/frontend/src/styles.css,23055,f06f98ee15538fb3c40986d3828147852c2f0d448f87421c2ca7c256aba5ad15,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/test/setup.ts,405,52a100a144460fa5899d64e88959ae3af7692deda7ccc085775c6a0a6507dbb1,Regression checks and fixtures for test
+gui,src/dashboard_GUI/frontend/src/types.ts,3709,d9518f72e758bf5ac3a6da6423c8d5c5303b718eb462af3fe8dec3c389b8353f,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/useJob.ts,4427,c13bb9ff1d9e5a35a4611ba311d607065118c5c131fcfb296a99f9be9b54becf,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/src/useRecording.ts,4097,bc984553e2a1d6fcc0fef02b33f5b90204c89b402547f59d9f55da4406815a78,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/tsconfig.json,438,dfb574d457e807b1b9ea35572166ebaf3fada597096ea1385c54e30d7a269c7b,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/frontend/vite.config.ts,516,dbfdfaa5d57758eff14e8a112efa5ff535885d00eb984929012be34072313e4e,"Browser interface, typed client, styling or frontend dependency/build configuration"
+gui,src/dashboard_GUI/scripts/check_stage2_smoke.py,5378,211e0327789564c8453e6a615b9be0e386cc7fdb19dc5165325aed944e87e1c2,Explicit tiny Stage 2 verification. Creates disposable app-owned outputs only.
+gui,src/dashboard_GUI/scripts/check_stage3_smoke.py,6049,9d810c7a6b1d46ed6d32cd109b47693195b8324dfab04473c3f55ae7e6bf3efd,Tiny Stage 3 observed-app/CLI parity and real local HTTP/WebSocket check.
+gui,src/dashboard_GUI/scripts/check_stage6_http.py,4973,02781278c9477e5f2199d9b8b9463682da661d803f5fcc1101928cfbad986bdd,Explicit real production launcher/proxy/security/shutdown integration check.
+gui,src/dashboard_GUI/scripts/launch_control_center.py,11903,b281bd7665af0f6d2b1da3d0c12e4e4a441996bf8e5e154cf0fca6095596530b,Local foreground launcher and explicit verification gate. No auto-install/run.
+gui,src/dashboard_GUI/scripts/render_experiment.py,1735,7322b52eec03ca08c0d6e5a6eb73a345ea54e18f805e41ef720f0d04f5a09044,Create fresh readable plots/HTML without changing experiment artifacts.
+gui,src/gazebo_fleet_pose_transport/CMakeLists.txt,1230,9244be25ddc0a5e2d0f2a1c41a538f97e3f127b2db6b5c43a27a367d382b3f24,Gazebo C++ batched pose transport and parser
+gui,src/gazebo_fleet_pose_transport/README.md,2590,e651a2c2140ad22b0985418300fde5b5290a1fb6d13f033524dca91b1c102531,Gazebo C++ batched pose transport and parser
+gui,src/gazebo_fleet_pose_transport/package.xml,697,90ada8371d5b299e8dc497d6ca4154645cacd3a1218113c4e4ee95c3b358a451,Gazebo C++ batched pose transport and parser
+gui,src/gazebo_fleet_pose_transport/src/frame_parser.cpp,5634,700ce562c7a3d22048fd1d65dad79c747b6b6077c37d652abd1e57f3db158a47,Gazebo C++ batched pose transport and parser
+gui,src/gazebo_fleet_pose_transport/src/frame_parser.hpp,1528,9370d8e49fbc2efd7115b303b77c79136d5b9a4030d6c6ad931882a5913af9d4,Gazebo C++ batched pose transport and parser
+gui,src/gazebo_fleet_pose_transport/src/gazebo_fleet_pose_transport.cpp,11986,4fc8c6d9e47037ec82ec676e068eb358f692008ce35bf11722427f0644f8549d,Gazebo C++ batched pose transport and parser
+gui,src/gazebo_fleet_pose_transport/test/test_frame_parser.cpp,2866,201d8a56c98d655f8fd2ab29ba313fc81ed70a49e1827a24d1446912008a8526,Regression checks and fixtures for test
+gui,src/mrta_core/mrta_core/__init__.py,808,69b884962b9a58e5a23c21fbca2410f41b0ad53aa05cf3c900ff5b4f5999290d,"Shared warehouse, order, routing, timing, energy and configuration model"
+gui,src/mrta_core/mrta_core/battery.py,11714,6e15a033e8cfcbd860260bb0b5bc5056c232c9b78141fdd1add9f3a505a6fcf5,"Battery V1: a normalized, deterministic state-of-charge model."
+gui,src/mrta_core/mrta_core/grid.py,4862,7912024939fb08c9dd8ee48ff6f02914c8555d9d4f68e097ed1e409d390a801d,"Shared warehouse, order, routing, timing, energy and configuration model"
+gui,src/mrta_core/mrta_core/kinematics.py,4442,7c41c15d2d02743fc000de13607de0c9fc22ead3c5b21e03bd274edc149fccd9,Physics-based robot motion and energy model.
+gui,src/mrta_core/mrta_core/map_builder.py,15699,f3dba378b70137b66b8e80d53a9f6af8a37244a657ce5dcd36299d50ce98f22d,"Build, export and write warehouse maps in the Excel format."
+gui,src/mrta_core/mrta_core/map_check.py,11087,496d305c50be965f49f596b45d3f8527f12694d83032ce92502ec1ccf833941d,"Fast structural checks for a warehouse map, in plain language."
+gui,src/mrta_core/mrta_core/models.py,606,99d4b9bf351475eb326007917e1c76b03d4347fa25544b4b17df923f0f62d949,"Shared warehouse, order, routing, timing, energy and configuration model"
+gui,src/mrta_core/mrta_core/order_queue.py,4475,42ec65f8d9ac1b1991446e5453357594635608009f865f0b8ab8283df6eb45cd,The deterministic FIFO warehouse workload.
+gui,src/mrta_core/mrta_core/orders.py,7265,88a0e1a3a5c63d414dc653779383e82ba1beb1957bb29a2296cb6d0df0104afc,Customer orders loaded from CSV.
+gui,src/mrta_core/mrta_core/sim_config.py,7777,f4bc08822f222e7a45e57fc4292d35939d0870521c395506562e9c89fa225752,Central simulation configuration.
+gui,src/mrta_core/mrta_core/symbolic.py,4023,acaaf4def1f374c697eb05e16ef23e43e3ebe428554f9d0cbb887a660510cb0a,"Shared warehouse, order, routing, timing, energy and configuration model"
+gui,src/mrta_core/mrta_core/warehouse_map.py,7272,139bf85dcc63b6b2900ec6b50b81063bcc15ccd86277b8bc1fb29e87c8019032,Layered warehouse map model.
+gui,src/mrta_core/mrta_core/warehouse_map_io.py,5798,14e3a925290088c4d9f2e524e06b75a941e5be83ef5f4bc859a2f9fc7febec40,Load a human-readable warehouse map from CSV.
+gui,src/mrta_core/mrta_core/warehouse_map_xlsx.py,21914,a8402437541257615443afec82d3945ee30366fe74fbe156c6cf142bfec19bd2,Load a warehouse map directly from an Excel XLSX layout.
+gui,src/mrta_core/mrta_core/warehouse_routing.py,37982,59db7419e13d44fe4434deb912e29ca5649b5f8c50a60ae64653198b7cbc18ee,Static warehouse routing: the one grid-aware path layer.
+gui,src/mrta_core/mrta_core/world.py,3768,b6b22676f6769c9c869e6eae354fa26207df84c5af0e28fb25dbeae118f97f66,World <-> grid coordinate mapping.
+gui,src/mrta_core/mrta_core/world_view.py,1884,60a6224eb346d2481701d850bb856e123133afa1f87733d286f2152b5351c6f8,Grid <-> world coordinate transform.
+gui,src/mrta_core/package.xml,723,2b1b94a53fc5b3733796fb1bc484cadf114bdf06c657b9a1d51424c0a03d5bc4,"Shared warehouse, order, routing, timing, energy and configuration model"
+gui,src/mrta_core/resource/mrta_core,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,"Shared warehouse, order, routing, timing, energy and configuration model"
+gui,src/mrta_core/setup.cfg,87,f7215f370092c299f486d28c6930d37bfc51deb5cdc7bcb906d0162d3e52a2f6,"Shared warehouse, order, routing, timing, energy and configuration model"
+gui,src/mrta_core/setup.py,722,a094a4469746fc202d848022c2d1b5a6b7b6455e681d4df5e810c05a9d818272,"Shared warehouse, order, routing, timing, energy and configuration model"
+gui,src/mrta_core/tests/conftest.py,2114,4f5987b3fb59f8a5c2afc08dc8e050ccef9ab84f9ce92c371a6388458789453a,Shared fixtures for the order workload tests.
+gui,src/mrta_core/tests/test_battery.py,5816,cfc93e427dc79de2af5a9fd88b069dd745de1be8c71c892a7a50e6b82075a43c,Battery V1 model: exact energy arithmetic and a strict config.
+gui,src/mrta_core/tests/test_grid.py,2012,f67c4d43733d2b6a6936f3aaf09a2351e402f27211c5097e40759949e56c5178,Regression checks and fixtures for tests
+gui,src/mrta_core/tests/test_kinematics.py,1888,2d1aa188e1094ece63711e5c4e434cda745f8f325ed533300ba3ea3b3cc585ce,Regression checks and fixtures for tests
+gui,src/mrta_core/tests/test_map_lanes.py,14570,cffe69b10f25252e6f2c02fda414adeb94ab3b80126548873923ac71b7e5aa58,Maps that draw their own lanes.
+gui,src/mrta_core/tests/test_map_lookups.py,2455,f58bca33f90c89000ee5904ff0f605453453c8cfafb07daa4adff4cea4528a3e,The map's zone lookups answer exactly what a scan of every zone did.
+gui,src/mrta_core/tests/test_models.py,815,03599c0977e1653f6f638b6b635b92eafd72ea379b25449668a038f7c63f531f,Regression checks and fixtures for tests
+gui,src/mrta_core/tests/test_order_limit.py,2732,d5f1a4c3e8327e3bb777d5f67dff952dee1289f209391d186dcbe37407826939,"A shorter run takes the first N logical orders, never part of one."
+gui,src/mrta_core/tests/test_order_queue.py,5960,3e0468f3ce92a23736edabceb715236e21484ead213c402fe7c6bb99df334f57,FIFO workload semantics: which orders an allocator may see.
+gui,src/mrta_core/tests/test_orders.py,7557,b495e2038971fbd9c98d89ed2ed19ba3983cc2fc4d41382226b7414d043cda0e,"The deterministic FIFO workload: schema, grouping and validation."
+gui,src/mrta_core/tests/test_symbolic.py,3624,5ca80f8c708c6a7f306e7a78f977f5f51bc90fe4b0958f614c132b9afe6b355d,Regression checks and fixtures for tests
+gui,src/mrta_core/tests/test_warehouse_routing.py,6465,2b342d0337616486f8264a26be70aec86a688c34a3ebb1a0a2568f97bd6ce229,"Terminals are leg endpoints, never transit, for A* and RMF alike."
+gui,src/mrta_core/tests/test_world.py,1939,577b6744aa32d8efb20d2d114309a097d9635a7abf45663429499595ee415975,Regression checks and fixtures for tests
+gui,src/rmf_grid_traffic/CMakeLists.txt,1211,34c43e3687b091dedbd762c9e2fabc7c1663dafb216de4bc0732b583a84da069,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/rmf_grid_traffic/config/warehouse_nav_graph.yaml,349608,6c19c9e67eab43e891a996f298a4e3d802c079faa823056ab03965014892d02b,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/rmf_grid_traffic/package.xml,732,66007a52b2dc4a56f84a61a4463560a8f27a94102a91cc750f4182bed70b502e,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/rmf_grid_traffic/scripts/generate_nav_graph.py,8096,fd35daa670f31f7ad11a614c99ccfaf874261937cd714e9f61d31d2dedaefce5,Generate an Open-RMF navigation graph from the warehouse XLSX.
+gui,src/rmf_grid_traffic/scripts/local_headway_demo.py,5083,1740ebfecf1b8a4c73faf664e2a71295d8398bc5f6652f3274af4178890bfb74,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/rmf_grid_traffic/scripts/local_traffic_demo.py,5204,d91faf144ef8ec3bc4c98da9e4dc4a0c129206ef3638d66627203d3e51f3cc97,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/rmf_grid_traffic/scripts/local_yield_demo.py,9136,350b058dc686e75df315fa64a826f501f986df0939d023ac5690ebc618760c57,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/rmf_grid_traffic/scripts/real_warehouse_gazebo_demo.py,11859,9dd404e367e7810940eb7404a5514379368d1d3d8cb5e2a5ff714d534e390d35,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/rmf_grid_traffic/scripts/real_warehouse_traffic_demo.py,19664,2c86a9f9fe73076726db1093b5d56bf34b9ca23f89cef88026b5a6c2e104c029,Two-robot playback of a real synchronous traffic conflict.
+gui,src/rmf_grid_traffic/scripts/verify_nav_graph.py,7025,04223b4b057a746b0df91742e2fd599588bbda3d65d2ef7b1b7802477182f715,Verify the RMF nav graph is an exact mirror of the lane policy.
+gui,src/rmf_grid_traffic/src/graph_check.cpp,2065,ff63b4d2715825763439592c45ec67039e7116b541521952d3d40fd2e043e812,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/rmf_grid_traffic/src/route_check.cpp,5922,b9d0a7a3657213ab4992161de86450b2b0a30316f10748a883668023d5aa9fb6,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/rmf_grid_traffic/src/two_robot_check.cpp,9789,04fe3fb54aaec3c8c1bc11cdb711a78dc668624eefcb5be674b4fead5942b179,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+gui,src/robot_interfaces/CMakeLists.txt,601,5aa53c1dcf348b548c6c661fdd8e07d3acc546b0805fadd2215f43c22296be82,ROS message interface definitions / build metadata
+gui,src/robot_interfaces/msg/FleetStatus.msg,1197,d0335511ad916a4407702788d7881ab67fb5a357bdd7c379a8949be43eb90b2f,ROS message interface definitions / build metadata
+gui,src/robot_interfaces/msg/RobotState.msg,812,28d09a15904c4e9b8b2b16d63b6c1431aca083efe11cd0639c3e8339fbd9d0f2,ROS message interface definitions / build metadata
+gui,src/robot_interfaces/msg/RobotStateArray.msg,239,a2ec889a7cbe2c66452b6f28b457bf913938fc7a51ec1bbb4f5deaa3f7acd304,ROS message interface definitions / build metadata
+gui,src/robot_interfaces/package.xml,830,73293e6ab2a8616c4f73aa4c577816242522ef25a75c2497feed32c4c6b9f794,ROS message interface definitions / build metadata
+gui,src/simulation_env/config/README.md,2254,54562ff7954cf7e3c912e8bfc68ef658f573c2c92155aaa4db88ccfa8a29cd62,Active scenario configuration or committed order workload
+gui,src/simulation_env/config/orders.csv,149299,c38a93e492b0e38afecbc3118c70fb4ab8a6a1a35b156b42986bed48fce20ea6,Active scenario configuration or committed order workload
+gui,src/simulation_env/config/warehouse.yaml,5918,fbab9056ece331128758d894513dd11bbe7596d9149f28c17e4eb65ab5c7ca9d,Active scenario configuration or committed order workload
+gui,src/simulation_env/launch/gazebo.launch.py,3050,25acc0f87137f0b7fe26a36be3ab930297a56ea2e5d419bbb14852bc41ef652e,Gazebo with the warehouse and the fleet parked on its start cells.
+gui,src/simulation_env/launch/warehouse_sim.launch.py,7865,ceacc3a65038bceb7e277fb859b3df9d878660bb977c3fd86400cacdd218cb71,Warehouse workload simulation: fleet execution and Gazebo.
+gui,src/simulation_env/maps/README.md,1394,68ea02855995f82deccc11134e3e4ca50e80851db6dac7da0eefc441c45134ef,"Warehouse map workbook; W100 active, others examples or fixtures"
+gui,src/simulation_env/maps/W100.xlsx,14443,508c3ab470df7de45de22c9f7f690c77cd09c3de54d89c9a2810742710c27fbc,"Warehouse map workbook; W100 active, others examples or fixtures"
+gui,src/simulation_env/maps/my_map.xlsx,14444,ee3c21d01a4959bf2a18575cd9b5334b7ebd330d1194b1ef5fe79a97049c2d8e,"Warehouse map workbook; W100 active, others examples or fixtures"
+gui,src/simulation_env/maps/my_map_20.xlsx,8230,51405d2779f90abfc3cee9606e1de6e8bee6379927c4cc3a74ec4231ae4d0b67,"Warehouse map workbook; W100 active, others examples or fixtures"
+gui,src/simulation_env/maps/my_map_60.xlsx,15232,d951b03a0dd5ceae514897041cd5d81e25d1bce9b1f1c2dea184aca01c045a0e,"Warehouse map workbook; W100 active, others examples or fixtures"
+gui,src/simulation_env/package.xml,752,cfdf926ccbe562a0bb7a290cc80c67c9927044fe77f2c13161d8c26e1be1d448,Repository support file; inspect linked source
+gui,src/simulation_env/resource/simulation_env,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,Repository support file; inspect linked source
+gui,src/simulation_env/scripts/README.md,3007,b92dc6bc6eb19ef7add17209ff986c28b2678885f2c3852c1aad18cfe74071cd,"Headless workload, campaign, plot, scenario or scientific check command"
+gui,src/simulation_env/scripts/build_scenario.py,8002,65d126bca24a6305df8eadb9572e00587421eb8ed0d2d53c4dc444db23a6d063,"Build everything for the current map: config, orders, Gazebo world."
+gui,src/simulation_env/scripts/check_18_robot_traffic_stress.py,13142,b8446bf8bb9a458afd1d917b3ef0490b5f2e8e6c93376557dcaa472e6810563a,"Headless workload, campaign, plot, scenario or scientific check command"
+gui,src/simulation_env/scripts/check_b4_charging.py,14617,0a1a7cb2c00286b215d9d2a04f63f51c80d4ae6d8dc239f45ad4e74ace779c7e,"Battery V1 B4: charge to 100%, leave the charger, rejoin the fleet."
+gui,src/simulation_env/scripts/check_b5_queue.py,15266,261ed8b243e233591152887a9d97b357275639123fd8158f487e0f8337299970,Battery V1 B5: holding promotion and charger preemption.
+gui,src/simulation_env/scripts/check_batch_reservations.py,2470,25cb856d2718b32b8a6476599b171414e7e36da5ddd29465330b387ba17de1e1,"Headless workload, campaign, plot, scenario or scientific check command"
+gui,src/simulation_env/scripts/check_battery_eligibility.py,10418,3d0d4df442d29922431e0eb97464221085a97673012b928f205b376e1b30662f,Battery V1 B2: show that energy eligibility actually binds.
+gui,src/simulation_env/scripts/check_charger_evacuation.py,12566,93a618038130b5e272c84ccb11b2b5a4fd5bcbcfa4a332b3563cc8df1dd0f442,"Battery V1 B3/B4: REQUEST robots leave the transit network, charge"
+gui,src/simulation_env/scripts/check_engine_batch_traffic.py,3009,7b67c6820a9b90c281874e1789104e5b4cc4ead8ffd0865afeb26089f5b9a29a,"Headless workload, campaign, plot, scenario or scientific check command"
+gui,src/simulation_env/scripts/check_engine_headon_yield.py,6858,6bbe122c7c592f58abea2ec38b2d0b4540ede0351c2c64b1f77eafb7437c215c,Head-on prevention in the production fleet engine.
+gui,src/simulation_env/scripts/check_local_headon_resolution.py,9306,04eef03ee5a39f40fd7c30f2c4ee4470f3fde50163c03da6113cd31095deb003,"Local head-on detection, yielding and rejoining on the real map."
+gui,src/simulation_env/scripts/check_local_traffic_controller.py,3940,2faa015ced50f8515509cab141b115a56ad50548687e4ba0835bad69ca544d3a,"Headless workload, campaign, plot, scenario or scientific check command"
+gui,src/simulation_env/scripts/check_local_yield_selector.py,3038,9534bbcfd84aa7c7e2b230b0ad7d5f399db5ffcc2dc1b6ca0aa72cd30d6a33f9,"Headless workload, campaign, plot, scenario or scientific check command"
+gui,src/simulation_env/scripts/check_map_topology.py,11410,ac29aa879438dbf56f5be6478313aa5018edc96013295630a474c443faf2e07f,"Topology gate for a warehouse map, under the production lane policy."
+gui,src/simulation_env/scripts/check_raw_mission_cycle.py,4055,c0e92fa3624d0ab787a956c61b95248780dec921d1a1761d01167aa37d038f04,"Headless workload, campaign, plot, scenario or scientific check command"
+gui,src/simulation_env/scripts/check_strategy_distinctness.py,8448,97de8c317fa5924740eaaf99a31d4b9bbb3f72fbc181cdb103eeca4f13c25648,"Strategy distinctness gate (docs/DECISIONS.md, ""Strategy Distinctness Gate"")."
+gui,src/simulation_env/scripts/compare_paired.py,9208,6c9aa405fb7927b5049dc212f3d89ffc19ae25f723b6c38dd08d790355ae19d3,Compare strategies by paired differences over workload seeds.
+gui,src/simulation_env/scripts/discover_directional_highways.py,3126,142b63972e841f9738a82d2b216ff85d22f521bd8f982c9a4b9b1196cade3c70,"Headless workload, campaign, plot, scenario or scientific check command"
+gui,src/simulation_env/scripts/generate_gazebo_grid_world.py,8202,62d2855331ecc04a487b0df74b0422d6ccb9bfef453603db4de9db47688f83de,Generate a lightweight Gazebo warehouse world from the XLSX map.
+gui,src/simulation_env/scripts/generate_orders.py,4762,d0abb6931fbe3df2fd47315fa32c48bfb633844f732448694f7928b0525e9695,Generate a deterministic order workload.
+gui,src/simulation_env/scripts/map_tool.py,11171,a753f0d1319114fce5204e9dec5a1a01d55131e588e64854de13dbf27bfb9698,"Make, check and inspect warehouse maps."
+gui,src/simulation_env/scripts/plot_dataset.py,10646,e4366dc80857f3fe26f17cd58d61947ba4c4c345e29230c0036e59978fd4d145,Plot figures from recorded Phase 8 datasets.
+gui,src/simulation_env/scripts/plot_experiment.py,12170,9fdf8d84ab3532e57eb5fd961007a1c2b70e30048640ea71cf37dd4c0b5661a3,Plot an experiment written by run_experiment.py: every core metric.
+gui,src/simulation_env/scripts/run_experiment.py,12952,9d3b8b79bfe5f0e31ae1966c636cfea160c62ac80fd40a95bc4e2b049148c873,Run an experiment grid headless: strategies x fleet sizes x seeds.
+gui,src/simulation_env/scripts/run_workload.py,13551,f16454ab7eec7ce3b6454da6b303608b3567d3f33b562fddea243726d1f82014,Run a warehouse workload headless: FIFO -> allocator -> fleet.
+gui,src/simulation_env/scripts/validate_directional_highways.py,9066,6cb25601d176c4f4f6a4d366c628394fbaa80b71fbee9f30f22e8426ed644693,Validate the directed warehouse traffic topology.
+gui,src/simulation_env/setup.cfg,97,d2b4e0ba8108d4d8b68fff3bd762579eae658bd33c69d2e299b8502458b1583c,Repository support file; inspect linked source
+gui,src/simulation_env/setup.py,1161,3a13d86868fe59853d9bd42420477a9f25eca67d606c6b4d5eb7d96223e95374,Repository support file; inspect linked source
+gui,src/simulation_env/simulation_env/__init__.py,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,Scientific simulator execution / traffic / charging / data or diagnostics module
+gui,src/simulation_env/simulation_env/battery_ledger.py,17125,635e18af21c6354fa4a1132f55474cf49c41c106c97655ec414d8df1ce321ced,The one authoritative record of every robot's state of charge.
+gui,src/simulation_env/simulation_env/charging.py,18706,723d2290abdd0fa5913aeaddd3cfe46a5174fcd708f7eda2ff2b2479fcd13611,"Charger and holding terminals: who holds each cell, and in what state."
+gui,src/simulation_env/simulation_env/dataset.py,15039,96f878c8fe9acd8c70609140f430aa18697de1cc8017216f386a66fbdf46d245,Phase 8: the decision and outcome dataset.
+gui,src/simulation_env/simulation_env/dataset_export.py,10033,6d831ddb1616205aeff67c3475b09cfb6b86e4006a01712e652f021d5c6d91a0,Phase 8: reading a run's dataset back out.
+gui,src/simulation_env/simulation_env/fleet.py,8336,a7e74ad4be435c2547df45bdf6a828a5e6570ac6db55da8d866a9c50449182ce,Build a robot fleet from configuration.
+gui,src/simulation_env/simulation_env/fleet_engine.py,65491,2f74f28dc08ffd62d842588575088a7ea82d427c3ed3eef17e438865dd5a8abe,Event-driven fleet simulation with one authoritative clock.
+gui,src/simulation_env/simulation_env/fleet_node.py,41150,24bb80f02a45210c587643bd18bcf3d27121356d27e33bf7b18195a47ff4fade,ROS 2 node that deploys the fleet and publishes its state.
+gui,src/simulation_env/simulation_env/gazebo_bridge.py,13435,5271e7b30a58a72fdaef3d6cc98802bbaebc046a631d059fc7f880b06c881828,Gazebo transport helpers.
+gui,src/simulation_env/simulation_env/gazebo_view.py,1222,78dddd602520ff0afb7227fd80a783d040dab9bd87852d8d40b18f60a6c139a9,Grid <-> Gazebo view transform.
+gui,src/simulation_env/simulation_env/gazebo_world.py,8227,4afec8aec1393f6d49c52314f780b82d1374257dc387423eb5b63ba4c6b03dda,"Start Gazebo with the fleet already parked: the world, and nothing else."
+gui,src/simulation_env/simulation_env/grid_robot.py,7488,5929ebbc87dc8a2592e693a770fed3703a5f06f4cd4f32facb53f812d5d598a9,Lightweight deterministic grid robot.
+gui,src/simulation_env/simulation_env/local_traffic_controller.py,11303,2b075d895fd75178873eaff1682d7f2af911e848a9f2990c67b1391dcbece0d9,Local batch traffic arbitration for grid robots.
+gui,src/simulation_env/simulation_env/local_yield_selector.py,3798,b9ff6657a1dde2cb2e43338d4c5554947f06a814b1b8e62ebbd0b90898b6fee0,Select one nearby temporary yield cell for a local traffic conflict.
+gui,src/simulation_env/simulation_env/paired.py,7678,cba0c85ba0f41d09fc52dda5550c3901822eff5e307e47a9b3762d05ecf9ae9d,Paired comparison of strategies over workload seeds.
+gui,src/simulation_env/simulation_env/reservations.py,15353,7b4cdfb43ff9868be3cf496e42a01ba53a808aec9c6a9a5bbc210f6a9f2948b0,Time-indexed cell and directed-edge reservations.
+gui,src/simulation_env/simulation_env/run_metrics.py,9146,a74f4691f297dc12d41015cb86612da92006ecc7bab6fc46fa7aa57822a99787,"Run-level metrics: the numbers an experiment compares, one file per run."
+gui,src/simulation_env/simulation_env/stage_parking.py,6689,7e010b98072681a30b52a5797f9369832d13e2e161ff2c03e9a65a3ff5d3a962,Final parking: the Stage Zone bank is a shared fleet resource.
+gui,src/simulation_env/simulation_env/work_accounting.py,6141,f7636ec759e62a46066eec7021a9398eebcdcda8fb10dcfc55ee558590fccf23,"Which part of a run was order work, and which was recovery (B6a)."
+gui,src/simulation_env/simulation_env/workload_executor.py,115941,0aacdfc8142deda2b81a01436c810026c3ceb88eb7259a7e049c8af8ce1d751b,Run a whole warehouse workload: FIFO -> allocator -> fleet.
+gui,src/simulation_env/test/fixtures/CSV_To_Gazebo_v2.xlsx,6625,6fcdfda918c4254f0b20b32488a92c70cd95f3ab7e3217e96c88c1a29cd087fd,Regression checks and fixtures for fixtures
+gui,src/simulation_env/test/fixtures/orders.csv,7446,4c66bb94eaa6a012ba2417dc2dadfe219cdbbe05537faf237674b6bbfef8553c,Regression checks and fixtures for fixtures
+gui,src/simulation_env/test/fixtures/orders_500.csv,37313,4e7c82902d6248117973f4bce6ccf0fb13d0ec950c869543af44682a9ff86112,Regression checks and fixtures for fixtures
+gui,src/simulation_env/test/fixtures/v2_reference.yaml,5288,06d51a174ed4c5d687c5d5f0cfc94c59d3cc7bbae763c8ce6df96ee40591ae75,Regression checks and fixtures for fixtures
+gui,src/simulation_env/test/fixtures/warehouse_sim_b3_four_low.yaml,4059,86627a05faea7817c2b518e4f5cc7f524331c7dfdd6e9c58fc187eeac1cb865b,Regression checks and fixtures for fixtures
+gui,src/simulation_env/test/fixtures/warehouse_sim_b3_twelve_low.yaml,4219,bb9a6b894a479098c8fc374053b57a29cd048da8559ec94fa3a7dfd63a415c7b,Regression checks and fixtures for fixtures
+gui,src/simulation_env/test/test_b4_lifecycle.py,9920,3378c4b21d81ba43e86be38910d7f09cea0863b6c19c27668cfb1a2d156f3c0d,"B4 charging, clearance, reuse and watchdog regressions."
+gui,src/simulation_env/test/test_b5_queue.py,19782,3c51f8cf2bb16ca5306dfce2b3110d22528f79c6ed8bb335554b020aa023c880,Battery V1 increment B5: queue promotion and charger preemption.
+gui,src/simulation_env/test/test_battery_eligibility.py,25764,94b56a4470c82847d2dc35ff8656a66a89cc2c3f37c7d7801e667b9097eebccf,"Battery V1 increment B2: eligibility, CHARGE_DUE and CHARGE_NEEDED."
+gui,src/simulation_env/test/test_battery_ledger.py,23227,9294059637469f5a2a0653f82326fdb29b240ff071f33a6d349c075f228678f7,"Battery V1 increment B1: SOC accounting, observation only."
+gui,src/simulation_env/test/test_charger_evacuation.py,30993,bcc8156469e28fd3d435ca10752a0f3615daf4fce756cd2ab82ccf0e1c63989a,Battery V1 increment B3: REQUEST robots leave the transit network.
+gui,src/simulation_env/test/test_charging_bank.py,4841,0448afd1122b7e0de2bc77e1b9d8047a82b0ca49ec750c3fd1a8f2b09c961096,"The V2 charging bank: one cell deep, reachable, never transit."
+gui,src/simulation_env/test/test_dataset.py,24260,c1f509e30bcec11fd4c0dd686c3dbff59f15d06ebdbdae28e5066edef95936f3,Phase 8: the decision and outcome dataset.
+gui,src/simulation_env/test/test_experiment_integrity.py,9845,4158fa6cdb28abee0bd9c8ef758b7deb49a77b6caf45145ca03f94e632c97fb7,Paired experiment integrity (E1).
+gui,src/simulation_env/test/test_gazebo_world.py,6794,b88d65d51b73e3b2d2b8f6534e5e8c53126ccd0c82862cc58560960248ed3b4a,"Gazebo starts with the fleet parked, and only one Gazebo per world."
+gui,src/simulation_env/test/test_one_config.py,6376,63130c9421f09402cd2a0e8f61644293979e3cecc772170efab120bf9aa7467a,"One config, one map, one world."
+gui,src/simulation_env/test/test_order_limit_run.py,6545,b6710e8c5e0510b657b7d28af795b1e55f945f98788bb0345c88f08db4175a0a,"A run on fewer orders: what it executes, and what it records."
+gui,src/simulation_env/test/test_paired_seeds.py,6692,1774b2523ce62bcf4091503d35983ec25aaef4172141f18a48993697369f0096,"Paired workload seeds: one workload per seed, shared by every strategy."
+gui,src/simulation_env/test/test_reservation_audit.py,5758,86f91abe41ac25da62dc52d4592d8012148e4b479fee81d8461cbe9eeaeb2166,"The reservation audit finds every conflict, and finishes on a long run."
+gui,src/simulation_env/test/test_run_metrics.py,3047,84530ff5d9e6d3e0db9e6bac688280a340eec5acd5ee1e5cb1109111c9924d0d,metrics.json reports exactly what the run did.
+gui,src/simulation_env/test/test_s0_window.py,17221,57c70d33de76f6d17df4142c9b640a11d53837bb40a35790fcc70a054f0c046e,S0: the allocation candidate window and the FIFO liveness rule.
+gui,src/simulation_env/test/test_spawn_spread.py,3586,a14b81c31b190fab22e9b04ea6cd4b47cbd6d13bbbb3ffa8f622cbd246cac33d,How a fleet smaller than the parking bank is placed at t=0.
+gui,src/simulation_env/test/test_stage_parking.py,8773,263e0fcdde6ddaca7c2ff760c728ed976c35c3aadb440b8e1025ed1daf530924,Final parking: the Stage Zone bank is a shared fleet resource.
+gui,src/simulation_env/test/test_stage_promotion.py,11127,768508d2dd72cd602e9449583fa7dc4b615f1062db6adc751170d0411640dae3,"Battery V1, B5: Stage Zone robots are promoted like holding robots."
+gui,src/simulation_env/test/test_traffic_rotation.py,9583,92722bd492dcf763c06614e34c14d46f0807564302f00fdfa998a7a2428143db,"Rotation right-of-way: a full ring moves as one, never deadlocks."
+gui,src/simulation_env/test/test_work_accounting.py,13507,bc4ed5dbef19f4556af9206cf796edafa93b20130c559be75152e6eac4d8b2c8,Order work and end-of-work recovery are measured apart (B6a).
+gui,src/simulation_env/worlds/warehouse.world,419541,98a55eaf2a3832a4001cbd3d260c659fed645b479e318bff6a70d3bb22f580ff,Generated warehouse-only Gazebo world
+gui,src/task_management/package.xml,581,9b38fb98daf57b7a0fb9e9f7e2a1a0e89fe59df54ecdc62739cd552aca5ca286,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+gui,src/task_management/resource/task_management,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+gui,src/task_management/setup.cfg,99,1a507b5308a8673ebd1087650c8b8bf440d8e8f4dc0ac2467248af64946222f8,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+gui,src/task_management/setup.py,793,8607217a0aa4fe3dd4043b5c7062389c99ab6f251ab0ca9cd2d69cd83ca08901,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+gui,src/task_management/task_management/__init__.py,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+gui,src/task_management/task_management/allocation_strategy.py,33402,613d013fd968d4a53febd9227754652c760b58ae2d8f5360d6ceeb96d680b271,Batch MRTA allocation strategies for warehouse orders.
+gui,src/task_management/task_management/features.py,11559,3451deb236d7d77947a12f17c45ed8820df4e1c0dc216a5dfa68ac1a084706e6,Grid-aware features for batch warehouse MRTA.
+gui,src/task_management/test/test_nearest_astar.py,11573,26f90cff72e4f15cd0ec5313781ebeae43010664a684f9ef77b2d5222b87b0cb,Nearest A* picks the expected pairing on a controlled warehouse.
+gui,src/task_management/test/test_phase7_strategies.py,17426,ac66f875cb9ce20b6c52363b9befb7ed6611c829a9d584e031625d8493665d2b,Phase 7: the five remaining conventional strategies.
+gui,src/task_management/test/test_strategies.py,13535,2d9aa4184d092418d00a6a74582bbf4154dcbe4cd8bbee40430c209dfcf24760,Phase 7 slice 1: Random and Nearest Manhattan beside Nearest A*.
+research,.claude/agents/phase-coder.md,3086,03791c4469a8613bcf5631db64fca0297697d39826f178b42ceec3ec62cc1671,Repository support file; inspect linked source
+research,.gitignore,496,7af163558394497d46803cc49acc06102de5c565343a7b648f9e3a3340b770b0,Repository support file; inspect linked source
+research,.scratch/m1-outcome-signal/spec.md,15192,795dfc4d41b4590a468eb4bd56249b9f7c744dd10a2e4524c6242edbf047ac2e,Repository support file; inspect linked source
+research,.scratch/m1-review/2026-10-28-review.md,5997,9f9fa72c3c702bd21e906538bdff0c4e7e374e2b7ad6f411d8ffc63fb2cbf3a8,Repository support file; inspect linked source
+research,.scratch/traffic-demos/issues/01-real-warehouse-traffic-demo-finds-no-conflict.md,2350,c44b53bad6a255e2c37c505c6fc41f98866d75dac5a06f5dfb7af2f6aacb70cd,Repository support file; inspect linked source
+research,.scratch/traffic-liveness/issues/01-cyclic-deadlock-under-scattered-allocation.md,9801,e09d2e18d80b0ac1e61d4fb8aa546954f8d30681f6d9bd69c5aa8197b9152644,Repository support file; inspect linked source
+research,AGENTS.md,8407,fe9f06ccd92570b39c07881edeef8d414e02bfec5d14df08d8a56b1a782cba2f,Repository development contract; current task is documentation only
+research,CLAUDE.md,8407,83bad375fa4be76c315bcbfd14c075ab4fc104e6a8a1943c73b94b94eb6ba9bf,Repository development contract; current task is documentation only
+research,README.md,33582,d04c0a10d4eac6e5ff52d60839e50886b32ee6573c59f23933b14c7074993d8e,Repository support file; inspect linked source
+research,docs/00_RUNBOOK.md,49298,c4510ab60cc2f24271df6de44901ecb25d3cd8cec23232c5bda498f16f2eacaa,Project documentation / architecture / decision or operating record
+research,docs/18_TRAFFIC_TOPOLOGY.md,6954,6111ae819fdf35bd1ebb8663baeb6edf589c87744a03038634f8c9187334edab,Project documentation / architecture / decision or operating record
+research,docs/19_MAP_V2_MIGRATION.md,15169,1aa731396f8790e53ee5dd3bc36ef6895b201c3d28a03d141219263d4118d8e4,Project documentation / architecture / decision or operating record
+research,docs/ARCHITECTURE.md,37767,c12726fffda326e9ade0b01d2f1ac644ad67259836f77c461d53e200fea9cc3d,Project documentation / architecture / decision or operating record
+research,docs/CODE_MAP.md,318740,e85aedc2010c9c19e7af447bbd2e3abda3569359277af4148c5fce7478e2e28b,Project documentation / architecture / decision or operating record
+research,docs/CURRENT_PHASE.md,121265,2d619688bbf691164eca353f21d3d57a655d5211522af06bb04fbc183c92656f,Project documentation / architecture / decision or operating record
+research,docs/DECISIONS.md,62929,fc07cce11f5fc34791173064ada332e39410edd8709e3fd860c1d47fba6c8d93,Project documentation / architecture / decision or operating record
+research,docs/EXPERIMENT_PROTOCOL.md,20629,f21095daabe7c38e817fddef10b3adbfa39796909e125d6ba9140a1143aa92bc,Project documentation / architecture / decision or operating record
+research,docs/HOW_IT_WORKS.md,19938,4b184054d117240fa06bd9e4ec8e06aed214dd790d0b5e9a3d42aeb4727d057f,Project documentation / architecture / decision or operating record
+research,docs/MAKE_A_MAP.md,11936,6ef226a2f4b5475aa0851f655e810e4976dece4f763c79dd7084e7bf7c194437,Project documentation / architecture / decision or operating record
+research,docs/README.md,4054,cc001b54b2dd537fd2c9a0accc85de3187b182aed3f064576e25638f1a21b020,Project documentation / architecture / decision or operating record
+research,docs/REPO_ATLAS.html,706040,23301976f2e4369c87787d0956b212e46c6d8db552a967c82f3774b78c8f6daa,Project documentation / architecture / decision or operating record
+research,docs/REPO_MAP.xmind,66165,ba07dab0b9b8cf0aad7095f39a534eebd270b19888af1846f7176e73114848a0,Project documentation / architecture / decision or operating record
+research,docs/RND_SYSTEM_EXPLORER.html,657154,55256f255f4ed0e18dbd44836a6ba691285fd0edcb948a7d1fc2806b56c6fbb1,Project documentation / architecture / decision or operating record
+research,docs/ROADMAP.md,18542,be0f1485c7445b6e4013eb3599c15b5c1ca63b53a2322ffd6705d2f2159e943e,Project documentation / architecture / decision or operating record
+research,docs/START_HERE.md,21627,d140e11a4e9b55ed7e209276e2056ae064ac4bd193f8e2e6725b31e149e4e4fa,Project documentation / architecture / decision or operating record
+research,docs/agents/domain.md,1832,aefa95a4589d4111c7d06aacc4bf99d0212b23aa63ad8f2687123251b214211f,Project documentation / architecture / decision or operating record
+research,docs/agents/issue-tracker.md,1810,7dcda20a2eb4bdc89b95d1143423c0691309921cadae3132e6424f371030506e,Project documentation / architecture / decision or operating record
+research,docs/agents/triage-labels.md,1045,4f53c9b40ce2651e3611aa090eaedbd6dbc9b71ef8c5f7e65eac0d8263190d0d,Project documentation / architecture / decision or operating record
+research,docs/archive/01_PROJECT_OVERVIEW.md,3734,f1b4cedd8242601c95f30019c4db04b1fb0382828ce87c1b241ea6b653fc8199,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/02_SYSTEM_ARCHITECTURE.md,7466,bf5403bc2de2e625e7637b42bf739208efb4d9ecc2b27b559085a7b307b029f3,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/03_REPOSITORY_STRUCTURE.md,5628,a5ef90fac2859810cb27f2d4e8b012ee4c55f154507b4983528636ccc96ddcdb,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/04_ROS2_PACKAGES.md,7388,16679025e5b3665cc5a12eacb1abc964cd44745c8ee6aaad38647d0f7f8b9bdb,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/05_MRTA_ALGORITHMS.md,10856,c91c1c4de5d2b51ba84ff7db110bd1f28f57c318f581781c92394e8b1fd42834,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/06_OUTCOME_AWARE_ILP.md,7800,1fe52427e721198efa080eba58e96c7b8e541e14f13a2a9e233998c3b52e5d09,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/07_GRID_AND_PATH_COST.md,11353,237ffa6289b5ef53e7e2140e00294a1f44abfe250dc275258d8a914f3071204c,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/08_EXPLAINABILITY.md,6010,7a3b46598d90d569b329a6572f8e23c58addfbc092329ac6e2d973fadeed8367,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/09_BUILD_AND_INSTALL.md,5250,ec82fe77e911e93ba0a47e732a5c7d01b8d8b696c38276356ee1a8b9569af0b2,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/10_LAUNCH_GUIDE.md,9218,ea0c5e59c503a85b87b451da8c2261d140f97b13b68957cec8925ee369340154,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/11_SIMULATION_GUIDE.md,6271,f54fe9d4e9f1f7457acce06d8e79d67fdbe4dbe6a9135914fea671cc072e135d,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/12_EXPERIMENTS.md,9085,aba431837ee2050327d427f99e48f5aba8f8c79732a3635679bf70df1bf82d11,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/13_METRICS_AND_OUTPUTS.md,8765,49d47fb9c0bd94ad9af0664b287fe516a1a2ee372ef1a04c903a6f3729d4f2e9,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/14_TESTING.md,5377,d6b1133df4b0981ffde1a2b60875779b7c0f30ac76d9151d238919c7e95f0768,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/15_TROUBLESHOOTING.md,6021,175486160577f6a71d3e8749698d8766a6a51c636fc41c956aedfab93a29e58b,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/16_CURRENT_STATUS.md,7837,9798b26e7c77cb588e7c5b2c8a13c538910fd7de665224a1946a73a7dfc8d17b,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/17_RESEARCH_GAPS.md,11026,dbe512c4634d39b6534d9a4937a4821eb0440775ccdce7fef991868c981a4214,"Historical documentation; superseded, not current operating instructions"
+research,docs/archive/AUDIT_2026_08_29.md,33347,bd2995f25ff50cc773b27d6b2791c53bb8547edcf3d53cbfae2169645b834873,"Historical documentation; superseded, not current operating instructions"
+research,docs/code_map.json,727218,fdbd2cc56049b6edf8fa8a72a8067637c71e311410370a642b85d78356df6408,Project documentation / architecture / decision or operating record
+research,docs/figures/baseline_tradeoff.png,59404,b750ef224e2313e44a639e89ba5f6623861b92d903472ed1b9ccc6b6bc72d6a9,Documentation chart; verify its experiment provenance
+research,docs/figures/decision_shape.png,74632,fa30ad97eca93b50f4daac5ed638b9207e34a3a8c6ee14cc759864deccec46d0,Documentation chart; verify its experiment provenance
+research,docs/figures/m1_outcome_signal_and_scaling.png,620056,b052a2b81ab97b9542c5b9416de65418fd27166a5b2fb0649eecfbc3eb282fb3,Documentation chart; verify its experiment provenance
+research,docs/figures/predicted_vs_realized.png,116787,fca71e965567fb6a496919cee84ea84117f1b31bb488d94c4b2bb84f8b478c29,Documentation chart; verify its experiment provenance
+research,"docs/images/ChatGPT Image Sep 4, 2026, 01_05_37 PM.png",1587801,708903dfce3b0d2c7e2bf62b7f9a3d17688d3fb42d56cfba486d40e97e6d6c26,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 01_09_04 PM.png",1151327,3f0eaec481fefeb965a57cd0d0067a5bd53cde277ae242ec85861d9288ec7eca,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 01_12_33 PM.png",1447652,fb70549d3d4fea9e2cf321baeca13cc40189aae285df651b5ddf08ee37505c68,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 01_31_49 PM (1).png",1769684,6c86a141aa1135c801a3f29ebd4f242938564419fc5176ba670f32480b5e3ed4,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 01_31_49 PM (2).png",1665540,e45003854c7c1f4993e16a7c1df8648d685eb9d4d0e55739677665f54cf7cb72,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 01_31_49 PM (3).png",1524323,27cf9597068a434864d81ef817d04de8ca5832733c291f34baf7c1704b4765a2,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_44 PM (1).png",1506887,97d347c2453f5ab2321f0c7a31f1e890bc6bfcc35eb00a40d0c5a28a24ffc7e1,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_44 PM (2).png",1486572,a81f8f80642c1bf2b2d21087d4de1380f4aae8afa704301421403da8f6bc8b2e,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_44 PM (3).png",1565522,9b829a56f2672081af31df84b820c2af4f8a711443fd907b18f8e3a2053cf9ac,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_44 PM (4).png",1648107,6cb60b5a6a0a2ba3f2c885f07879ac2a67dd91640aee332edf77353f3d98913a,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_45 PM (5).png",1414559,d005f818065593c59e9783a0cfad55ff99163e6590d91ead1d7e7639966b6390,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 12_44_45 PM (6).png",1391216,564e1525b1738000a91c3ad5f86ba1bcdffb5f3ac8e2016316b98df5e0d4b71f,Historical illustration asset
+research,"docs/images/ChatGPT Image Sep 4, 2026, 12_49_22 PM.png",1609136,e1a8c14484c168b2dda0de791f0f37471d8407d000bc88283f9119ff2284e56c,Historical illustration asset
+research,docs/papers/ICAPS 26 PlanRob Presentation/PlanRob-15.tex,12425,2955e01e9105a51675e3b8b7192253ab9d6bc646908e65df73cfb24ac724b1d7,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/figures/fig1_architecture.png,1144476,e4f775229564e3f8ca9949e3bf2a79b1f269d02492b91c4517202a354da435d0,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/figures/fig2_makespan.png,250426,6b8903d7aaec31fc064f290fdfeb58dafdd038a90f0a8b03fd1962a32a6e3039,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/figures/fig3_ranking.png,150839,2e97a8c39e0f767ebbbf7cb3cb47a6246ec86c0774fdf76d7970709b5440d46d,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/planrob26_talk.tex,14615,f3750ab46981037d1115779f1be6e5da452d54ac6a034d83fa27ec534d53c57b,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamercolorthemehbrs.sty,1396,5012f2058e3f1c3c045e58bbda3885d9cccbb102e6a62d7df807878c9487b8ce,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamerfontthemehbrs.sty,929,7c20791a90713d9090fe8770b98a4beaa04573b9256708024db4f38b0d529b48,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamerinnerthemehbrs.sty,231,82a7954fbb4848ab625c147d7786f6410e4947f7643dd8ebd23c433ae1a6d100,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamerouterthemehbrs.sty,5105,07dc8c32f2ebbf0a91bb67425c33848e277cdfdb2e1a612972e73fa166ece810,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/theme/beamerthemehbrs.sty,647,b083e9c479d0905f9fab2cf939ae74085edff0cd519b62fb5f5333d414c18203,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/theme/images/Logo-HBRS-cyan.png,19351,3c89a9e95e66354eea2f179eb4399f2c767262e301a5d7d8620a81b04b6f8ea2,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS 26 PlanRob Presentation/theme/images/b-it.pdf,40658,ca912e5bf9b5ab7070bf89657eda86d748079358220ef5388530de3d3682f865,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS_26_PlanRob_Presentation.pdf,1739079,aad0b01731b0102c81b9829161da4a0b52bdeb0d981d4aecd6cc9305b71d51ad,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/ICAPS_26_PlanRob_Presentation_need chanmges.pdf,1739959,4c7fb57188a58480db162b7ba7522be6a51f6c9069006d36920600f8305b2a14,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/papers/Learning Interpretable Scheduling Policies for Online Multi-Robot Task Allocation via Inductive Logic Programming.pdf,1609017,dfc29ab2ce8781c1fd9be2051439a0977367dcd2328557ff37f690afb83874ef,Prior paper/talk or presentation asset; historical results are not new ILP evidence
+research,docs/tools/code_map.py,58251,df4845342ee409b52b6c12a1d23123c3ad57ca54372c013ad036a394105dfb40,"Build the code map: every source file, every class and function, who"
+research,pixi.lock,135630,114c58f6ca2fdab7a51dbe6392aaedf71b4c802cb4af15d16723fc942cec7b4b,Locked scientific environment / dependency and task definition
+research,pixi.toml,1104,8b77383f89f509de0a914bfd13e6f9c4800269673460ddf28a77585bcd820ec7,Locked scientific environment / dependency and task definition
+research,scripts/generate_overview_plots.py,5882,89d46fdb40f3bb469d651af6e3ea0ec889c50befa2563a983725dbe061a130ac,Generate overview experiment and outcome signal plots for README.md.
+research,src/dashboard_GUI/MRTA_CODEX_STAGE_0_PROMPT.txt,1946,12ea8128a855b35f08161683123d363949a4f130f05455d990de60ced6cd3ad0,Repository support file; inspect linked source
+research,src/dashboard_GUI/MRTA_CONTROL_CENTER_CODEX_PLAN (1).md,33660,07b7b24a4e24ba68aa1d71ec0226b08daf33432057710d75514f982db30a86cb,Repository support file; inspect linked source
+research,src/dashboard_GUI/MRTA_CONTROL_CENTER_CODEX_PLAN.md,33660,07b7b24a4e24ba68aa1d71ec0226b08daf33432057710d75514f982db30a86cb,Repository support file; inspect linked source
+research,src/dashboard_GUI/docs/control_center/API_CONTRACT.md,9359,351fbbfb46b4d2144f117e8041f1ed0b1bf31ed77e2ad8b91b68f4a902c3bfd2,"Dashboard design, stage acceptance, or operator documentation"
+research,src/dashboard_GUI/docs/control_center/BASELINE_INVENTORY.md,17328,75a39eb0bea6f383dc0518187ad77adfe2875f648fd8ec279faee45175bf74c8,"Dashboard design, stage acceptance, or operator documentation"
+research,src/dashboard_GUI/docs/control_center/EVENT_SCHEMA.md,9399,22d918416d6c5b5a3c95345733c27b3cf8319a2b672f1eb5c517e4e43381a5b8,"Dashboard design, stage acceptance, or operator documentation"
+research,src/dashboard_GUI/docs/control_center/SCIENTIFIC_PARITY.md,7970,3a72c1767c986e15e786305a46559ce3334f8eab864d94ae190b283f83917f04,"Dashboard design, stage acceptance, or operator documentation"
+research,src/dashboard_GUI/docs/control_center/STAGED_PLAN.md,7523,e1e146d7a245a07f8b54d1038f1ac40f9a34da31f671d122ef545ecf7256d531,"Dashboard design, stage acceptance, or operator documentation"
+research,src/gazebo_fleet_pose_transport/CMakeLists.txt,1230,9244be25ddc0a5e2d0f2a1c41a538f97e3f127b2db6b5c43a27a367d382b3f24,Gazebo C++ batched pose transport and parser
+research,src/gazebo_fleet_pose_transport/README.md,2590,e651a2c2140ad22b0985418300fde5b5290a1fb6d13f033524dca91b1c102531,Gazebo C++ batched pose transport and parser
+research,src/gazebo_fleet_pose_transport/package.xml,697,90ada8371d5b299e8dc497d6ca4154645cacd3a1218113c4e4ee95c3b358a451,Gazebo C++ batched pose transport and parser
+research,src/gazebo_fleet_pose_transport/src/frame_parser.cpp,5634,700ce562c7a3d22048fd1d65dad79c747b6b6077c37d652abd1e57f3db158a47,Gazebo C++ batched pose transport and parser
+research,src/gazebo_fleet_pose_transport/src/frame_parser.hpp,1528,9370d8e49fbc2efd7115b303b77c79136d5b9a4030d6c6ad931882a5913af9d4,Gazebo C++ batched pose transport and parser
+research,src/gazebo_fleet_pose_transport/src/gazebo_fleet_pose_transport.cpp,11986,4fc8c6d9e47037ec82ec676e068eb358f692008ce35bf11722427f0644f8549d,Gazebo C++ batched pose transport and parser
+research,src/gazebo_fleet_pose_transport/test/test_frame_parser.cpp,2866,201d8a56c98d655f8fd2ab29ba313fc81ed70a49e1827a24d1446912008a8526,Regression checks and fixtures for test
+research,src/mrta_core/mrta_core/__init__.py,808,69b884962b9a58e5a23c21fbca2410f41b0ad53aa05cf3c900ff5b4f5999290d,"Shared warehouse, order, routing, timing, energy and configuration model"
+research,src/mrta_core/mrta_core/battery.py,11714,6e15a033e8cfcbd860260bb0b5bc5056c232c9b78141fdd1add9f3a505a6fcf5,"Battery V1: a normalized, deterministic state-of-charge model."
+research,src/mrta_core/mrta_core/grid.py,4862,7912024939fb08c9dd8ee48ff6f02914c8555d9d4f68e097ed1e409d390a801d,"Shared warehouse, order, routing, timing, energy and configuration model"
+research,src/mrta_core/mrta_core/kinematics.py,4442,7c41c15d2d02743fc000de13607de0c9fc22ead3c5b21e03bd274edc149fccd9,Physics-based robot motion and energy model.
+research,src/mrta_core/mrta_core/map_builder.py,15699,f3dba378b70137b66b8e80d53a9f6af8a37244a657ce5dcd36299d50ce98f22d,"Build, export and write warehouse maps in the Excel format."
+research,src/mrta_core/mrta_core/map_check.py,11087,496d305c50be965f49f596b45d3f8527f12694d83032ce92502ec1ccf833941d,"Fast structural checks for a warehouse map, in plain language."
+research,src/mrta_core/mrta_core/models.py,606,99d4b9bf351475eb326007917e1c76b03d4347fa25544b4b17df923f0f62d949,"Shared warehouse, order, routing, timing, energy and configuration model"
+research,src/mrta_core/mrta_core/order_queue.py,4475,42ec65f8d9ac1b1991446e5453357594635608009f865f0b8ab8283df6eb45cd,The deterministic FIFO warehouse workload.
+research,src/mrta_core/mrta_core/orders.py,7265,88a0e1a3a5c63d414dc653779383e82ba1beb1957bb29a2296cb6d0df0104afc,Customer orders loaded from CSV.
+research,src/mrta_core/mrta_core/sim_config.py,7777,f4bc08822f222e7a45e57fc4292d35939d0870521c395506562e9c89fa225752,Central simulation configuration.
+research,src/mrta_core/mrta_core/symbolic.py,4023,acaaf4def1f374c697eb05e16ef23e43e3ebe428554f9d0cbb887a660510cb0a,"Shared warehouse, order, routing, timing, energy and configuration model"
+research,src/mrta_core/mrta_core/warehouse_map.py,7272,139bf85dcc63b6b2900ec6b50b81063bcc15ccd86277b8bc1fb29e87c8019032,Layered warehouse map model.
+research,src/mrta_core/mrta_core/warehouse_map_io.py,5798,14e3a925290088c4d9f2e524e06b75a941e5be83ef5f4bc859a2f9fc7febec40,Load a human-readable warehouse map from CSV.
+research,src/mrta_core/mrta_core/warehouse_map_xlsx.py,21914,a8402437541257615443afec82d3945ee30366fe74fbe156c6cf142bfec19bd2,Load a warehouse map directly from an Excel XLSX layout.
+research,src/mrta_core/mrta_core/warehouse_routing.py,37982,59db7419e13d44fe4434deb912e29ca5649b5f8c50a60ae64653198b7cbc18ee,Static warehouse routing: the one grid-aware path layer.
+research,src/mrta_core/mrta_core/world.py,3768,b6b22676f6769c9c869e6eae354fa26207df84c5af0e28fb25dbeae118f97f66,World <-> grid coordinate mapping.
+research,src/mrta_core/mrta_core/world_view.py,1884,60a6224eb346d2481701d850bb856e123133afa1f87733d286f2152b5351c6f8,Grid <-> world coordinate transform.
+research,src/mrta_core/package.xml,723,2b1b94a53fc5b3733796fb1bc484cadf114bdf06c657b9a1d51424c0a03d5bc4,"Shared warehouse, order, routing, timing, energy and configuration model"
+research,src/mrta_core/resource/mrta_core,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,"Shared warehouse, order, routing, timing, energy and configuration model"
+research,src/mrta_core/setup.cfg,87,f7215f370092c299f486d28c6930d37bfc51deb5cdc7bcb906d0162d3e52a2f6,"Shared warehouse, order, routing, timing, energy and configuration model"
+research,src/mrta_core/setup.py,722,a094a4469746fc202d848022c2d1b5a6b7b6455e681d4df5e810c05a9d818272,"Shared warehouse, order, routing, timing, energy and configuration model"
+research,src/mrta_core/tests/conftest.py,2114,4f5987b3fb59f8a5c2afc08dc8e050ccef9ab84f9ce92c371a6388458789453a,Shared fixtures for the order workload tests.
+research,src/mrta_core/tests/test_battery.py,5816,cfc93e427dc79de2af5a9fd88b069dd745de1be8c71c892a7a50e6b82075a43c,Battery V1 model: exact energy arithmetic and a strict config.
+research,src/mrta_core/tests/test_grid.py,2012,f67c4d43733d2b6a6936f3aaf09a2351e402f27211c5097e40759949e56c5178,Regression checks and fixtures for tests
+research,src/mrta_core/tests/test_kinematics.py,1888,2d1aa188e1094ece63711e5c4e434cda745f8f325ed533300ba3ea3b3cc585ce,Regression checks and fixtures for tests
+research,src/mrta_core/tests/test_map_lanes.py,14570,cffe69b10f25252e6f2c02fda414adeb94ab3b80126548873923ac71b7e5aa58,Maps that draw their own lanes.
+research,src/mrta_core/tests/test_map_lookups.py,2455,f58bca33f90c89000ee5904ff0f605453453c8cfafb07daa4adff4cea4528a3e,The map's zone lookups answer exactly what a scan of every zone did.
+research,src/mrta_core/tests/test_models.py,815,03599c0977e1653f6f638b6b635b92eafd72ea379b25449668a038f7c63f531f,Regression checks and fixtures for tests
+research,src/mrta_core/tests/test_order_limit.py,2732,d5f1a4c3e8327e3bb777d5f67dff952dee1289f209391d186dcbe37407826939,"A shorter run takes the first N logical orders, never part of one."
+research,src/mrta_core/tests/test_order_queue.py,5960,3e0468f3ce92a23736edabceb715236e21484ead213c402fe7c6bb99df334f57,FIFO workload semantics: which orders an allocator may see.
+research,src/mrta_core/tests/test_orders.py,7557,b495e2038971fbd9c98d89ed2ed19ba3983cc2fc4d41382226b7414d043cda0e,"The deterministic FIFO workload: schema, grouping and validation."
+research,src/mrta_core/tests/test_symbolic.py,3624,5ca80f8c708c6a7f306e7a78f977f5f51bc90fe4b0958f614c132b9afe6b355d,Regression checks and fixtures for tests
+research,src/mrta_core/tests/test_warehouse_routing.py,6465,2b342d0337616486f8264a26be70aec86a688c34a3ebb1a0a2568f97bd6ce229,"Terminals are leg endpoints, never transit, for A* and RMF alike."
+research,src/mrta_core/tests/test_world.py,1939,577b6744aa32d8efb20d2d114309a097d9635a7abf45663429499595ee415975,Regression checks and fixtures for tests
+research,src/rmf_grid_traffic/CMakeLists.txt,1211,34c43e3687b091dedbd762c9e2fabc7c1663dafb216de4bc0732b583a84da069,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/rmf_grid_traffic/config/warehouse_nav_graph.yaml,349608,6c19c9e67eab43e891a996f298a4e3d802c079faa823056ab03965014892d02b,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/rmf_grid_traffic/package.xml,732,66007a52b2dc4a56f84a61a4463560a8f27a94102a91cc750f4182bed70b502e,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/rmf_grid_traffic/scripts/generate_nav_graph.py,8096,fd35daa670f31f7ad11a614c99ccfaf874261937cd714e9f61d31d2dedaefce5,Generate an Open-RMF navigation graph from the warehouse XLSX.
+research,src/rmf_grid_traffic/scripts/local_headway_demo.py,5083,1740ebfecf1b8a4c73faf664e2a71295d8398bc5f6652f3274af4178890bfb74,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/rmf_grid_traffic/scripts/local_traffic_demo.py,5204,d91faf144ef8ec3bc4c98da9e4dc4a0c129206ef3638d66627203d3e51f3cc97,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/rmf_grid_traffic/scripts/local_yield_demo.py,9136,350b058dc686e75df315fa64a826f501f986df0939d023ac5690ebc618760c57,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/rmf_grid_traffic/scripts/real_warehouse_gazebo_demo.py,11859,9dd404e367e7810940eb7404a5514379368d1d3d8cb5e2a5ff714d534e390d35,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/rmf_grid_traffic/scripts/real_warehouse_traffic_demo.py,19664,2c86a9f9fe73076726db1093b5d56bf34b9ca23f89cef88026b5a6c2e104c029,Two-robot playback of a real synchronous traffic conflict.
+research,src/rmf_grid_traffic/scripts/verify_nav_graph.py,7025,04223b4b057a746b0df91742e2fd599588bbda3d65d2ef7b1b7802477182f715,Verify the RMF nav graph is an exact mirror of the lane policy.
+research,src/rmf_grid_traffic/src/graph_check.cpp,2065,ff63b4d2715825763439592c45ec67039e7116b541521952d3d40fd2e043e812,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/rmf_grid_traffic/src/route_check.cpp,5922,b9d0a7a3657213ab4992161de86450b2b0a30316f10748a883668023d5aa9fb6,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/rmf_grid_traffic/src/two_robot_check.cpp,9789,04fe3fb54aaec3c8c1bc11cdb711a78dc668624eefcb5be674b4fead5942b179,RMF graph/route checks or local traffic/Gazebo demos; see handover for legacy entry-point limits
+research,src/robot_interfaces/CMakeLists.txt,601,5aa53c1dcf348b548c6c661fdd8e07d3acc546b0805fadd2215f43c22296be82,ROS message interface definitions / build metadata
+research,src/robot_interfaces/msg/FleetStatus.msg,1197,d0335511ad916a4407702788d7881ab67fb5a357bdd7c379a8949be43eb90b2f,ROS message interface definitions / build metadata
+research,src/robot_interfaces/msg/RobotState.msg,812,28d09a15904c4e9b8b2b16d63b6c1431aca083efe11cd0639c3e8339fbd9d0f2,ROS message interface definitions / build metadata
+research,src/robot_interfaces/msg/RobotStateArray.msg,239,a2ec889a7cbe2c66452b6f28b457bf913938fc7a51ec1bbb4f5deaa3f7acd304,ROS message interface definitions / build metadata
+research,src/robot_interfaces/package.xml,830,73293e6ab2a8616c4f73aa4c577816242522ef25a75c2497feed32c4c6b9f794,ROS message interface definitions / build metadata
+research,src/simulation_env/config/README.md,2254,54562ff7954cf7e3c912e8bfc68ef658f573c2c92155aaa4db88ccfa8a29cd62,Active scenario configuration or committed order workload
+research,src/simulation_env/config/orders.csv,149299,c38a93e492b0e38afecbc3118c70fb4ab8a6a1a35b156b42986bed48fce20ea6,Active scenario configuration or committed order workload
+research,src/simulation_env/config/warehouse.yaml,5918,fbab9056ece331128758d894513dd11bbe7596d9149f28c17e4eb65ab5c7ca9d,Active scenario configuration or committed order workload
+research,src/simulation_env/launch/gazebo.launch.py,3050,25acc0f87137f0b7fe26a36be3ab930297a56ea2e5d419bbb14852bc41ef652e,Gazebo with the warehouse and the fleet parked on its start cells.
+research,src/simulation_env/launch/warehouse_sim.launch.py,7865,ceacc3a65038bceb7e277fb859b3df9d878660bb977c3fd86400cacdd218cb71,Warehouse workload simulation: fleet execution and Gazebo.
+research,src/simulation_env/maps/README.md,1394,68ea02855995f82deccc11134e3e4ca50e80851db6dac7da0eefc441c45134ef,"Warehouse map workbook; W100 active, others examples or fixtures"
+research,src/simulation_env/maps/W100.xlsx,14443,508c3ab470df7de45de22c9f7f690c77cd09c3de54d89c9a2810742710c27fbc,"Warehouse map workbook; W100 active, others examples or fixtures"
+research,src/simulation_env/maps/my_map.xlsx,14444,ee3c21d01a4959bf2a18575cd9b5334b7ebd330d1194b1ef5fe79a97049c2d8e,"Warehouse map workbook; W100 active, others examples or fixtures"
+research,src/simulation_env/maps/my_map_20.xlsx,8230,51405d2779f90abfc3cee9606e1de6e8bee6379927c4cc3a74ec4231ae4d0b67,"Warehouse map workbook; W100 active, others examples or fixtures"
+research,src/simulation_env/maps/my_map_60.xlsx,15232,d951b03a0dd5ceae514897041cd5d81e25d1bce9b1f1c2dea184aca01c045a0e,"Warehouse map workbook; W100 active, others examples or fixtures"
+research,src/simulation_env/package.xml,752,cfdf926ccbe562a0bb7a290cc80c67c9927044fe77f2c13161d8c26e1be1d448,Repository support file; inspect linked source
+research,src/simulation_env/resource/simulation_env,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,Repository support file; inspect linked source
+research,src/simulation_env/scripts/README.md,3007,b92dc6bc6eb19ef7add17209ff986c28b2678885f2c3852c1aad18cfe74071cd,"Headless workload, campaign, plot, scenario or scientific check command"
+research,src/simulation_env/scripts/build_scenario.py,8002,65d126bca24a6305df8eadb9572e00587421eb8ed0d2d53c4dc444db23a6d063,"Build everything for the current map: config, orders, Gazebo world."
+research,src/simulation_env/scripts/check_18_robot_traffic_stress.py,13142,b8446bf8bb9a458afd1d917b3ef0490b5f2e8e6c93376557dcaa472e6810563a,"Headless workload, campaign, plot, scenario or scientific check command"
+research,src/simulation_env/scripts/check_b4_charging.py,14617,0a1a7cb2c00286b215d9d2a04f63f51c80d4ae6d8dc239f45ad4e74ace779c7e,"Battery V1 B4: charge to 100%, leave the charger, rejoin the fleet."
+research,src/simulation_env/scripts/check_b5_queue.py,15266,261ed8b243e233591152887a9d97b357275639123fd8158f487e0f8337299970,Battery V1 B5: holding promotion and charger preemption.
+research,src/simulation_env/scripts/check_batch_reservations.py,2470,25cb856d2718b32b8a6476599b171414e7e36da5ddd29465330b387ba17de1e1,"Headless workload, campaign, plot, scenario or scientific check command"
+research,src/simulation_env/scripts/check_battery_eligibility.py,10418,3d0d4df442d29922431e0eb97464221085a97673012b928f205b376e1b30662f,Battery V1 B2: show that energy eligibility actually binds.
+research,src/simulation_env/scripts/check_charger_evacuation.py,12566,93a618038130b5e272c84ccb11b2b5a4fd5bcbcfa4a332b3563cc8df1dd0f442,"Battery V1 B3/B4: REQUEST robots leave the transit network, charge"
+research,src/simulation_env/scripts/check_engine_batch_traffic.py,3009,7b67c6820a9b90c281874e1789104e5b4cc4ead8ffd0865afeb26089f5b9a29a,"Headless workload, campaign, plot, scenario or scientific check command"
+research,src/simulation_env/scripts/check_engine_headon_yield.py,6858,6bbe122c7c592f58abea2ec38b2d0b4540ede0351c2c64b1f77eafb7437c215c,Head-on prevention in the production fleet engine.
+research,src/simulation_env/scripts/check_local_headon_resolution.py,9306,04eef03ee5a39f40fd7c30f2c4ee4470f3fde50163c03da6113cd31095deb003,"Local head-on detection, yielding and rejoining on the real map."
+research,src/simulation_env/scripts/check_local_traffic_controller.py,3940,2faa015ced50f8515509cab141b115a56ad50548687e4ba0835bad69ca544d3a,"Headless workload, campaign, plot, scenario or scientific check command"
+research,src/simulation_env/scripts/check_local_yield_selector.py,3038,9534bbcfd84aa7c7e2b230b0ad7d5f399db5ffcc2dc1b6ca0aa72cd30d6a33f9,"Headless workload, campaign, plot, scenario or scientific check command"
+research,src/simulation_env/scripts/check_map_topology.py,11410,ac29aa879438dbf56f5be6478313aa5018edc96013295630a474c443faf2e07f,"Topology gate for a warehouse map, under the production lane policy."
+research,src/simulation_env/scripts/check_raw_mission_cycle.py,4055,c0e92fa3624d0ab787a956c61b95248780dec921d1a1761d01167aa37d038f04,"Headless workload, campaign, plot, scenario or scientific check command"
+research,src/simulation_env/scripts/check_strategy_distinctness.py,8448,97de8c317fa5924740eaaf99a31d4b9bbb3f72fbc181cdb103eeca4f13c25648,"Strategy distinctness gate (docs/DECISIONS.md, ""Strategy Distinctness Gate"")."
+research,src/simulation_env/scripts/compare_paired.py,9967,8dae66c3310c3ee96e8e616d97d49ffa031ee9e12380521e3807b1c253016e59,Compare strategies by paired differences over workload seeds.
+research,src/simulation_env/scripts/discover_directional_highways.py,3126,142b63972e841f9738a82d2b216ff85d22f521bd8f982c9a4b9b1196cade3c70,"Headless workload, campaign, plot, scenario or scientific check command"
+research,src/simulation_env/scripts/generate_gazebo_grid_world.py,8202,62d2855331ecc04a487b0df74b0422d6ccb9bfef453603db4de9db47688f83de,Generate a lightweight Gazebo warehouse world from the XLSX map.
+research,src/simulation_env/scripts/generate_orders.py,4762,d0abb6931fbe3df2fd47315fa32c48bfb633844f732448694f7928b0525e9695,Generate a deterministic order workload.
+research,src/simulation_env/scripts/m1_probe.py,11540,736eb2dd62a25a3b9f43828a4b7add1ec246c4e46f20e73bce2af405fc27963b,"M1 probe: one workload, recorded, plus congestion features and rollouts."
+research,src/simulation_env/scripts/map_tool.py,11171,a753f0d1319114fce5204e9dec5a1a01d55131e588e64854de13dbf27bfb9698,"Make, check and inspect warehouse maps."
+research,src/simulation_env/scripts/outcome_signal.py,4744,5da734fa7c0c334ace4cd05cb3f5ba23ca3aed0f16594913dadd7dedcf20e393,M1: outcome-signal report over recorded runs. Read only.
+research,src/simulation_env/scripts/plot_dataset.py,10646,e4366dc80857f3fe26f17cd58d61947ba4c4c345e29230c0036e59978fd4d145,Plot figures from recorded Phase 8 datasets.
+research,src/simulation_env/scripts/plot_experiment.py,12170,9fdf8d84ab3532e57eb5fd961007a1c2b70e30048640ea71cf37dd4c0b5661a3,Plot an experiment written by run_experiment.py: every core metric.
+research,src/simulation_env/scripts/run_experiment.py,17417,fa10fb73511b4de4bf870c616c10fe5e6e99f87770938d16f6dcdf9afa950691,Run an experiment grid headless: strategies x fleet sizes x seeds.
+research,src/simulation_env/scripts/run_workload.py,14795,5a018c37346d1728606bdef53abc6884edc76cfa1e23e04a2e213aae3db0f69c,Run a warehouse workload headless: FIFO -> allocator -> fleet.
+research,src/simulation_env/scripts/validate_directional_highways.py,9066,6cb25601d176c4f4f6a4d366c628394fbaa80b71fbee9f30f22e8426ed644693,Validate the directed warehouse traffic topology.
+research,src/simulation_env/setup.cfg,97,d2b4e0ba8108d4d8b68fff3bd762579eae658bd33c69d2e299b8502458b1583c,Repository support file; inspect linked source
+research,src/simulation_env/setup.py,1161,3a13d86868fe59853d9bd42420477a9f25eca67d606c6b4d5eb7d96223e95374,Repository support file; inspect linked source
+research,src/simulation_env/simulation_env/__init__.py,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,Scientific simulator execution / traffic / charging / data or diagnostics module
+research,src/simulation_env/simulation_env/battery_ledger.py,17125,635e18af21c6354fa4a1132f55474cf49c41c106c97655ec414d8df1ce321ced,The one authoritative record of every robot's state of charge.
+research,src/simulation_env/simulation_env/charging.py,18706,723d2290abdd0fa5913aeaddd3cfe46a5174fcd708f7eda2ff2b2479fcd13611,"Charger and holding terminals: who holds each cell, and in what state."
+research,src/simulation_env/simulation_env/congestion.py,9319,f047c2be027fea4641f91f6567ef5963f901efcd13a7e1d70986e28d89813b16,M1: decision-time congestion and route-overlap features (diagnostic).
+research,src/simulation_env/simulation_env/dataset.py,15830,27b8e71929e587431ef44ef2af88c63a1cd467d0e04619d13707350037f5c082,Phase 8: the decision and outcome dataset.
+research,src/simulation_env/simulation_env/dataset_export.py,10033,6d831ddb1616205aeff67c3475b09cfb6b86e4006a01712e652f021d5c6d91a0,Phase 8: reading a run's dataset back out.
+research,src/simulation_env/simulation_env/failures.py,4506,5a337616184a38295255987e8a6e11068a92767ccb87e996dd1f73b182116ef2,"Why a run failed: classified, and recorded beside its outputs."
+research,src/simulation_env/simulation_env/fleet.py,8336,a7e74ad4be435c2547df45bdf6a828a5e6570ac6db55da8d866a9c50449182ce,Build a robot fleet from configuration.
+research,src/simulation_env/simulation_env/fleet_engine.py,65491,2f74f28dc08ffd62d842588575088a7ea82d427c3ed3eef17e438865dd5a8abe,Event-driven fleet simulation with one authoritative clock.
+research,src/simulation_env/simulation_env/fleet_node.py,41778,56fc9458897219f959356cd1da00fa09892092229070f56c626f22f46fe0a051,ROS 2 node that deploys the fleet and publishes its state.
+research,src/simulation_env/simulation_env/gazebo_bridge.py,13435,5271e7b30a58a72fdaef3d6cc98802bbaebc046a631d059fc7f880b06c881828,Gazebo transport helpers.
+research,src/simulation_env/simulation_env/gazebo_view.py,1222,78dddd602520ff0afb7227fd80a783d040dab9bd87852d8d40b18f60a6c139a9,Grid <-> Gazebo view transform.
+research,src/simulation_env/simulation_env/gazebo_world.py,8227,4afec8aec1393f6d49c52314f780b82d1374257dc387423eb5b63ba4c6b03dda,"Start Gazebo with the fleet already parked: the world, and nothing else."
+research,src/simulation_env/simulation_env/grid_robot.py,7488,5929ebbc87dc8a2592e693a770fed3703a5f06f4cd4f32facb53f812d5d598a9,Lightweight deterministic grid robot.
+research,src/simulation_env/simulation_env/local_traffic_controller.py,11303,2b075d895fd75178873eaff1682d7f2af911e848a9f2990c67b1391dcbece0d9,Local batch traffic arbitration for grid robots.
+research,src/simulation_env/simulation_env/local_yield_selector.py,3798,b9ff6657a1dde2cb2e43338d4c5554947f06a814b1b8e62ebbd0b90898b6fee0,Select one nearby temporary yield cell for a local traffic conflict.
+research,src/simulation_env/simulation_env/outcome_signal.py,15501,d62dc76d5d9fc3f10dcb8ddeabfe32e9380591fae22fddc73d544b961f5a0055,M1: what a realized outcome tells us beyond the teacher's estimate.
+research,src/simulation_env/simulation_env/paired.py,9182,61c50471d25623ca84186673a537a78a0dda8cff1e219fe28df82f009b26f175,Paired comparison of strategies over workload seeds.
+research,src/simulation_env/simulation_env/reservations.py,15353,7b4cdfb43ff9868be3cf496e42a01ba53a808aec9c6a9a5bbc210f6a9f2948b0,Time-indexed cell and directed-edge reservations.
+research,src/simulation_env/simulation_env/rollout.py,13361,d9f356d26f6aee8fb8415b9dc7cd34d6717b4bf8add9b3b7db697c5b736f335d,M1: deterministic counterfactual rollouts from cloned simulator states.
+research,src/simulation_env/simulation_env/run_metrics.py,9146,a74f4691f297dc12d41015cb86612da92006ecc7bab6fc46fa7aa57822a99787,"Run-level metrics: the numbers an experiment compares, one file per run."
+research,src/simulation_env/simulation_env/seed_split.py,3809,705c803e7bd8b92bee631ab6b04d42e44d74cf50e8f335d91c7f05091798880b,Which workload seeds may be used for what.
+research,src/simulation_env/simulation_env/stage_parking.py,6689,7e010b98072681a30b52a5797f9369832d13e2e161ff2c03e9a65a3ff5d3a962,Final parking: the Stage Zone bank is a shared fleet resource.
+research,src/simulation_env/simulation_env/work_accounting.py,6141,f7636ec759e62a46066eec7021a9398eebcdcda8fb10dcfc55ee558590fccf23,"Which part of a run was order work, and which was recovery (B6a)."
+research,src/simulation_env/simulation_env/workload_executor.py,119283,6461b85aa09031b91c4b27b7e85e0c98832271508e3ddd3317a612519714adde,Run a whole warehouse workload: FIFO -> allocator -> fleet.
+research,src/simulation_env/test/fixtures/CSV_To_Gazebo_v2.xlsx,6625,6fcdfda918c4254f0b20b32488a92c70cd95f3ab7e3217e96c88c1a29cd087fd,Regression checks and fixtures for fixtures
+research,src/simulation_env/test/fixtures/orders.csv,7446,4c66bb94eaa6a012ba2417dc2dadfe219cdbbe05537faf237674b6bbfef8553c,Regression checks and fixtures for fixtures
+research,src/simulation_env/test/fixtures/orders_500.csv,37313,4e7c82902d6248117973f4bce6ccf0fb13d0ec950c869543af44682a9ff86112,Regression checks and fixtures for fixtures
+research,src/simulation_env/test/fixtures/v2_reference.yaml,5288,06d51a174ed4c5d687c5d5f0cfc94c59d3cc7bbae763c8ce6df96ee40591ae75,Regression checks and fixtures for fixtures
+research,src/simulation_env/test/fixtures/warehouse_sim_b3_four_low.yaml,4059,86627a05faea7817c2b518e4f5cc7f524331c7dfdd6e9c58fc187eeac1cb865b,Regression checks and fixtures for fixtures
+research,src/simulation_env/test/fixtures/warehouse_sim_b3_twelve_low.yaml,4219,bb9a6b894a479098c8fc374053b57a29cd048da8559ec94fa3a7dfd63a415c7b,Regression checks and fixtures for fixtures
+research,src/simulation_env/test/test_b4_lifecycle.py,9920,3378c4b21d81ba43e86be38910d7f09cea0863b6c19c27668cfb1a2d156f3c0d,"B4 charging, clearance, reuse and watchdog regressions."
+research,src/simulation_env/test/test_b5_queue.py,19782,3c51f8cf2bb16ca5306dfce2b3110d22528f79c6ed8bb335554b020aa023c880,Battery V1 increment B5: queue promotion and charger preemption.
+research,src/simulation_env/test/test_battery_eligibility.py,25764,94b56a4470c82847d2dc35ff8656a66a89cc2c3f37c7d7801e667b9097eebccf,"Battery V1 increment B2: eligibility, CHARGE_DUE and CHARGE_NEEDED."
+research,src/simulation_env/test/test_battery_ledger.py,23227,9294059637469f5a2a0653f82326fdb29b240ff071f33a6d349c075f228678f7,"Battery V1 increment B1: SOC accounting, observation only."
+research,src/simulation_env/test/test_charger_evacuation.py,30993,bcc8156469e28fd3d435ca10752a0f3615daf4fce756cd2ab82ccf0e1c63989a,Battery V1 increment B3: REQUEST robots leave the transit network.
+research,src/simulation_env/test/test_charging_bank.py,4841,0448afd1122b7e0de2bc77e1b9d8047a82b0ca49ec750c3fd1a8f2b09c961096,"The V2 charging bank: one cell deep, reachable, never transit."
+research,src/simulation_env/test/test_dataset.py,24368,318f245c2a4a08fda85321bd443615dfb889ecee10a93ffe1a36193375f6e854,Phase 8: the decision and outcome dataset.
+research,src/simulation_env/test/test_experiment_integrity.py,9988,700eb2eb1f944e85eb4b0c010ebde487f5f578d4f15459f02e7d7fbc8cddaa5e,Paired experiment integrity (E1).
+research,src/simulation_env/test/test_gazebo_world.py,6794,b88d65d51b73e3b2d2b8f6534e5e8c53126ccd0c82862cc58560960248ed3b4a,"Gazebo starts with the fleet parked, and only one Gazebo per world."
+research,src/simulation_env/test/test_m0_integrity.py,26733,cf8c355db542e5ea85b3506a1bfc5f07a7620f1fd47e316e0be566b9e8ff623a,M0: research integrity and experimental reproducibility.
+research,src/simulation_env/test/test_m1_diagnostics.py,18626,dafa774c907d2e9d78c54d5bbcd070f0d0a591955d4eb0240de005b1ec019f4a,"M1 diagnostics: outcome signal, congestion features, rollouts."
+research,src/simulation_env/test/test_one_config.py,6376,63130c9421f09402cd2a0e8f61644293979e3cecc772170efab120bf9aa7467a,"One config, one map, one world."
+research,src/simulation_env/test/test_order_limit_run.py,6545,b6710e8c5e0510b657b7d28af795b1e55f945f98788bb0345c88f08db4175a0a,"A run on fewer orders: what it executes, and what it records."
+research,src/simulation_env/test/test_paired_seeds.py,6692,1774b2523ce62bcf4091503d35983ec25aaef4172141f18a48993697369f0096,"Paired workload seeds: one workload per seed, shared by every strategy."
+research,src/simulation_env/test/test_reservation_audit.py,5758,86f91abe41ac25da62dc52d4592d8012148e4b479fee81d8461cbe9eeaeb2166,"The reservation audit finds every conflict, and finishes on a long run."
+research,src/simulation_env/test/test_run_metrics.py,3047,84530ff5d9e6d3e0db9e6bac688280a340eec5acd5ee1e5cb1109111c9924d0d,metrics.json reports exactly what the run did.
+research,src/simulation_env/test/test_s0_window.py,17221,57c70d33de76f6d17df4142c9b640a11d53837bb40a35790fcc70a054f0c046e,S0: the allocation candidate window and the FIFO liveness rule.
+research,src/simulation_env/test/test_spawn_spread.py,3586,a14b81c31b190fab22e9b04ea6cd4b47cbd6d13bbbb3ffa8f622cbd246cac33d,How a fleet smaller than the parking bank is placed at t=0.
+research,src/simulation_env/test/test_stage_parking.py,8773,263e0fcdde6ddaca7c2ff760c728ed976c35c3aadb440b8e1025ed1daf530924,Final parking: the Stage Zone bank is a shared fleet resource.
+research,src/simulation_env/test/test_stage_promotion.py,11127,768508d2dd72cd602e9449583fa7dc4b615f1062db6adc751170d0411640dae3,"Battery V1, B5: Stage Zone robots are promoted like holding robots."
+research,src/simulation_env/test/test_traffic_rotation.py,9583,92722bd492dcf763c06614e34c14d46f0807564302f00fdfa998a7a2428143db,"Rotation right-of-way: a full ring moves as one, never deadlocks."
+research,src/simulation_env/test/test_work_accounting.py,13507,bc4ed5dbef19f4556af9206cf796edafa93b20130c559be75152e6eac4d8b2c8,Order work and end-of-work recovery are measured apart (B6a).
+research,src/simulation_env/worlds/warehouse.world,419541,98a55eaf2a3832a4001cbd3d260c659fed645b479e318bff6a70d3bb22f580ff,Generated warehouse-only Gazebo world
+research,src/task_management/package.xml,581,9b38fb98daf57b7a0fb9e9f7e2a1a0e89fe59df54ecdc62739cd552aca5ca286,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+research,src/task_management/resource/task_management,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+research,src/task_management/setup.cfg,99,1a507b5308a8673ebd1087650c8b8bf440d8e8f4dc0ac2467248af64946222f8,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+research,src/task_management/setup.py,793,8607217a0aa4fe3dd4043b5c7062389c99ab6f251ab0ca9cd2d69cd83ca08901,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+research,src/task_management/task_management/__init__.py,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,"Allocation interface, eight conventional strategies, candidate routes and timing estimates"
+research,src/task_management/task_management/allocation_strategy.py,36234,9c825391ad3881ab7810d10ba4a42958f80644b8bd5521044a4d27dd884a6685,Batch MRTA allocation strategies for warehouse orders.
+research,src/task_management/task_management/features.py,11559,3451deb236d7d77947a12f17c45ed8820df4e1c0dc216a5dfa68ac1a084706e6,Grid-aware features for batch warehouse MRTA.
+research,src/task_management/test/test_nearest_astar.py,11573,26f90cff72e4f15cd0ec5313781ebeae43010664a684f9ef77b2d5222b87b0cb,Nearest A* picks the expected pairing on a controlled warehouse.
+research,src/task_management/test/test_phase7_strategies.py,17426,ac66f875cb9ce20b6c52363b9befb7ed6611c829a9d584e031625d8493665d2b,Phase 7: the five remaining conventional strategies.
+research,src/task_management/test/test_strategies.py,13535,2d9aa4184d092418d00a6a74582bbf4154dcbe4cd8bbee40430c209dfcf24760,Phase 7 slice 1: Random and Nearest Manhattan beside Nearest A*.

@@ -1,0 +1,13 @@
+[1/6] ros_validation: nearest_astar, robots=2, seed=101
+  complete; 3/3 orders
+[2/6] ros_validation: nearest_astar, robots=2, seed=102
+  complete; 3/3 orders
+[3/6] ros_validation: random, robots=2, seed=101
+  complete; 3/3 orders
+[4/6] ros_validation: random, robots=2, seed=102
+  complete; 3/3 orders
+[5/6] ros_validation: milp, robots=2, seed=101
+  complete; 3/3 orders
+[6/6] ros_validation: milp, robots=2, seed=102
+  complete; 3/3 orders
+COMPLETE: 6/6. Summary: /home/ibrahim/rnd_mrta_ilp_ws/src/dashboard_GUI/var/runs/experiments/validation_gazebo_recipe_20261028/summary.csv

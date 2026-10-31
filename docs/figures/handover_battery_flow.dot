@@ -1,0 +1,34 @@
+digraph battery {
+rankdir=TB;
+graph [fontname="DejaVu Sans",fontsize=18,bgcolor="white",pad="0.25",nodesep="0.30",ranksep="0.48",splines=polyline];
+node [shape=box,style="rounded,filled",fillcolor="#edf5fc",color="#83aac5",fontcolor="#183044",fontname="DejaVu Sans",fontsize=15,margin="0.18,0.12",penwidth=1.3];
+edge [color="#54758c",fontcolor="#3e5d73",fontname="DejaVu Sans",fontsize=11,arrowsize=0.75];
+
+available [label="AVAILABLE
+robot physically clear of service terminals",shape=oval];
+eligible [label="Order energy + charger leg
++ reserve <= current SOC?",shape=diamond,fillcolor="#f8f2e5"];
+busy [label="BUSY
+execute assigned order and retreat"];
+need [label="Charging due / needed
+SOC <= 10% or no feasible work
+busy robot finishes current order"];
+free [label="Free charger?",shape=diamond,fillcolor="#f8f2e5"];
+reserve [label="Reserve charger immediately
+travel to dedicated non-transit cell"];
+charge [label="CHARGING
+normal target 100% · +1% per simulated s",fillcolor="#eef8f2",color="#91b6a0"];
+full [label="Full / preempted
+physically leave charger first"];
+rejoin [label="Energy-eligible to rejoin?",shape=diamond,fillcolor="#f8f2e5"];
+hold [label="HOLDING / queue
+shared promotion discipline"];
+preempt [label="Saturation policy
+may preempt highest-SOC charger occupant"];
+available -> eligible;eligible -> busy [label="Yes"];eligible -> need [label="No"];
+busy -> available [label="still eligible"];busy -> need [label="due / needed"];
+need -> free;free -> reserve [label="Yes"];reserve -> charge -> full -> rejoin;
+free -> hold [label="No"];hold -> reserve [label="charger frees / promotion",style=dashed];
+hold -> preempt [style=dotted];preempt -> full [label="preempt occupant",style=dotted];
+rejoin -> available [label="Yes"];rejoin -> hold [label="No"];
+}

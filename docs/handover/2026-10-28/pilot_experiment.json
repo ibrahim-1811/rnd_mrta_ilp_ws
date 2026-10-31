@@ -1,0 +1,154 @@
+{
+  "name": "pilot_r50_o200_20261028_123625",
+  "spec": {
+    "strategies": [
+      "auction",
+      "earliest_finish",
+      "hungarian",
+      "milp",
+      "multi_criteria",
+      "nearest_astar",
+      "nearest_manhattan",
+      "random"
+    ],
+    "robots": [
+      50
+    ],
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "orders": 200,
+    "workloads": "seeded",
+    "workload_orders": 200
+  },
+  "runs": [
+    [
+      "auction",
+      50,
+      1
+    ],
+    [
+      "auction",
+      50,
+      2
+    ],
+    [
+      "auction",
+      50,
+      3
+    ],
+    [
+      "earliest_finish",
+      50,
+      1
+    ],
+    [
+      "earliest_finish",
+      50,
+      2
+    ],
+    [
+      "earliest_finish",
+      50,
+      3
+    ],
+    [
+      "hungarian",
+      50,
+      1
+    ],
+    [
+      "hungarian",
+      50,
+      2
+    ],
+    [
+      "hungarian",
+      50,
+      3
+    ],
+    [
+      "milp",
+      50,
+      1
+    ],
+    [
+      "milp",
+      50,
+      2
+    ],
+    [
+      "milp",
+      50,
+      3
+    ],
+    [
+      "multi_criteria",
+      50,
+      1
+    ],
+    [
+      "multi_criteria",
+      50,
+      2
+    ],
+    [
+      "multi_criteria",
+      50,
+      3
+    ],
+    [
+      "nearest_astar",
+      50,
+      1
+    ],
+    [
+      "nearest_astar",
+      50,
+      2
+    ],
+    [
+      "nearest_astar",
+      50,
+      3
+    ],
+    [
+      "nearest_manhattan",
+      50,
+      1
+    ],
+    [
+      "nearest_manhattan",
+      50,
+      2
+    ],
+    [
+      "nearest_manhattan",
+      50,
+      3
+    ],
+    [
+      "random",
+      50,
+      1
+    ],
+    [
+      "random",
+      50,
+      2
+    ],
+    [
+      "random",
+      50,
+      3
+    ]
+  ],
+  "created": "2026-10-28T11:36:43+00:00",
+  "git": {
+    "commit": "badbc59671acd06fdcaf513060175ab74aeccc3d",
+    "branch": "traffic/rmf-integration",
+    "dirty": true
+  }
+}

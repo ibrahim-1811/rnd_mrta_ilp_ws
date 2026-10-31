@@ -1,0 +1,9 @@
+EXPERIMENT headless: 6 runs, 0 already done, 6 to run, 1 at a time -> /tmp/mrta_gazebo_recipe_validation/headless
+  workloads: 2 seeds x 3 orders in /tmp/mrta_gazebo_recipe_validation/headless/workloads
+  ok  nearest_astar      robots 2    seed 101    0.7 s  /tmp/mrta_gazebo_recipe_validation/headless/nearest_astar/r2_s101
+  ok  nearest_astar      robots 2    seed 102    0.7 s  /tmp/mrta_gazebo_recipe_validation/headless/nearest_astar/r2_s102
+  ok  random             robots 2    seed 101    0.7 s  /tmp/mrta_gazebo_recipe_validation/headless/random/r2_s101
+  ok  random             robots 2    seed 102    0.6 s  /tmp/mrta_gazebo_recipe_validation/headless/random/r2_s102
+  ok  milp               robots 2    seed 101    0.7 s  /tmp/mrta_gazebo_recipe_validation/headless/milp/r2_s101
+  ok  milp               robots 2    seed 102    0.7 s  /tmp/mrta_gazebo_recipe_validation/headless/milp/r2_s102
+SUMMARY /tmp/mrta_gazebo_recipe_validation/headless/summary.csv (6 runs)

@@ -1,5 +1,7 @@
 # 00 — Runbook: every command, from scratch
 
+> **28 October 2026 documentation freeze:** use [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md) for current headless, Gazebo and dashboard demos. This older guide contains historical three-strategy/default/test-count references. Current code has eight strategies; research M1 has one failing report test.
+
 Verified end to end on branch `traffic/rmf-integration`, ROS 2 Jazzy,
 Gazebo (gz-sim), 2026-09-03. Every command below was executed; the
 numbers quoted are real output, not estimates.

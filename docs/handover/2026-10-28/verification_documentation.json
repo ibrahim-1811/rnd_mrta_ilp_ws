@@ -1,0 +1,13 @@
+{
+  "checked_at_berlin": "2026-10-28T15:59:03.069724+01:00",
+  "existing_non_markdown_source_files_unchanged": 366,
+  "changed_existing_code_or_config": [],
+  "intentional_markdown_changes_under_src": [
+    "/home/ibrahim/rnd_mrta_ilp_ws/src/dashboard_GUI/backend/README.md",
+    "/home/ibrahim/rnd_mrta_ilp_ws/src/dashboard_GUI/docs/control_center/WORKSPACE_INTEGRATION.md"
+  ],
+  "broken_current_doc_links": [],
+  "bash_blocks_checked": 56,
+  "bash_syntax_errors": [],
+  "note": "No science/GUI production sources changed. Pre-existing research modifications remain. Inventories predate documentation refresh."
+}

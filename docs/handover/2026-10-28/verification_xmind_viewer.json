@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-10-28T16:28:25.241749+01:00",
+  "sheets": 4,
+  "topic_counts": [
+    25,
+    26,
+    24,
+    18
+  ],
+  "all_topics_rendered": 93,
+  "branch_expansion": "passed",
+  "sheet_switching": "passed",
+  "notes": "passed",
+  "zoom": "passed",
+  "desktop_narrow_mobile_overflow": false,
+  "javascript_errors": [],
+  "external_network_required": false
+}

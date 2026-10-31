@@ -1,0 +1,879 @@
+[
+  {
+    "id": "b6a6e848dc5d4c44de3ed3c7",
+    "class": "sheet",
+    "title": "System architecture",
+    "rootTopic": {
+      "id": "5feceb66ffc86f38d952786c",
+      "class": "topic",
+      "title": "System architecture",
+      "children": {
+        "attached": [
+          {
+            "id": "5513e3eabba6d75402c1c34c",
+            "class": "topic",
+            "title": "Two Git worktrees",
+            "children": {
+              "attached": [
+                {
+                  "id": "54b54709d08c38144e4fc66b",
+                  "class": "topic",
+                  "title": "GUI / operational workspace",
+                  "notes": {
+                    "plain": {
+                      "content": "/home/ibrahim/rnd_mrta_ilp_ws\ntraffic/rmf-integration\nAudited HEAD ae832f5\nFull dashboard, supported ROS/Gazebo demo, pre-M0 science."
+                    }
+                  }
+                },
+                {
+                  "id": "6b147c773f03ef179dc894d4",
+                  "class": "topic",
+                  "title": "Research workspace",
+                  "notes": {
+                    "plain": {
+                      "content": "/home/ibrahim/rnd_mrta_ilp_research\nresearch/outcome-aware-ilp\nAudited HEAD 163c6a4\nM0 committed, local M1 diagnostics."
+                    }
+                  }
+                },
+                {
+                  "id": "4308de2d864c2732049f7de7",
+                  "class": "topic",
+                  "title": "Integration pending",
+                  "notes": {
+                    "plain": {
+                      "content": "M0 changes strategy identity, build_manifest, quantum/window/purpose, comparisons. GUI observer pin requires fresh parity."
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "a93875fe509ac2fae0e0939d",
+            "class": "topic",
+            "title": "Inputs",
+            "children": {
+              "attached": [
+                {
+                  "id": "57c3ab1a1e0f5ddeba9dab04",
+                  "class": "topic",
+                  "title": "W100.xlsx",
+                  "notes": {
+                    "plain": {
+                      "content": "src/simulation_env/maps/W100.xlsx\n40x54, 1m cells, 100 staging, 552 shelves, 36 dropoffs, 24 chargers, 12 holding."
+                    }
+                  }
+                },
+                {
+                  "id": "2197ee84bb76ec516bf0f0fc",
+                  "class": "topic",
+                  "title": "warehouse.yaml",
+                  "notes": {
+                    "plain": {
+                      "content": "src/simulation_env/config/warehouse.yaml\nDefault100 robots, 1.5m/s, q0, window=fleet_size, 1s service, battery fixed."
+                    }
+                  }
+                },
+                {
+                  "id": "f1900605d6333d883de9281e",
+                  "class": "topic",
+                  "title": "orders.csv",
+                  "notes": {
+                    "plain": {
+                      "content": "src/simulation_env/config/orders.csv\n2,000 logical reference orders, generation seed42. Multiple line items per order."
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "9dc6366a2003d418ace6b6c7",
+            "class": "topic",
+            "title": "Entry points",
+            "children": {
+              "attached": [
+                {
+                  "id": "48f4d0dc0911f531496b3196",
+                  "class": "topic",
+                  "title": "Headless CLI",
+                  "notes": {
+                    "plain": {
+                      "content": "src/simulation_env/scripts/run_workload.py"
+                    }
+                  }
+                },
+                {
+                  "id": "92e4c90eb2d39ee9756eb7cf",
+                  "class": "topic",
+                  "title": "Campaign CLI",
+                  "notes": {
+                    "plain": {
+                      "content": "src/simulation_env/scripts/run_experiment.py"
+                    }
+                  }
+                },
+                {
+                  "id": "c9782af7d680f0128cab3230",
+                  "class": "topic",
+                  "title": "ROS / Gazebo",
+                  "notes": {
+                    "plain": {
+                      "content": "src/simulation_env/launch/warehouse_sim.launch.py\norders:=true is required."
+                    }
+                  }
+                },
+                {
+                  "id": "0623b9a41c9a0a8967e17814",
+                  "class": "topic",
+                  "title": "Dashboard",
+                  "notes": {
+                    "plain": {
+                      "content": "src/dashboard_GUI/scripts/launch_control_center.py start\n127.0.0.1:5173 UI;127.0.0.1:8000 API"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "ecbe93f9c7fbf3c6a01b3bff",
+            "class": "topic",
+            "title": "Scientific packages",
+            "children": {
+              "attached": [
+                {
+                  "id": "a7f72a5ec1f5bacf2f86e5c7",
+                  "class": "topic",
+                  "title": "mrta_core",
+                  "notes": {
+                    "plain": {
+                      "content": "Map/config/order models, directed A*, battery energy requirement."
+                    }
+                  }
+                },
+                {
+                  "id": "f0d8cb7fbc5cb43b339c008a",
+                  "class": "topic",
+                  "title": "task_management",
+                  "notes": {
+                    "plain": {
+                      "content": "features.py and allocation_strategy.py; eight conventional policies."
+                    }
+                  }
+                },
+                {
+                  "id": "613673d91bd5197c70a1517b",
+                  "class": "topic",
+                  "title": "simulation_env",
+                  "notes": {
+                    "plain": {
+                      "content": "workload_executor.py, fleet_engine.py; traffic/charging/recovery; datasets/metrics."
+                    }
+                  }
+                },
+                {
+                  "id": "242aaea2fb9a78c2628e024c",
+                  "class": "topic",
+                  "title": "robot_interfaces",
+                  "notes": {
+                    "plain": {
+                      "content": "ROS message definitions."
+                    }
+                  }
+                },
+                {
+                  "id": "2113a01731be89cda1c86bea",
+                  "class": "topic",
+                  "title": "gazebo_fleet_pose_transport",
+                  "notes": {
+                    "plain": {
+                      "content": "Persistent C++ batched pose mirror."
+                    }
+                  }
+                },
+                {
+                  "id": "9b3c5b6b6fefd360a840a99c",
+                  "class": "topic",
+                  "title": "rmf_grid_traffic",
+                  "notes": {
+                    "plain": {
+                      "content": "Static RMF graph/route checks and local demos; no native production fleet adapter."
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "341a66fe9750f5ee9b016bb2",
+            "class": "topic",
+            "title": "Dashboard layers",
+            "children": {
+              "attached": [
+                {
+                  "id": "d73c0d684ffcfdebe6bed258",
+                  "class": "topic",
+                  "title": "React frontend",
+                  "notes": {
+                    "plain": {
+                      "content": "Operations, Run history, Experiments, System, sampled recording playback."
+                    }
+                  }
+                },
+                {
+                  "id": "35ac63e2d7dfde3ffcb512c3",
+                  "class": "topic",
+                  "title": "FastAPI backend",
+                  "notes": {
+                    "plain": {
+                      "content": "Adapters, preview/validation, process/job supervision, observation, storage, reports."
+                    }
+                  }
+                },
+                {
+                  "id": "f4939071abdb2073d414a94d",
+                  "class": "topic",
+                  "title": "Offline reports",
+                  "notes": {
+                    "plain": {
+                      "content": "Immutable HTML/PNG report folders; separate from dashboard screens."
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "notes": {
+        "plain": {
+          "content": "Audited28October2026. Implemented apparatus; symbolic learner pending. Source of truth: docs/PROJECT_HANDOVER.md."
+        }
+      },
+      "structureClass": "org.xmind.ui.map.unbalanced"
+    }
+  },
+  {
+    "id": "deeb258a21bd089203d6cbd1",
+    "class": "sheet",
+    "title": "Allocation and execution",
+    "rootTopic": {
+      "id": "6b86b273ff34fce19d6b804e",
+      "class": "topic",
+      "title": "Allocation and execution",
+      "children": {
+        "attached": [
+          {
+            "id": "18d6e1cac2a8adaf25577cca",
+            "class": "topic",
+            "title": "Decision trigger",
+            "notes": {
+              "plain": {
+                "content": "Free robots and configured dispatch quantum. q0 continuous; q3 primary research batching."
+              }
+            }
+          },
+          {
+            "id": "253d950f11ebdbeb4c2d54c5",
+            "class": "topic",
+            "title": "FIFO candidate window",
+            "notes": {
+              "plain": {
+                "content": "W=fleet_size by default; extend when no eligible pair exists in prefix."
+              }
+            }
+          },
+          {
+            "id": "d939926f05444b0f4495fb96",
+            "class": "topic",
+            "title": "Shared candidate features",
+            "children": {
+              "attached": [
+                {
+                  "id": "afe33a9e346d92cf11e6465f",
+                  "class": "topic",
+                  "title": "Directed C_static",
+                  "notes": {
+                    "plain": {
+                      "content": "Exhaustive shelf permutations; legal entry/retreat; distance in metres."
+                    }
+                  }
+                },
+                {
+                  "id": "fb98ba765d5f99cba6d2c677",
+                  "class": "topic",
+                  "title": "Estimated finish T",
+                  "notes": {
+                    "plain": {
+                      "content": "C_static/speed + shelf visits*service + dropoff service."
+                    }
+                  }
+                },
+                {
+                  "id": "51e5cbe75485275b4c971752",
+                  "class": "topic",
+                  "title": "Hard energy mask",
+                  "notes": {
+                    "plain": {
+                      "content": "Order travel + known service + directed charger leg + 10% reserve <= SOC; no future waiting."
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "0d7f0e336166042f8cc9e4c2",
+            "class": "topic",
+            "title": "Eight conventional strategies",
+            "children": {
+              "attached": [
+                {
+                  "id": "c0e364e71ae53627c7d206f7",
+                  "class": "topic",
+                  "title": "random",
+                  "notes": {
+                    "plain": {
+                      "content": "Canonical eligible-edge list; seeded shuffle; greedy matching. No uniform matching guarantee."
+                    }
+                  }
+                },
+                {
+                  "id": "44cddff095c711a0df1baf7f",
+                  "class": "topic",
+                  "title": "nearest_manhattan",
+                  "notes": {
+                    "plain": {
+                      "content": "Greedy Manhattan shelf-chain ranking; A* route and battery mask still govern execution."
+                    }
+                  }
+                },
+                {
+                  "id": "0e950ce878b383336b569e75",
+                  "class": "topic",
+                  "title": "nearest_astar",
+                  "notes": {
+                    "plain": {
+                      "content": "Greedy C_static; ties FIFO then robot_id."
+                    }
+                  }
+                },
+                {
+                  "id": "989d5ad2e1e94edd9c650ae0",
+                  "class": "topic",
+                  "title": "earliest_finish",
+                  "notes": {
+                    "plain": {
+                      "content": "Greedy T = C_static / speed + configured shelf/dropoff service. No future waiting."
+                    }
+                  }
+                },
+                {
+                  "id": "cc72b5d6826e12fc1351c27e",
+                  "class": "topic",
+                  "title": "multi_criteria",
+                  "notes": {
+                    "plain": {
+                      "content": "0.5 N(T) + 0.2 N(FIFO) + 0.2 N(-energy margin) + 0.1 N(charger distance). Fixed heuristic weights."
+                    }
+                  }
+                },
+                {
+                  "id": "e8101c9ccb36aab10dc720df",
+                  "class": "topic",
+                  "title": "auction",
+                  "notes": {
+                    "plain": {
+                      "content": "FIFO sequential single-item auction; cheapest currently-free eligible robot bids C_static."
+                    }
+                  }
+                },
+                {
+                  "id": "2a60b50547733a6cca803173",
+                  "class": "topic",
+                  "title": "hungarian",
+                  "notes": {
+                    "plain": {
+                      "content": "Maximum cardinality, then minimum summed C_static; SciPy linear_sum_assignment."
+                    }
+                  }
+                },
+                {
+                  "id": "6a9864fd1f67758853b832dd",
+                  "class": "topic",
+                  "title": "milp",
+                  "notes": {
+                    "plain": {
+                      "content": "Maximum cardinality; minimize latest estimated finish, then summed finish; SciPy / HiGHS. Different from inductive logic programming."
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "f70b94aeb67de2a5eb4bd8c2",
+            "class": "topic",
+            "title": "Capture decision rows",
+            "notes": {
+              "plain": {
+                "content": "One row per scored pair; selected flag; before execution."
+              }
+            }
+          },
+          {
+            "id": "bd82a28b1f088b3a18673771",
+            "class": "topic",
+            "title": "Check assignment contract",
+            "notes": {
+              "plain": {
+                "content": "At most one robot per order and one order per robot; only eligible offered pairs."
+              }
+            }
+          },
+          {
+            "id": "8f854692d8bc8def84a88d51",
+            "class": "topic",
+            "title": "Execute shared mission",
+            "children": {
+              "attached": [
+                {
+                  "id": "4be1f040ecc71e6e889788b3",
+                  "class": "topic",
+                  "title": "Travel through one-way lanes"
+                },
+                {
+                  "id": "174cbee27d3d31841a9dc591",
+                  "class": "topic",
+                  "title": "Local traffic / reservations / rotation right-of-way"
+                },
+                {
+                  "id": "92a4aa186ae2b8bb0232a95b",
+                  "class": "topic",
+                  "title": "Shelf service"
+                },
+                {
+                  "id": "e91c6707dbb2ed7caaea91be",
+                  "class": "topic",
+                  "title": "Dropoff fulfillment"
+                },
+                {
+                  "id": "bd80e8562b65861ab3a9ac8a",
+                  "class": "topic",
+                  "title": "Final retreat; robot becomes available"
+                }
+              ]
+            }
+          },
+          {
+            "id": "2da190e578ddcfcde27e7720",
+            "class": "topic",
+            "title": "Record outcome at retirement",
+            "notes": {
+              "plain": {
+                "content": "Join run_id + original decision_id + robot_id + order_id. M0 fixes deferred-decision linkage."
+              }
+            }
+          },
+          {
+            "id": "52e90ae24326591c8161e2e0",
+            "class": "topic",
+            "title": "Recovery and final artifacts",
+            "notes": {
+              "plain": {
+                "content": "Per-robot recovery can overlap other deliveries. Separate order_makespan from fleet settled time."
+              }
+            }
+          }
+        ]
+      },
+      "structureClass": "org.xmind.ui.map.unbalanced"
+    }
+  },
+  {
+    "id": "30b7d50fd26751cdc76c1c42",
+    "class": "sheet",
+    "title": "Battery, data and experiments",
+    "rootTopic": {
+      "id": "d4735e3a265e16eee03f5971",
+      "class": "topic",
+      "title": "Battery, data and experiments",
+      "children": {
+        "attached": [
+          {
+            "id": "98ce94b2b196906ca4859e06",
+            "class": "topic",
+            "title": "Fixed Battery V1",
+            "children": {
+              "attached": [
+                {
+                  "id": "452fc4f229ed4e9f7ddd14c2",
+                  "class": "topic",
+                  "title": "SOC rates",
+                  "notes": {
+                    "plain": {
+                      "content": "Initial100%; travel1%/20m;service1%/60s;idle/wait1%/300s;charge+1%/s."
+                    }
+                  }
+                },
+                {
+                  "id": "0ea1ce469f6261b6b8824ad8",
+                  "class": "topic",
+                  "title": "Charge due / needed",
+                  "notes": {
+                    "plain": {
+                      "content": "Due<=10%; active order finishes first; no assignment bypasses energy mask."
+                    }
+                  }
+                },
+                {
+                  "id": "f926caf2720e20ddbce8bc60",
+                  "class": "topic",
+                  "title": "Charger workflow",
+                  "notes": {
+                    "plain": {
+                      "content": "Reserve→travel→charge→physically leave→rejoin; holding/promotion/preemption fixed."
+                    }
+                  }
+                },
+                {
+                  "id": "90d31e9568f4549799630496",
+                  "class": "topic",
+                  "title": "Remaining scope",
+                  "notes": {
+                    "plain": {
+                      "content": "B6 rest incomplete; G6 partial recovery charging deferred."
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "1d800ad9f4e99e1c61aa4547",
+            "class": "topic",
+            "title": "Per-run artifacts",
+            "children": {
+              "attached": [
+                {
+                  "id": "aa5f7bf56fb115e9513ae627",
+                  "class": "topic",
+                  "title": "run.json",
+                  "notes": {
+                    "plain": {
+                      "content": "Input hashes, effective settings, Git commit/dirty state, run identity."
+                    }
+                  }
+                },
+                {
+                  "id": "c691001d97b76d6ed4302c9e",
+                  "class": "topic",
+                  "title": "metrics.json",
+                  "notes": {
+                    "plain": {
+                      "content": "Schema2 separates order/recovery; legacy schema1 lacks order makespan."
+                    }
+                  }
+                },
+                {
+                  "id": "2dfe6f1f375e2ca75d1cae55",
+                  "class": "topic",
+                  "title": "decisions + outcomes",
+                  "notes": {
+                    "plain": {
+                      "content": "Parquet in Pixi; CSV fallback in ROS without PyArrow."
+                    }
+                  }
+                },
+                {
+                  "id": "91674d80fa5adccc4a811360",
+                  "class": "topic",
+                  "title": "bk.pl / exs.pl",
+                  "notes": {
+                    "plain": {
+                      "content": "Raw teacher-choice facts; no learned rule or full multi-run learner dataset."
+                    }
+                  }
+                },
+                {
+                  "id": "cef19ce0cf1a8c6442444f5b",
+                  "class": "topic",
+                  "title": "failure.json",
+                  "notes": {
+                    "plain": {
+                      "content": "ResearchM0 classified execution failures; use fresh output directories."
+                    }
+                  }
+                },
+                {
+                  "id": "6954daf45a2c4d25862105ab",
+                  "class": "topic",
+                  "title": "run.log / console.log",
+                  "notes": {
+                    "plain": {
+                      "content": "Campaign child run.log; standalone console.log only when redirected/teed."
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "58c0e7476a0d98d74ec64f7d",
+            "class": "topic",
+            "title": "Output roots",
+            "children": {
+              "attached": [
+                {
+                  "id": "88a0dd2da21b643aa09ab838",
+                  "class": "topic",
+                  "title": "CLI runs/",
+                  "notes": {
+                    "plain": {
+                      "content": "Ignored scientific output."
+                    }
+                  }
+                },
+                {
+                  "id": "85307c9da0b691f4d4adcac5",
+                  "class": "topic",
+                  "title": "GUI var/runs/singles/"
+                },
+                {
+                  "id": "e077ab7a6162e07168341e7e",
+                  "class": "topic",
+                  "title": "GUI var/runs/experiments/"
+                },
+                {
+                  "id": "5901e0125d74ace168e7d6cf",
+                  "class": "topic",
+                  "title": "GUI var/jobs/",
+                  "notes": {
+                    "plain": {
+                      "content": "process.log, optional telemetry.ndjson and ownership/gate evidence."
+                    }
+                  }
+                },
+                {
+                  "id": "e7134a5c094037081dec3fa9",
+                  "class": "topic",
+                  "title": "GUI var/reports/"
+                },
+                {
+                  "id": "60791c2e834e30fb2e997e46",
+                  "class": "topic",
+                  "title": "GUI jobs.sqlite / index.sqlite / app-index"
+                },
+                {
+                  "id": "bda930b21de597d9507ecd79",
+                  "class": "topic",
+                  "title": "Colcon log/ and external ~/.ros/log/"
+                }
+              ]
+            }
+          },
+          {
+            "id": "484aa6ccd17c9fe96eb955b9",
+            "class": "topic",
+            "title": "Saved GUI pilot",
+            "notes": {
+              "plain": {
+                "content": "50robots ×200orders ×8strategies ×seeds1–3=24/24; q0 pre-M0; no charging. A* mean ordermakespan393.22s; exploratory."
+              }
+            }
+          },
+          {
+            "id": "401133a5a31266432a69f7be",
+            "class": "topic",
+            "title": "Historical fleet sweep",
+            "notes": {
+              "plain": {
+                "content": "30/40/50robots;3A*+3Manhattan+9Random=15;one reference workload;schema1/provenance limits."
+              }
+            }
+          },
+          {
+            "id": "0b9db2ecfb8de65fb248232d",
+            "class": "topic",
+            "title": "Seed roles and pairing",
+            "notes": {
+              "plain": {
+                "content": "Training101–110;validation111–115;evaluation1–30;sealed final201–230. Shared workload perseed; strict grid/settings/identity checks. Holm/Wilcoxon pending."
+              }
+            }
+          }
+        ]
+      },
+      "structureClass": "org.xmind.ui.map.unbalanced"
+    }
+  },
+  {
+    "id": "45d817aa427b4fe1744c7fd3",
+    "class": "sheet",
+    "title": "ILP research and demo commands",
+    "rootTopic": {
+      "id": "4e07408562bedb8b60ce05c1",
+      "class": "topic",
+      "title": "ILP research and demo commands",
+      "children": {
+        "attached": [
+          {
+            "id": "1032746e7e3338a630f96b94",
+            "class": "topic",
+            "title": "ILP versus MILP",
+            "notes": {
+              "plain": {
+                "content": "Inductive logic programming learns rules. Mixed-integer linear programming optimizes assignments. They are different methods."
+              }
+            }
+          },
+          {
+            "id": "02925afd44e2946e583a7f64",
+            "class": "topic",
+            "title": "M0 committed",
+            "notes": {
+              "plain": {
+                "content": "Identity, classified failures, seed controls, deferred decision linkage."
+              }
+            }
+          },
+          {
+            "id": "6d27ca189b30af4f85eab024",
+            "class": "topic",
+            "title": "M1 partial diagnostics",
+            "notes": {
+              "plain": {
+                "content": "Residual analysis, decision-time congestion sidecars, cloned alternatives. Current feature reporter has route_cells merge failure. Existing pilot predates fixes."
+              }
+            }
+          },
+          {
+            "id": "e86574df7434a3b185fb0ee2",
+            "class": "topic",
+            "title": "M2 planned",
+            "notes": {
+              "plain": {
+                "content": "Run-scoped atoms, learner predicates, bias, sampling, offline teacher relabeling."
+              }
+            }
+          },
+          {
+            "id": "5132a20379415fe98f3a0700",
+            "class": "topic",
+            "title": "M3–M6 planned",
+            "children": {
+              "attached": [
+                {
+                  "id": "131820139e6bcad722a18075",
+                  "class": "topic",
+                  "title": "Reproduce Nearest A* with Popper"
+                },
+                {
+                  "id": "eb4714f4ab5f42342e2536ee",
+                  "class": "topic",
+                  "title": "Single-Teacher ILP"
+                },
+                {
+                  "id": "2ce66f7c2dd4639093fa2df2",
+                  "class": "topic",
+                  "title": "Multi-Teacher ILP"
+                },
+                {
+                  "id": "27c4c0ac3eba6093ca5183e0",
+                  "class": "topic",
+                  "title": "Outcome-Aware ILP",
+                  "notes": {
+                    "plain": {
+                      "content": "Freeze objective/labels first; evaluate alternatives; never label unexecuted candidates as observed bad outcomes."
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "e8692ca200b54ddada768e71",
+            "class": "topic",
+            "title": "M7–M9 planned",
+            "notes": {
+              "plain": {
+                "content": "Rule explanations, held-out policy evaluation, final report; target20December2026."
+              }
+            }
+          },
+          {
+            "id": "a786dd9eb664a366b2356271",
+            "class": "topic",
+            "title": "No leakage boundary",
+            "notes": {
+              "plain": {
+                "content": "State_t→Decision_t→Outcome. Future waits/energy/charging may label training examples, never become decision-time input."
+              }
+            }
+          },
+          {
+            "id": "d016d339874fc1562fe41bdd",
+            "class": "topic",
+            "title": "Toolchain",
+            "notes": {
+              "plain": {
+                "content": "Popperv4.4.0 commit860cd0de;SWI10.0.0;Clingo5.8.2;Janus1.5.3;Python3.12. One learner problem per process."
+              }
+            }
+          },
+          {
+            "id": "896af01783cc4ba66a114b2b",
+            "class": "topic",
+            "title": "Demo commands",
+            "children": {
+              "attached": [
+                {
+                  "id": "dc29b138ff184b03e2da94fb",
+                  "class": "topic",
+                  "title": "Headless",
+                  "notes": {
+                    "plain": {
+                      "content": "cd /home/ibrahim/rnd_mrta_ilp_ws\nexport PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management\n.pixi/envs/default/bin/python src/simulation_env/scripts/run_workload.py --robots 6 --orders 12 --strategy nearest_astar --quiet --progress 0."
+                    }
+                  }
+                },
+                {
+                  "id": "1a4ceaca3bad7e55f2792756",
+                  "class": "topic",
+                  "title": "Gazebo",
+                  "notes": {
+                    "plain": {
+                      "content": "source /opt/ros/jazzy/setup.bash\nsource install/setup.bash\nros2 launch simulation_env warehouse_sim.launch.py orders:=true robots:=10 order_limit:=50 strategy:=nearest_astar"
+                    }
+                  }
+                },
+                {
+                  "id": "2606aca2159a8dbdc98c9b22",
+                  "class": "topic",
+                  "title": "Dashboard",
+                  "notes": {
+                    "plain": {
+                      "content": "python3 src/dashboard_GUI/scripts/launch_control_center.py check\npython3 src/dashboard_GUI/scripts/launch_control_center.py start\nCtrl+C stops owned services."
+                    }
+                  }
+                },
+                {
+                  "id": "e5ff3e6b4688be0f78c12d44",
+                  "class": "topic",
+                  "title": "Full walkthrough",
+                  "notes": {
+                    "plain": {
+                      "content": "docs/PROJECT_HANDOVER.md sections4–8; original audit evidence and exact report paths included."
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "structureClass": "org.xmind.ui.map.unbalanced"
+    }
+  }
+]
