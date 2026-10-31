@@ -29,6 +29,7 @@ setuptools = "<81"
 [tasks]
 test = "PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management:src/ilp_learning python -m pytest src/mrta_core/tests src/simulation_env/test src/task_management/test src/ilp_learning/test -q"
 test-ilp = "PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management:src/ilp_learning python -m pytest src/ilp_learning/test -q -rs"
+m3-induction = "PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management:src/ilp_learning python -m ilp_learning.m3_induction"
 lint = "ruff check ."
 lint-src = "ruff check src"
 format = "ruff format ."

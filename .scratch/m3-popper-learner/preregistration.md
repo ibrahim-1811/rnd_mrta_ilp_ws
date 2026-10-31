@@ -60,13 +60,22 @@ Leave-one-seed-out over 104-110: train on six seeds, measure frozen-key fidelity
 - Drop for a fold = training fidelity minus held-out fidelity.
 - Limit, per condition = max(worst fold drop, 2 × SD of held-out fidelity across folds).
 
-Computed and frozen before validation. Value: pending the learner.
+Computed and frozen before validation. Values, measured on 2026-10-31 at `6a9e0bc`, awaiting researcher approval. Fidelity definition and fold detail: [induction_report.md](induction_report.md).
+
+| Quantum | Robots | Worst fold drop | 2 × SD | Limit |
+|---|---|---:|---:|---:|
+| 3 | 30 | 0.0022 | 0.0036 | 0.0036 |
+| 3 | 70 | 0.0083 | 0.0071 | 0.0083 |
+| 3 | 100 | 0.0814 | 0.0628 | 0.0814 |
+| 0 | 30 | 0.0000 | 0.0000 | 0.0000 |
+| 0 | 70 | 0.0262 | 0.0382 | 0.0382 |
+| 0 | 100 | 0.0888 | 0.0933 | 0.0933 |
 
 ### G8 bounds and precision
 
 Bound: delta = between-seed CV of nearest_astar on 104-110 for that metric and condition. Reason: a policy difference smaller than the spread caused by changing the workload is not one an operator could act on, and any tighter bound would be set inside workload noise.
 
-Measured on 7 induction seeds, 300 orders, all completed (development data):
+Measured on 7 induction seeds, 300 orders, all completed:
 
 | Quantum | Robots | delta, `order_makespan_s` | delta, `mean_completion_time_s` |
 |---|---|---:|---:|
@@ -77,7 +86,7 @@ Measured on 7 induction seeds, 300 orders, all completed (development data):
 | 0 | 70 | 2.67% | 1.44% |
 | 0 | 100 | 2.16% | 2.12% |
 
-To be recomputed from the clean evidence commit.
+Recomputed from clean HEAD `6a9e0bc`, 42 teacher runs, all completed: every value above is unchanged to two decimals.
 
 The 100-robot quantum 3 row is real spread, not one outlier: order makespan runs 347-431 s and total waiting 3,426-10,272 s across seeds, which shows congestion varying strongly by workload. A pass at that condition is weak evidence, because the bound allows about an 8% difference. Researcher decision needed: keep it, or cap delta (for example at 5%), which would make an inconclusive result more likely there.
 
@@ -90,6 +99,8 @@ Test: 90% CI of the mean paired log ratio, ILP against nearest_astar, 5 pairs, s
 | Crosses a bound | Inconclusive, reported as such |
 
 Precision: with 5 pairs the CI half-width is 0.953 × SD of paired differences. If that SD estimated on induction seeds exceeds delta / 0.953, G8 cannot show equivalence at that condition, and this is stated before validation. Identical behaviour gives zero paired spread; that is reported as identical, not as a statistical result.
+
+Stated before validation, from 7 closed-loop induction pairs of arm A's full-data rule: G8 cannot show equivalence on `order_makespan_s` at 100 robots, quantum 0 (SD 2.285% against a maximum of 2.27%). All other rows can, on SD alone. 30 robots, quantum 0 was identical to nearest_astar on 7/7 seeds. Table: [induction_report.md](induction_report.md).
 
 ### Battery stress probe
 
@@ -136,4 +147,4 @@ G8 kept with justified bounds and a precision assessment. G9 accepted provisiona
 
 ## Still needed before validation
 
-Induction-derived G5 and G8 values, researcher approval of them and the battery specification, and a clean evidence commit.
+Researcher approval of the G5 and G8 values above and of the battery specification, and a clean evidence commit.
