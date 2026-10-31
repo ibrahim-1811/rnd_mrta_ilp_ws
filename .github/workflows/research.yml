@@ -1,0 +1,20 @@
+name: research
+on:
+  push:
+    branches: [research/outcome-aware-ilp]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Plain Python only: ROS, Gazebo and colcon checks need their own environment.
+  # runs/ is not in git, so the real-dataset test skips here; run it locally.
+  science:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+      - run: pixi run lint-src
+      - run: pixi run test
