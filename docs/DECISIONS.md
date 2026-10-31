@@ -1747,3 +1747,33 @@ Accepted by the researcher on 2026-10-29 following review of the M1 Pilot v2 mat
    - Within-decision relative delta predicates (f(r,o) - min_o' f(r,o')) preferred to eliminate t=0 simultaneous launch cold-start distortion.
    - Pruned from active ILP vocabulary: route_cells (collinear with c_static_m), overlap_cells (inverted/confounded), shelf_load (sparse/null), dropoff_load (null in 5/6 conditions).
 ```
+
+## M3 Execution Semantics Amendment (2026-10-31)
+
+Approved by the researcher on 2026-10-31 (decision D1), before any validation seed was used. This amends item 4 of the M1 Acceptance Record, whose text above stays as the record of the earlier decision. Items 1-3 and 5-7 are unchanged.
+
+```text
+1. Primary matching for greedy teachers (nearest_astar, earliest_finish, auction, multi_criteria): iterative.
+   - Evaluate the learned rules on the remaining eligible pairs.
+   - Make one pick: the smallest (tier, clause_rank, fifo_position, c_static_m, est_finish_s, robot_id).
+   - Remove that robot and order, and repeat until no eligible pair remains.
+
+2. Comparison and global-teacher matching (hungarian, milp): one-shot M-Card, retained as a pre-registered arm.
+   M-Greedy remains an ablation.
+
+3. Rule priority, both semantics:
+   - A rule-covered pair is never given up to increase cardinality.
+   - Fallback only fills robots and orders left over after rule-covered matching.
+   - Every assignment records whether a rule or fallback made it.
+   - This resolves the conflict between item 4 and M2 spec 4.4 step 3 in favour of item 4.
+     The cost is that a matching may be maximal rather than maximum.
+
+4. Unchanged: the queue-first tie-break, so an empty or tautological rule collapses to FIFO, not to nearest_astar.
+
+5. Claims:
+   - The greedy sequence comes from the fixed executor, not from learning.
+   - A rule equivalent to nearest_astar under this executor is reported as an "ILP-recovered explanation of nearest_astar", not a new strategy, and is excluded from strategy rankings.
+   - Fidelity to a greedy teacher is close to automatic once the conjunction is found, so it never counts alone as evidence of learning.
+```
+
+Reason: at quantum 3 on 2,623 Phase 0 decisions, one-shot M-Card reached 0.479 fidelity to nearest_astar and iterated execution 0.99. The risk is bias toward greedy teachers in M5, so per-teacher ceilings are reported.

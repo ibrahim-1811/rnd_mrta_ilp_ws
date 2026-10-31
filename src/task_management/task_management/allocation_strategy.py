@@ -1064,3 +1064,122 @@ class MILPAllocator(BatchAllocationStrategy):
             return f"{self.name}: no eligible robot-order pair -> defer"
 
         return f"{self.name}: {len(assignments)} pair(s), batch makespan minimised"
+
+
+# ======================================================================
+# Learned rules (M3)
+# ======================================================================
+
+
+@register_batch
+class ILPAllocationStrategy(BatchAllocationStrategy):
+    """Learned Popper rules executed by the fixed matcher.
+
+    The rules come from a rule artifact; the greedy sequence comes from
+    the executor, not from learning (docs/DECISIONS.md, "M3 Execution
+    Semantics Amendment (2026-10-31)"). A rule equivalent to a teacher
+    under this executor is an explanation of that teacher, not a new
+    strategy.
+
+    Eligibility is a hard mask applied before any rule or fallback, and
+    every pick is logged for the optional rule_trace.parquet sidecar.
+
+    ilp_learning is imported only when an artifact is loaded, so no
+    other strategy depends on it. Without an artifact the strategy can
+    be named and identified, but refuses to allocate: it must never be
+    mistaken for a run of the empty rule, which is itself an artifact.
+    """
+
+    name = "ilp"
+
+    def __init__(self, seed: int = 0, rule_artifact=None, matching: str = "iterative"):
+        self.rule_artifact = None if rule_artifact is None else Path(rule_artifact).resolve()
+        self.matching = matching
+        self._program = None
+        self._matcher = None
+
+        if self.rule_artifact is not None:
+            from ilp_learning.matcher import BatchMatcher
+            from ilp_learning.rule_artifact import load_rule_artifact
+
+            self._program, _ = load_rule_artifact(self.rule_artifact)
+            self._matcher = BatchMatcher(mode=matching)
+
+        super().__init__(seed)
+
+    def reset(self):
+        # assign() runs once per executor decision, in order, so this
+        # count is the decision_id the run records.
+        self._decisions = 0
+        self.rule_trace: list[dict] = []
+
+    def parameters(self) -> dict:
+        return {"matching": self.matching}
+
+    def artifacts(self) -> list[dict]:
+        if self.rule_artifact is None:
+            return []
+
+        return [artifact_record("rule_artifact", self.rule_artifact)]
+
+    def assign(
+        self,
+        warehouse,
+        robots,
+        orders,
+        fifo_position,
+        cache=None,
+        battery=None,
+        timing=None,
+    ):
+
+        if self._program is None:
+            raise ValueError("ilp: no rule artifact loaded")
+
+        timing = _require_timing(self.name, timing)
+
+        from ilp_learning.matcher import maximum_cardinality
+        from ilp_learning.predicates import CandidatePair
+
+        eligible = _eligible(self, warehouse, robots, orders, fifo_position, cache, battery)
+        decision_id = self._decisions
+        self._decisions += 1
+
+        by_pair = {(c.robot_id, c.order_id): c for c in eligible}
+        picks = self._matcher.match_pairs(
+            [
+                CandidatePair(c.robot_id, c.order_id, c.cost, timing.finish_s(c), c.fifo_position)
+                for c in eligible
+            ],
+            self._program,
+        )
+
+        maximum = maximum_cardinality(by_pair)
+
+        self.rule_trace.extend(
+            {
+                "decision_id": decision_id,
+                "round": pick.round,
+                "robot_id": pick.robot_id,
+                "order_id": pick.order_id,
+                "matched_by_rule": pick.matched_by_rule,
+                "fallback": not pick.matched_by_rule,
+                "clause_rank": pick.rule_rank if pick.matched_by_rule else None,
+                "tie_level": pick.tie_level,
+                "matching": self.matching,
+                "cardinality": len(picks),
+                "maximum_cardinality": maximum,
+            }
+            for pick in picks
+        )
+
+        return greedy_pairing(
+            [by_pair[(pick.robot_id, pick.order_id)] for pick in picks], fifo_position
+        )
+
+    def write_rule_trace(self, run_dir, run_id):
+        """Write this run's picks beside its tables; returns the path."""
+
+        from ilp_learning.rule_trace import write_rule_trace
+
+        return write_rule_trace(run_dir, run_id, self.rule_trace)
