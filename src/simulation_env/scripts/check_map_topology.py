@@ -14,10 +14,17 @@ the current one. It answers:
     to it. A local "has a lane in and a lane out" test is not enough: a
     terminal whose only aisle neighbour is a one-way dead end has both
     lanes and is still a trap or unreachable
-  * can every station reach every other station through A*
+  * can every station reach every other station
   * does any of those routes use a terminal as an intermediate cell,
     move directly from one terminal to another, or take a move the RMF
     nav graph does not have
+
+Terminals are blocked as intermediate cells, so a leg is always: leave
+the start terminal, drive the core, enter the goal terminal. Station
+legs are therefore audited in one pass over the core and each station's
+entrances and exits (audit_station_legs). --exhaustive plans all
+n(n-1) legs with A* instead: minutes on W100, over an hour on a
+79 x 104 map.
 
 It deliberately imports the production routing policy rather than
 restating the lane rules:
@@ -33,7 +40,7 @@ it.
 Usage
 -----
     python3 src/simulation_env/scripts/check_map_topology.py \\
-        --config src/simulation_env/config/warehouse.yaml
+        --config src/simulation_env/config/warehouse.yaml [--exhaustive]
 """
 
 from __future__ import annotations
@@ -42,6 +49,7 @@ import argparse
 import itertools
 from collections import Counter, deque
 from pathlib import Path
+from time import perf_counter
 
 from mrta_core.grid import astar_path
 from mrta_core.sim_config import load_sim_config
@@ -71,14 +79,87 @@ def _reach(start, adjacency):
     return seen
 
 
+def _neighbors(cell):
+    x, y = cell
+    return ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
+
+
+def audit_station_legs(stations, transit_set, forward_adj, blocked_edges, lane_edges, strongly_connected):
+    """Audit every station leg without planning each one.
+
+    stations maps zone id to its cell. A leg exists when a legal exit of
+    the start and a legal entrance of the goal lie in the same reachable
+    part of the core; every move of a leg is a core edge, an exit or an
+    entrance, so each of those is held against the nav graph once. This
+    is stricter than the exhaustive audit, which sees only the moves
+    shortest paths happen to use. Returns (unreachable, terminal_hop,
+    off_graph), the exhaustive audit's lists.
+    """
+
+    exits = {
+        zone: [n for n in _neighbors(cell) if n in transit_set and (cell, n) not in blocked_edges]
+        for zone, cell in stations.items()
+    }
+    entrances = {
+        zone: [n for n in _neighbors(cell) if n in transit_set and (n, cell) not in blocked_edges]
+        for zone, cell in stations.items()
+    }
+
+    zone_at = {cell: zone for zone, cell in stations.items()}
+    terminal_hop = [
+        (zone, zone_at[n], (cell, n))
+        for zone, cell in stations.items()
+        for n in _neighbors(cell)
+        if n in zone_at and (cell, n) not in blocked_edges
+    ]
+    direct = {(source, target) for source, target, _ in terminal_hop}
+
+    reached = {}
+
+    def reachable_from(zone):
+        if strongly_connected:
+            return transit_set if exits[zone] else frozenset()
+        cells = set()
+        for cell in exits[zone]:
+            if cell not in reached:
+                reached[cell] = _reach(cell, forward_adj)
+            cells |= reached[cell]
+        return cells
+
+    unreachable = []
+    for source in stations:
+        cells = reachable_from(source)
+        unreachable.extend(
+            (source, target)
+            for target in stations
+            if target != source
+            and (source, target) not in direct
+            and not cells.intersection(entrances[target])
+        )
+
+    moves = [(cell, n) for cell, neighbors in forward_adj.items() for n in neighbors]
+    for zone, cell in stations.items():
+        moves.extend((cell, n) for n in exits[zone])
+        moves.extend((n, cell) for n in entrances[zone])
+    off_graph = [("road", "edge", move) for move in moves if move not in lane_edges]
+
+    return unreachable, terminal_hop, off_graph
+
+
 def main() -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument("--map", type=Path)
     parser.add_argument("--config", type=Path)
+    parser.add_argument("--exhaustive", action="store_true", help="plan all n(n-1) legs with A*")
 
     args = parser.parse_args()
+
+    started = perf_counter()
+
+    def progress(message):
+        print(f"[{perf_counter() - started:7.2f} s] {message}", flush=True)
 
     if args.map is None and args.config is None:
         parser.error("give --map or --config")
@@ -89,6 +170,7 @@ def main() -> int:
 
     types = non_transit_types()
 
+    progress(f"loading {map_path}")
     warehouse = load_warehouse_xlsx(map_path)
     grid = warehouse.grid
 
@@ -106,6 +188,8 @@ def main() -> int:
     ]
 
     transit = [cell for cell in free_cells if cell not in terminal_cells]
+
+    progress(f"building the road graph: {len(transit)} cells")
 
     transit_set = set(transit)
 
@@ -179,8 +263,12 @@ def main() -> int:
         key=lambda zone: zone.zone_id,
     )
 
+    progress(f"road graph strongly connected: {strongly_connected}")
+
     # Terminal access, globally: from the core into the terminal, and
     # from the terminal back out to the core.
+    progress(f"planning in and out of {len(zones)} stations with A*")
+
     access = {}
 
     for zone in zones:
@@ -207,32 +295,51 @@ def main() -> int:
 
     # Station-to-station reachability, planned exactly as a mission
     # leg is planned, and audited move by move.
-    unreachable = []
     through_terminal = []
-    terminal_hop = []
-    off_graph = []
 
-    for source, target in itertools.permutations(zones, 2):
-        start = min(source.cells)
-        goal = min(target.cells)
+    legs = len(zones) * (len(zones) - 1)
 
-        result = plan(start, goal)
+    if args.exhaustive:
+        unreachable = []
+        terminal_hop = []
+        off_graph = []
 
-        if not result.found:
-            unreachable.append((source.zone_id, target.zone_id))
-            continue
+        for done, (source, target) in enumerate(itertools.permutations(zones, 2)):
+            if done % 100_000 == 0:
+                progress(f"exhaustive A*: leg {done} of {legs}")
 
-        path = result.path
+            start = min(source.cells)
+            goal = min(target.cells)
 
-        if any(cell in terminal_cells for cell in path[1:-1]):
-            through_terminal.append((source.zone_id, target.zone_id))
+            result = plan(start, goal)
 
-        for move in zip(path, path[1:]):
-            if move[0] in terminal_cells and move[1] in terminal_cells:
-                terminal_hop.append((source.zone_id, target.zone_id, move))
+            if not result.found:
+                unreachable.append((source.zone_id, target.zone_id))
+                continue
 
-            if move not in lane_edges:
-                off_graph.append((source.zone_id, target.zone_id, move))
+            path = result.path
+
+            if any(cell in terminal_cells for cell in path[1:-1]):
+                through_terminal.append((source.zone_id, target.zone_id))
+
+            for move in zip(path, path[1:]):
+                if move[0] in terminal_cells and move[1] in terminal_cells:
+                    terminal_hop.append((source.zone_id, target.zone_id, move))
+
+                if move not in lane_edges:
+                    off_graph.append((source.zone_id, target.zone_id, move))
+    else:
+        progress(f"auditing {legs} station legs from the road graph")
+        unreachable, terminal_hop, off_graph = audit_station_legs(
+            {zone.zone_id: min(zone.cells) for zone in zones},
+            transit_set,
+            forward_adj,
+            blocked_edges,
+            lane_edges,
+            strongly_connected,
+        )
+
+    progress("audit finished")
 
     zone_counts = Counter(zone.zone_type.value for zone in warehouse.zones)
 
