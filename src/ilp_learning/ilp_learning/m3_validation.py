@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from hashlib import sha256
 import itertools
 import json
@@ -143,6 +144,8 @@ def check_may_start(out: Path, induction: Path) -> None:
         raise SystemExit("refused: a campaign already ran from another commit")
     out.mkdir(parents=True, exist_ok=True)
     started.write_text(json.dumps({"commit": commit, "tag": TAG}) + "\n", encoding="utf-8")
+    with (out / "attempts.log").open("a", encoding="utf-8") as log:
+        log.write(f"{datetime.now(timezone.utc).isoformat()} {commit}\n")
 
 
 def write_hand_rules(out: Path) -> None:
@@ -163,19 +166,23 @@ def write_hand_rules(out: Path) -> None:
         )
 
 
-def run_teachers(c: Campaign) -> None:
+def run_teachers(c: Campaign) -> list[str]:
+    """Both quanta are attempted; a failure is returned, never raised."""
+    failed = []
     for q, quantum in m3.QUANTA.items():
-        m3._call(
-            [
-                sys.executable, "src/simulation_env/scripts/run_experiment.py",
-                "--name", q, "--out", str(c.out), "--strategies", *TEACHERS,
-                "--robots", *map(str, m3.FLEETS), "--seeds", *map(str, c.seeds),
-                "--orders", str(m3.ORDERS), "--workloads", "seeded",
-                "--workload-orders", str(m3.ORDERS), "--quantum", str(quantum),
-                "--window", m3.WINDOW, "--purpose", c.purpose, "--jobs", str(c.jobs), "--resume",
-            ],
-            c.out / "logs" / f"teachers_{q}.log",
-        )
+        command = [
+            sys.executable, "src/simulation_env/scripts/run_experiment.py",
+            "--name", q, "--out", str(c.out), "--strategies", *TEACHERS,
+            "--robots", *map(str, m3.FLEETS), "--seeds", *map(str, c.seeds),
+            "--orders", str(m3.ORDERS), "--workloads", "seeded",
+            "--workload-orders", str(m3.ORDERS), "--quantum", str(quantum),
+            "--window", m3.WINDOW, "--purpose", c.purpose, "--jobs", str(c.jobs), "--resume",
+        ]
+        try:
+            m3._call(command, c.out / "logs" / f"teachers_{q}.log")
+        except RuntimeError as error:
+            failed.append(f"{q}: {error}")
+    return failed
 
 
 def run_arm(c: Campaign, arm: str, q: str, robots: int, seed: int) -> None:
@@ -315,6 +322,10 @@ def g7_run(run: Path) -> dict:
 
 
 def condition_gates(c: Campaign, q: str, robots: int, scored: dict, summary: dict) -> dict:
+    """Raises if a learned run did not finish: that condition is not scored."""
+    unfinished = [seed for seed in c.seeds if not arm_finished(c, "learned", q, robots, seed)]
+    if unfinished:
+        raise RuntimeError(f"learned runs did not finish on seeds {unfinished}")
     condition = f"{q}/{robots}"
     rates = scored["learned"]["pooled"]["scopes"]["choice_bearing"]["rates"]
     pairs = scored["learned"]["pooled"]["scopes"]["choice_bearing"]["counts"]["teacher_pairs"]
@@ -440,8 +451,11 @@ def g11(c: Campaign) -> dict:
         _, artifact = load_rule_artifact(c.rule("learned", q, robots))
         file_hash = sha256(c.rule("learned", q, robots).read_bytes()).hexdigest()
         for seed in c.seeds:
-            manifest = json.loads((c.arm_run("learned", q, robots, seed) / "run.json").read_text())
-            identity = json.dumps(manifest["strategy_identity"])
+            path = c.arm_run("learned", q, robots, seed) / "run.json"
+            if not path.exists():
+                identities = False
+                continue
+            identity = json.dumps(json.loads(path.read_text())["strategy_identity"])
             identities = identities and (file_hash in identity or artifact["content_sha256"] in identity)
     commit, dirty, tags = git_state()
     allowlist = subprocess.run(
@@ -537,6 +551,8 @@ def main() -> int:
     induction = (REPO / args.induction).resolve()
     out = (REPO / args.out).resolve()
     if args.dry_run:
+        if out == (REPO / DEFAULT_OUT).resolve():
+            raise SystemExit(f"refused: a dry run may not write to {DEFAULT_OUT}; give --out")
         c = Campaign(induction, out, m3.SEEDS[:2], "induction", args.jobs)
     else:
         check_may_start(out, induction)
@@ -545,7 +561,7 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     write_hand_rules(out)
     print("teachers", flush=True)
-    run_teachers(c)
+    failed_teachers = run_teachers(c)
 
     print("arms", flush=True)
     failed_arms = run_arms(c)
@@ -565,7 +581,7 @@ def main() -> int:
 
     gates = {
         "conditions": conditions,
-        "failed_arms": failed_arms,
+        "failed_arms": failed_teachers + failed_arms,
         "G10": summary["g10"],
         "G11": g11(c),
         "G12": g12(c),

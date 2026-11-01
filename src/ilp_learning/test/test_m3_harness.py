@@ -129,6 +129,40 @@ def test_a_folder_with_another_commits_evidence_is_refused(tmp_path, monkeypatch
         m3.check_fresh(tmp_path)
 
 
+def test_an_unmarked_folder_with_content_is_refused(tmp_path, monkeypatch):
+    monkeypatch.setattr(m3, "head_commit", lambda: "new")
+    (tmp_path / "old_run").mkdir()
+    with pytest.raises(SystemExit, match="another commit"):
+        m3.check_fresh(tmp_path)
+
+
+def _campaign(tmp_path):
+    return v.Campaign(tmp_path, tmp_path, (104, 105), "induction", 1)
+
+
+def test_a_failed_teacher_is_recorded_and_both_quanta_are_tried(tmp_path, monkeypatch):
+    tried = []
+
+    def fail(command, log):
+        tried.append(command[command.index("--name") + 1])
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(m3, "_call", fail)
+    failed = v.run_teachers(_campaign(tmp_path))
+    assert tried == ["q3", "q0"] and len(failed) == 2
+
+
+def test_a_learned_run_that_did_not_finish_is_not_scored(tmp_path):
+    with pytest.raises(RuntimeError, match="did not finish"):
+        v.condition_gates(_campaign(tmp_path), "q3", 30, {}, {})
+
+
+def test_a_dry_run_may_not_write_to_the_campaign_folder(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["m3_validation", "--dry-run"])
+    with pytest.raises(SystemExit, match="dry run may not"):
+        v.main()
+
+
 def test_validation_loading_refuses_other_seeds_and_failed_runs(tmp_path):
     (tmp_path / "run.json").write_text(json.dumps({"orders_path": "w/orders_s104.csv"}))
     with pytest.raises(ValueError, match="not a validation seed"):

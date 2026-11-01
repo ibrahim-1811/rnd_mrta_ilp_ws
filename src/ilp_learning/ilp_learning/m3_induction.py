@@ -64,7 +64,11 @@ def head_commit() -> str:
 def check_fresh(base: Path) -> None:
     """Finished steps are skipped, so a folder holds one commit's evidence only."""
     marker = base / "commit.txt"
-    if marker.exists() and marker.read_text().strip() != head_commit():
+    if marker.exists():
+        stale = marker.read_text().strip() != head_commit()
+    else:
+        stale = base.exists() and any(base.iterdir())
+    if stale:
         raise SystemExit(f"refused: {base} holds evidence from another commit; use a new folder")
     base.mkdir(parents=True, exist_ok=True)
     marker.write_text(head_commit() + "\n", encoding="utf-8")
