@@ -1,6 +1,6 @@
 # Phasewise Development Roadmap
 
-> **Updated 31 October 2026.** Current measured status: [CURRENT_PHASE.md](CURRENT_PHASE.md). Demo commands: [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md). M0 and M1 are closed; M2 is corrected; M3 code is implemented, with no learned rule evaluated yet; M4–M9 remain pending. Earlier phase text below is a dated development record, not a new completion claim.
+> **Updated 31 October 2026.** Current measured status: [CURRENT_PHASE.md](CURRENT_PHASE.md). Demo commands: [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md). M0 and M1 are closed; M2 is corrected; M3 validation ran once from `m3-evidence-1`, with mixed gates recorded in CURRENT_PHASE.md; online congestion predicates come next, then M4, M5 and M6. Earlier phase text below is a dated development record, not a new completion claim.
 
 ## Milestone plan to 20 December 2026
 
