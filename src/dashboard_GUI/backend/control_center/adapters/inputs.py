@@ -21,7 +21,7 @@ class InputStore:
             raw=h.read()
         if hashlib.sha256(raw).hexdigest()!=input_id:raise HTTPException(409,'Immutable CSV hash changed; upload the original file again')
         return self.root/(input_id+'.csv')
-    def add(self,text):
+    def add(self,text,scenario_id='W100'):
         from mrta_core.orders import REQUIRED_COLUMNS,load_orders_csv
         from control_center.adapters.catalogue import load_scenario
         raw=text.encode('utf-8')
@@ -37,11 +37,11 @@ class InputStore:
             root=owned_directory(self.root)
             with tempfile.NamedTemporaryFile(dir=root,suffix='.csv',delete=False) as temp:temp.write(raw);path=Path(temp.name)
             try:
-                _,warehouse=load_scenario();orders=load_orders_csv(path,warehouse)
+                _,warehouse=load_scenario(scenario_id);orders=load_orders_csv(path,warehouse)
                 digest=hashlib.sha256(raw).hexdigest();target=root/(digest+'.csv')
                 path.chmod(0o444)
                 try:os.link(path,target,follow_symlinks=False)
                 except FileExistsError:self.resolve(digest)
             finally:path.unlink(missing_ok=True)
         except (ValueError,UnicodeError,csv.Error,StopIteration) as exc:raise HTTPException(422,str(exc)) from exc
-        return dict(id=digest,sha256=digest,orders=len(orders),line_items=count,bytes=len(raw))
+        return dict(id=digest,sha256=digest,orders=len(orders),line_items=count,bytes=len(raw),scenario_id=scenario_id)

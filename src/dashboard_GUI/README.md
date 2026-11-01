@@ -12,8 +12,8 @@ The research simulator and its scientific phase are unchanged.
 
 | Screen | Available features |
 |---|---|
-| Operations | Real W100 map, pan/zoom/fit, optional directed lanes, observed robot cells/status/SOC, robot selection and details, order counts, exact simulated clock |
-| Run setup | Registry strategies, robot/order counts, allocation seed, observed or original CLI mode, quantum/window/speed overrides supported by the original single runner, preview then explicit launch |
+| Operations | Selected registered warehouse map, pan/zoom/fit, optional directed lanes, observed robot cells/status/SOC, robot selection and details, order counts, exact simulated clock |
+| Run setup | Validated warehouse scenario, registry strategies, robot/order counts, allocation seed, observed or original CLI mode, quantum/window/speed overrides supported by the original single runner, preview then explicit launch |
 | Custom orders | Explicit CSV selection, map-aware validation, hash-addressed immutable copy, effective logical-order count in preview; original reference workload untouched |
 | Process controls | Owned job selection, running/completed/failed/interrupted status, cancel request while active, original stdout/stderr, follow/copy logs, original scientific metrics |
 | Recording | Real captured samples, play/pause, first sample, seek, display rate, latest state and bounded next segment; dropped/stale/incomplete labels |
@@ -28,6 +28,29 @@ Not available: scientific pause/resume of a simulation clock, continuous
 trajectories, matrix fleet recordings, remote access, ROS/Gazebo UI, map editing,
 learned ILP rules/explanations, or arbitrary matrix quantum/config/window/speed/CSV
 overrides. Registration of a strategy is separate from scientific approval.
+
+## Start from a fresh checkout or worktree
+
+The launcher needs two interpreters inside the checkout: the scientific one at
+`.pixi/envs/default` (in a git worktree, a symlink to the main workspace's
+environment) and the dashboard backend at `src/dashboard_GUI/backend/.venv`.
+Create the backend once (needs network for pip; the scientific environment is not
+modified):
+
+```bash
+cd <checkout>
+.pixi/envs/default/bin/python -m venv --system-site-packages src/dashboard_GUI/backend/.venv
+src/dashboard_GUI/backend/.venv/bin/python -m pip install -e 'src/dashboard_GUI/backend[test]'
+(cd src/dashboard_GUI/frontend && npm ci)
+python3 src/dashboard_GUI/scripts/launch_control_center.py check
+python3 src/dashboard_GUI/scripts/launch_control_center.py start
+```
+
+In Run setup choose **W100 research warehouse** (reference, default) or
+**my_map custom warehouse** (200 parking cells), set robots = 100, preview, launch.
+Every Excel file in `src/simulation_env/maps/` is listed: drop a file there and
+restart. `start` runs `build_scenario_bundle.py --sync`, which builds what the map
+needs and adds it to `config/scenarios.yaml`. Matrix experiments remain W100-only.
 
 ## Start or restart
 
@@ -85,7 +108,8 @@ an alternative way to restart them. Prefer the one-command launcher above.
 
 ## Your first single run
 
-1. Open **Operations**. Leave robots = **2**, orders = **3**, seed = **7**.
+1. Open **Operations**. Keep the **W100 research warehouse** reference scenario
+   selected. Leave robots = **2**, orders = **3**, seed = **7**.
 2. Select **Nearest A*** and **Observed**. Keep the reference workload selected.
 3. Click **Preview run**. Review the effective counts, seed, quantum, speed,
    original server-generated command, destination and warnings.
@@ -119,6 +143,29 @@ so equivalent repeated executions can share it. These IDs serve different roles.
 Changing settings invalidates the preview. Launch rechecks input/source hashes;
 if files changed, preview again instead of launching different inputs silently.
 
+### Warehouse scenarios
+
+The read-only registry lists warehouse configurations known to the Control
+Center. W100 is the tracked scientific reference and the default. Each entry is
+loaded by the production configuration and XLSX loaders and checked by the
+production map validator; the UI shows its dimensions and initial home capacity.
+An invalid entry remains visible with its validation errors, but it cannot be
+selected for geometry or previewed.
+
+Scenario IDs are registry identifiers, not file paths. A single-run preview
+records the selected ID, a content identity, and SHA-256 hashes of the config,
+map, and orders. Launch rebuilds that plan and refuses it if those bytes changed.
+Selecting another scenario clears any preview and uploaded-order selection.
+Selection is locked while an owned job is active, and an older selected job
+continues to use the map associated with that job rather than the current setup.
+
+The registry and tracked scenarios are declarations, not mutable runtime state.
+Future generated or interactive maps belong in ignored, app-owned, immutable
+runtime bundles. A custom map should be registered only after preserving its
+bytes, passing the full topology/routing/traffic/terminal and visualization
+consistency gates, and receiving project-owner approval; registration must never
+rewrite W100 or its config/orders.
+
 ### Your own order CSV
 
 Use **Upload and validate CSV**. The header must be exactly:
@@ -127,7 +174,7 @@ Use **Upload and validate CSV**. The header must be exactly:
 order_id,item_id,shelf_id,quantity,dropoff_id
 ```
 
-Use actual W100 shelf and drop-off IDs from the map/configuration. Quantity must
+Use shelf and drop-off IDs from the currently selected scenario. Quantity must
 be a positive integer. Multiple rows with one order ID are one logical order;
 they must agree on the drop-off. Limits: 2 MiB and 50,000 line items. Unsupported
 priority, release-time, deadline and battery columns are rejected.
@@ -137,7 +184,8 @@ The backend validates with the original loader, copies the bytes under
 CSV. The hash is rechecked during planning, launch and final validation.
 Selecting the reference workload again clears the custom selection. A browser
 reload clears the selection; upload the same file again to reuse its same hash.
-Custom CSV is a single-run feature, including observed runs.
+Custom CSV is a single-run feature, including observed runs. Upload validation
+and preview validation both use the selected scenario.
 
 ## Recording and map use
 
@@ -186,8 +234,9 @@ backend permits one active top-level job (single or experiment).
 
 After **Launch matrix**, Operations shows its job/status/logs and cancellation.
 Return to Experiments and **Refresh studies** to inspect generated artifacts.
-Matrix children use the original configuration, quantum, window, speed and no
-observation wrapper. Unsupported overrides are intentionally absent. Different
+Matrix children remain explicitly bound to the original W100 reference
+configuration and use its quantum, window, speed and no observation wrapper.
+Unsupported overrides are intentionally absent. Different
 quantum conditions must remain separate experiments; comparisons reject mixed
 settings. Supporting a new matrix CLI flag would be separate runner work.
 

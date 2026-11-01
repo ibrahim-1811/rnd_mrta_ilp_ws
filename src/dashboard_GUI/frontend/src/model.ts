@@ -10,13 +10,13 @@ export function acceptJob(current: Job | null, next: Job): Job {
   if (current && (current.id !== next.id || next.sequence < current.sequence)) return current
   return next
 }
-export function buildSpec(form: Form, capacity: number) {
+export function buildSpec(form: Form, capacity: number, scenarioId = 'W100') {
   const number = (text: string, name: string, minimum: number, maximum: number, integer = false) => {
     const value = Number(text)
     if (!text.trim() || !Number.isFinite(value) || value < minimum || value > maximum || (integer && !Number.isInteger(value))) throw new Error(`${name} must be ${integer ? 'a whole number' : 'a number'} between ${minimum} and ${maximum}.`)
     return value
   }
-  const spec: Record<string, unknown> = { kind: 'run', scenario_id: 'W100', strategy: form.strategy,
+  const spec: Record<string, unknown> = { kind: 'run', scenario_id: scenarioId, strategy: form.strategy,
     robots: number(form.robots, 'Robots', 1, capacity, true), orders: number(form.orders, 'Orders', 0, 1_000_000, true),
     seed: number(form.seed, 'Seed', 0, 2 ** 32 - 1, true), execution_mode: form.mode,
     quiet: true, export: form.export, progress_interval_s: 10 }

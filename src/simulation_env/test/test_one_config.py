@@ -38,10 +38,23 @@ ONE_CONFIG = PACKAGE / "config" / "warehouse.yaml"
 # ----------------------------------------------------------------------
 
 
-def test_the_config_folder_holds_one_config():
-    configs = sorted(p.name for p in (PACKAGE / "config").glob("*.yaml"))
+def test_the_config_folder_holds_the_reference_and_only_built_scenarios():
+    """warehouse.yaml is the one reference config (W100).
 
-    assert configs == ["warehouse.yaml"]
+    Deliberate exception (2026-10-31): a further map served in the
+    dashboard and Gazebo has one config named by its id, written by
+    build_scenario_bundle.py together with its own world. Nothing is
+    kept per fleet size, and a config with no world is not allowed.
+    """
+
+    configs = sorted(p.stem for p in (PACKAGE / "config").glob("*.yaml"))
+
+    assert "warehouse" in configs
+
+    for scenario_id in configs:
+        if scenario_id != "warehouse":
+            assert (PACKAGE / "worlds" / f"{scenario_id}.world").is_file()
+            assert load_sim_config(PACKAGE / "config" / f"{scenario_id}.yaml").gazebo_world_name == scenario_id
 
 
 @pytest.fixture(scope="module")

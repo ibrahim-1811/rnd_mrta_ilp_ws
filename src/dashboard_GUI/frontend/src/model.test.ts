@@ -16,10 +16,10 @@ describe('scientific display and input boundaries', () => {
   it('only produces supported single-run fields and rejects invalid finite/count values', () => {
     const form = { strategy: 'random', robots: '2', orders: '3', seed: '7', mode: 'observed' as const,
       window: '', quantum: '', speed: '', sample: '1', export: false }
-    expect(buildSpec(form, 100)).toEqual({ kind: 'run', scenario_id: 'W100', strategy: 'random', robots: 2, orders: 3,
+    expect(buildSpec(form, 100, 'second')).toEqual({ kind: 'run', scenario_id: 'second', strategy: 'random', robots: 2, orders: 3,
       seed: 7, execution_mode: 'observed', observation_sample_s: 1, quiet: true, export: false, progress_interval_s: 10 })
     for (const values of [{ robots: '101' }, { robots: '2.5' }, { orders: '-1' }, { speed: 'NaN' }, { quantum: '-1' }]) {
-      expect(() => buildSpec({ ...form, ...values }, 100)).toThrow()
+      expect(() => buildSpec({ ...form, ...values }, 100, 'second')).toThrow()
     }
   })
   it('invalidates a preview whenever its effective request changes', () => {

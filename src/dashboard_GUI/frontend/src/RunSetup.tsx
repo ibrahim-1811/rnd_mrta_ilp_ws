@@ -7,8 +7,9 @@ import type { Form, Job, Preview, Scenario, Strategy } from './types'
 
 const initial: Form = { strategy: 'nearest_astar', robots: '2', orders: '3', seed: '7', mode: 'observed', window: '', quantum: '', speed: '', sample: '1', export: false }
 
-export function RunSetup({ scenario, strategies, canObserve, activeJob, onLaunched, onRefresh, disabled = false }: {
+export function RunSetup({ scenario, scenarios = scenario ? [scenario] : [], scenarioId = scenario?.id ?? '', onScenarioChange = () => {}, strategies, canObserve, activeJob, onLaunched, onRefresh, disabled = false }: {
   scenario: Scenario | null; strategies: Strategy[]; canObserve: boolean; activeJob: boolean;
+  scenarios?: Scenario[]; scenarioId?: string; onScenarioChange?: (scenarioId: string) => void;
   onLaunched: (job: Job) => void; onRefresh: () => void; disabled?: boolean
 }) {
   const [form, setForm] = useState<Form>(initial)
@@ -26,21 +27,25 @@ export function RunSetup({ scenario, strategies, canObserve, activeJob, onLaunch
   useEffect(() => {
     if (strategies.length && !strategies.some(s => s.id === current.current.strategy)) { setForm(f => ({ ...f, strategy: strategies[0].id })); setPreview(null) }
   }, [strategies])
+  useEffect(() => {
+    setInput(null); setForm(f => ({ ...f, input_id: undefined })); setPreview(null); setError('')
+  }, [scenarioId])
   useEffect(() => { if (preview) dialog.current?.showModal() }, [preview])
   const change = (key: keyof Form, value: string | boolean) => { setForm(f => ({ ...f, [key]: value })); setPreview(null); setError('') }
   async function previewRun() {
     if (action.current || !scenario || disabled || uploading) return
     action.current = true; setBusy('preview'); setError('')
     try {
-      const spec = buildSpec(form, scenario.capacity)
+      if (!scenario.valid || scenario.capacity === null) throw new Error('Select a valid warehouse scenario.')
+      const spec = buildSpec(form, scenario.capacity, scenarioId)
       const result = await act<Preview>('/jobs/preview', spec)
-      if (previewMatches(spec, buildSpec(current.current, scenario.capacity))) setPreview({ plan: result.data, spec, expires: Date.now() + result.data.expires_in_s * 1000 })
+      if (previewMatches(spec, buildSpec(current.current, scenario.capacity, scenarioId))) setPreview({ plan: result.data, spec, expires: Date.now() + result.data.expires_in_s * 1000 })
     } catch (e) { setError(message(e)) }
     finally { action.current = false; setBusy('') }
   }
   async function launch() {
     if (!preview || action.current || activeJob || !scenario || disabled) return
-    if (Date.now() > preview.expires || !previewMatches(preview.spec, buildSpec(current.current, scenario.capacity))) { setPreview(null); setError('Preview expired or settings changed. Preview the run again.'); return }
+    if (!scenario.valid || scenario.capacity === null || Date.now() > preview.expires || !previewMatches(preview.spec, buildSpec(current.current, scenario.capacity, scenarioId))) { setPreview(null); setError('Preview expired or settings changed. Preview the run again.'); return }
     action.current = true; setBusy('launch'); setError('')
     try { const result = await act<Job>('/runs', { preview_id: preview.plan.preview_id }); setPreview(null); onLaunched(result.data) }
     catch (e) { setPreview(null); setError(message(e)); onRefresh() }
@@ -49,8 +54,11 @@ export function RunSetup({ scenario, strategies, canObserve, activeJob, onLaunch
   return <section className="panel setup-panel" aria-label="Run configuration">
     <div className="panel-heading"><div><span className="eyebrow">RUN CONFIGURATION</span><h2>Set up a run</h2></div><SlidersHorizontal size={17} className="muted" /></div>
     <form onSubmit={e => { e.preventDefault(); void previewRun() }}>
-      <div className="scenario-tile"><span className="scenario-icon"><FlaskConical size={20} /></span><div><strong>{scenario?.id ?? 'Loading scenario…'}</strong><span>{scenario ? `${scenario.width} × ${scenario.height} grid · ${scenario.capacity} homes` : 'Reading the local catalogue'}</span></div><span className="mini-tag">MAP</span></div>
-      <InputPicker value={input} onChange={v => { setInput(v); setForm(f=>({...f,input_id:v?.id})); setPreview(null) }} onBusy={setUploading} disabled={!!busy} />
+      <label>Warehouse scenario<select aria-label="Warehouse scenario" value={scenarioId} disabled={disabled || activeJob || !!busy || uploading} onChange={e => onScenarioChange(e.target.value)}>{scenarios.map(item => <option key={item.id} value={item.id} disabled={!item.valid}>{item.label}{item.reference ? ' · reference' : ''}{item.valid ? '' : ' · invalid'}</option>)}</select></label>
+      <div className="scenario-tile"><span className="scenario-icon"><FlaskConical size={20} /></span><div><strong>{scenario?.label ?? 'Loading scenario…'}</strong><span>{scenario?.valid ? `${scenario.width} × ${scenario.height} grid · ${scenario.capacity} homes` : 'Scenario is unavailable for preview'}</span></div><span className="mini-tag">{scenario?.reference ? 'REFERENCE' : 'MAP'}</span></div>
+      {scenarios.filter(item => !item.valid).map(item => <div className="notice error" role="status" key={item.id}>{`${item.label}: ${item.validation.errors.join(' · ')}`}</div>)}
+      {scenario?.validation.warnings.map(warning => <div className="notice" role="status" key={warning}>{warning}</div>)}
+      <InputPicker value={input} scenarioId={scenarioId} onChange={v => { setInput(v); setForm(f=>({...f,input_id:v?.id})); setPreview(null) }} onBusy={setUploading} disabled={!!busy} />
       <label>Allocation strategy<select aria-label="Allocation strategy" value={form.strategy} disabled={!!busy || !strategies.length} onChange={e => change('strategy', e.target.value)}>{strategies.map(s => <option key={s.id} value={s.id}>{human(s.id)}</option>)}</select></label>
       <div className="field-row"><label>Robots<input aria-label="Robots" type="number" min="1" max={scenario?.capacity ?? 100} step="1" required value={form.robots} disabled={!!busy} onChange={e => change('robots', e.target.value)} /></label><label>Orders<input aria-label="Orders" type="number" min="0" max="1000000" step="1" required value={form.orders} disabled={!!busy} onChange={e => change('orders', e.target.value)} /></label></div>
       <label>Allocation seed<input aria-label="Allocation seed" type="number" min="0" max="4294967295" step="1" required value={form.seed} disabled={!!busy} onChange={e => change('seed', e.target.value)} /></label>
@@ -68,7 +76,7 @@ export function RunSetup({ scenario, strategies, canObserve, activeJob, onLaunch
         <p className="field-hint">Blank settings use the existing configuration. Orders = 0 selects all available orders.</p>
       </details>
       {error && <div className="inline-error" role="alert">{error}</div>}
-      <button className="button primary full" type="submit" disabled={disabled || uploading || !!busy || !scenario || !strategies.length}>{busy ? <LoaderCircle size={16} className="spin" /> : <Play size={15} />} Preview run <ArrowRight size={15} /></button>
+      <button className="button primary full" type="submit" disabled={disabled || uploading || !!busy || !scenario?.valid || scenario.capacity === null || !strategies.length}>{busy ? <LoaderCircle size={16} className="spin" /> : <Play size={15} />} Preview run <ArrowRight size={15} /></button>
       <p className="setup-note">Review the effective settings before launch.<br />Scientific execution remains in the existing simulator.</p>
     </form>
     {preview && <dialog ref={dialog} className="preview-dialog" aria-label="Review run before launch" onCancel={() => setPreview(null)}>

@@ -12,10 +12,11 @@ router=APIRouter(prefix='/api/v1')
 
 class InputRequest(StrictModel):
     csv_text:str=Field(min_length=1,max_length=2*1024*1024)
+    scenario_id:str=Field('W100',pattern=r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')
 
 @router.post('/inputs',response_model=Envelope,dependencies=[Depends(mutation)])
 def upload(request:Request,body:InputRequest):
-    return result(source_call(lambda:InputStore(request.app.state.data_dir).add(body.csv_text)))
+    return result(source_call(lambda:InputStore(request.app.state.data_dir).add(body.csv_text,body.scenario_id)))
 
 @router.get('/experiments',response_model=Envelope)
 def experiments(request:Request):

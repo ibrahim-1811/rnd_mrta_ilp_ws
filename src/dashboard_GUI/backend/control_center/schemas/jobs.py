@@ -14,7 +14,7 @@ class StrictModel(BaseModel):
 
 class RunSpec(StrictModel):
     kind: Literal['run'] = 'run'
-    scenario_id: Literal['W100'] = 'W100'
+    scenario_id: str = Field('W100', pattern=r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')
     strategy: str = Field('nearest_astar', min_length=1, max_length=100)
     robots: Count = 0
     orders: Count = 0

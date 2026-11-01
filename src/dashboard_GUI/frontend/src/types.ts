@@ -3,7 +3,10 @@ export type Envelope<T> = { api_schema_version: number; data: T; availability: s
 export type Capability = { implemented: boolean; readable: boolean; reason?: string | null; scope?: string }
 export type Capabilities = Record<string, Capability | string>
 export type Strategy = { id: string; implementation: string; review_status: string }
-export type Scenario = { id: string; width: number; height: number; capacity: number; settings: Record<string, unknown>; hashes: Record<string, string> }
+export type Scenario = { id: string; label: string; reference: boolean; provenance: string | null;
+  width: number | null; height: number | null; capacity: number | null; valid: boolean;
+  validation: { errors: string[]; warnings: string[] }; settings: Record<string, unknown>;
+  hashes: Record<string, string>; identity: string | null }
 export type Cell = [number, number]
 export type Geometry = { id: string; width: number; height: number; resolution_m: number; origin: Cell;
   obstacles: Cell[]; traversable_cells: Cell[]; non_transit_cells: Cell[];

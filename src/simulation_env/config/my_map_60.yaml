@@ -1,0 +1,145 @@
+# Scenario config for 'my_map_60', written by build_scenario_bundle.py
+# from config/warehouse.yaml. Do not edit by hand; rebuild instead.
+# =====================================================================
+#  THE config.  One config, one map, one Gazebo world.
+# =====================================================================
+#
+#  Everything runs from this file: headless runs, Gazebo, recording.
+#  It names the current map (maps/W100.xlsx, room for 100 robots) and
+#  the current order list (orders.csv). Run any fleet size on it.
+#
+#  To switch to a new map, do not edit this by hand; run
+#    PYTHONPATH=$PP $PY src/simulation_env/scripts/build_scenario.py \
+#        --map src/simulation_env/maps/<your map>.xlsx
+#  It checks the map, rewrites the map, robot_count and orders lines
+#  here, regenerates orders.csv for that map, and rebuilds the one
+#  Gazebo world (worlds/warehouse.world).
+#
+#  You rarely need to edit this file: almost everything can be changed
+#  for a single run on the command line, which leaves this file -- and
+#  so your reference results -- untouched:
+#
+#    --robots 10           fleet size            (1 .. 100)
+#    --orders 300          use the first 300 orders of the order file
+#    --orders-file X.csv   a different order file
+#    --strategy random     nearest_astar | nearest_manhattan | random
+#    --seed 7              seed for the random strategy
+#    --quantum 3.0         dispatch quantum (see "allocation" below)
+#    --window legacy       candidate window (see "allocation" below)
+#    --speed 1.0           robot speed in m/s
+#    --dataset runs/X      record decisions and outcomes for learning
+#
+#  Example (this config is the default, so no --config is needed):
+#    PYTHONPATH=$PP $PY src/simulation_env/scripts/run_workload.py \
+#        --robots 50 --orders 300 --strategy nearest_manhattan
+#
+#  In Gazebo, the same robot count is chosen at launch: robots:=50.
+#
+#  Settings marked FIXED are the same for every strategy on purpose:
+#  they are the experiment's apparatus, not its variable. Change them
+#  only to ask a different question, and never between two runs you
+#  intend to compare. Settings marked FREE are yours to vary.
+#
+#  Full guide: docs/START_HERE.md
+# =====================================================================
+
+
+# --- the map ----------------------------------------------------------
+warehouse:
+  # FIXED. The Excel map, looked for in src/simulation_env/maps/.
+  # Rewritten by build_scenario.py --map; see the top of this file.
+  map: my_map_60.xlsx
+  # FIXED. Metres per Excel cell.
+  resolution_m: 1.0
+
+
+# --- the robots -------------------------------------------------------
+fleet:
+  # FREE. Default fleet size; override per run with --robots, or
+  # robots:=N in Gazebo. Cannot be more than the map's parking (P) cells:
+  # 100 on W100. build_scenario.py --map sets it to that maximum.
+  robot_count: 62
+  robot_prefix: robot_
+  # FIXED. Where robots start:
+  #   spread   robots shared out evenly over all parking cells, so 10
+  #            robots start spaced along both walls (used for W100)
+  #   home     robot k starts on parking cell k (the old V2 rule)
+  # Where they park at the END is always the nearest free cell.
+  initial_position_mode: spread
+  # FIXED. Metres per second; override per run with --speed.
+  speed_mps: 1.5
+
+
+# --- the battery: FIXED, identical for every strategy -----------------
+#
+#  Each robot starts full and drains as it works. At or below
+#  charge_due_percent it finishes its current order and goes to charge.
+#  A robot is only given an order it can finish and still reach a
+#  charger with reserve_percent left. Charging fills it back to 100%.
+battery:
+  enabled: true
+  initial_soc_percent: 100.0
+  travel_percent_per_20m: 1.0          # 1% per 20 m driven
+  service_percent_per_60s: 1.0         # 1% per 60 s picking / dropping
+  waiting_idle_percent_per_300s: 1.0   # 1% per 300 s standing still
+  charging_percent_per_second: 1.0     # +1% per second on a charger
+  reserve_percent: 10.0
+  charge_due_percent: 10.0
+
+
+# --- how long a robot spends at a station: FIXED ----------------------
+service:
+  shelf_pick_s: 1.0
+  dropoff_s: 1.0
+
+
+# --- the work ---------------------------------------------------------
+orders:
+  # FREE. 2000 orders made from the current map's own shelves and
+  # drop-offs, seed 42. Use --orders N for the first N, or --orders-file
+  # for another list. build_scenario.py --map regenerates it.
+  file: orders_my_map_60.csv
+  mode: replay
+
+
+# --- what the strategy is shown at each decision ----------------------
+allocation:
+  # FIXED. How many waiting orders a free robot may choose from.
+  #   fleet_size   as many orders as there are robots (use this)
+  #   legacy       only as many as there are free robots -- the old rule,
+  #                which left 87% of decisions with no choice at all
+  #   <number>     an explicit width
+  window: fleet_size
+  # FREE. Seconds to hold a freed robot so several are assigned together.
+  #   0.0    assign immediately (the standard setting)
+  #   3.0    batch freed robots: every decision has a real choice; needed
+  #          to tell batch strategies like Hungarian apart. Costs waiting.
+  dispatch_quantum_s: 0.0
+
+
+# --- randomness -------------------------------------------------------
+simulation:
+  deterministic: true
+  # FREE. Seed for the random strategy; override per run with --seed.
+  # The same seed always gives the same result.
+  seed: 42
+
+
+# --- Gazebo and ROS (only for the 3D view, step 10 of START_HERE) -----
+visualization:
+  # Playback speed in Gazebo: 4.0 = four times real time. Display only;
+  # it never changes a result.
+  time_scale: 4.0
+  min_wall_hold_s: 0.0
+
+ros:
+  robot_states_topic: /mrta/robot_states
+  order_states_topic: /mrta/order_states
+  robot_state_publish_hz: 2.0
+
+gazebo:
+  enabled: true
+  # The one 3D world, built from the current map by build_scenario.py:
+  # worlds/warehouse.world. It holds the warehouse only; the robots are
+  # created when a run starts, as many as the run uses.
+  world_name: my_map_60

@@ -19,13 +19,16 @@ export default function App() {
   const [health, setHealth] = useState<{ version: string; read_only: boolean } | null>(null)
   const [capabilities, setCapabilities] = useState<Capabilities>({})
   const [strategies, setStrategies] = useState<Strategy[]>([])
-  const [scenario, setScenario] = useState<Scenario | null>(null)
+  const [scenarios, setScenarios] = useState<Scenario[]>([])
+  const [scenarioId, setScenarioId] = useState('')
   const [geometry, setGeometry] = useState<Geometry | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
   const [jobId, setJobId] = useState<string | null>(() => new URLSearchParams(location.search).get('job'))
   const [robotId, setRobotId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mapLoading, setMapLoading] = useState(false)
   const [catalogueError, setCatalogueError] = useState('')
+  const [mapError, setMapError] = useState('')
   const [actionError, setActionError] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [storedMetrics, setMetrics] = useState<(Envelope<Record<string, unknown> | null> & { job_id: string }) | null>(null)
@@ -35,6 +38,11 @@ export default function App() {
   const selectedRef = useRef(jobId); selectedRef.current = jobId
   const logBox = useRef<HTMLPreElement>(null)
   const { job, logs, error: jobError, transport } = useJob(jobId, revision)
+  const scenario = scenarios.find(item => item.id === scenarioId) ?? null
+  const referenceScenario = scenarios.find(item => item.reference && item.valid) ?? scenarios.find(item => item.valid) ?? null
+  const jobScenarioId = typeof job?.plan?.effective?.scenario_id === 'string' ? job.plan.effective.scenario_id : null
+  const displayedScenario = scenarios.find(item => item.id === (jobScenarioId ?? scenarioId)) ?? null
+  const geometryScenarioId = jobScenarioId ?? scenarioId
   const recording = useRecording(job)
   const frame = recording.frame?.job_id === jobId ? recording.frame : null
   const canObserve = (capabilities.telemetry as Capability | undefined)?.readable === true
@@ -46,17 +54,20 @@ export default function App() {
     void Promise.allSettled([
       read<{ version: string; read_only: boolean }>('/health', controller.signal),
       read<Capabilities>('/capabilities', controller.signal), read<Strategy[]>('/strategies', controller.signal),
-      read<Scenario[]>('/scenarios', controller.signal), read<Geometry>('/scenarios/W100/map', controller.signal),
-      read<Job[]>('/jobs?limit=100', controller.signal),
+      read<Scenario[]>('/scenarios', controller.signal), read<Job[]>('/jobs?limit=100', controller.signal),
     ] as const).then(results => {
       if (controller.signal.aborted) return
       if (results[0].status === 'fulfilled') setHealth(results[0].value.data); else setHealth(null)
       if (results[1].status === 'fulfilled') setCapabilities(results[1].value.data)
       if (results[2].status === 'fulfilled') setStrategies(results[2].value.data)
-      if (results[3].status === 'fulfilled') setScenario(results[3].value.data[0] ?? null)
-      if (results[4].status === 'fulfilled') setGeometry(results[4].value.data)
-      if (results[5].status === 'fulfilled') {
-        const available = sortJobs(results[5].value.data)
+      if (results[3].status === 'fulfilled') {
+        const available = results[3].value.data
+        setScenarios(available)
+        setScenarioId(current => available.some(item => item.id === current && item.valid)
+          ? current : (available.find(item => item.reference && item.valid) ?? available.find(item => item.valid))?.id ?? '')
+      }
+      if (results[4].status === 'fulfilled') {
+        const available = sortJobs(results[4].value.data)
         setJobs(available)
         if (!initialized.current) { initialized.current = true; if (!selectedRef.current && available.length) setJobId(available[0].id) }
       }
@@ -66,6 +77,17 @@ export default function App() {
     })
     return () => controller.abort()
   }, [revision])
+  useEffect(() => {
+    setGeometry(null); setMapError('')
+    if (!geometryScenarioId) return
+    const controller = new AbortController()
+    setMapLoading(true)
+    void read<Geometry>(`/scenarios/${encodeURIComponent(geometryScenarioId)}/map`, controller.signal)
+      .then(result => { if (!controller.signal.aborted) setGeometry(result.data) })
+      .catch(error => { if (!controller.signal.aborted) setMapError(message(error)) })
+      .finally(() => { if (!controller.signal.aborted) setMapLoading(false) })
+    return () => controller.abort()
+  }, [geometryScenarioId, revision])
   useEffect(() => {
     if (job) setJobs(current => sortJobs([job, ...current.filter(j => j.id !== job.id)]))
   }, [job?.id, job?.status, job?.owned_process_alive])
@@ -104,15 +126,15 @@ export default function App() {
     <aside className="sidebar"><a className="brand" href="#workspace" onClick={() => setView('operations')}><span className="brand-mark"><Warehouse size={23} /></span><span>MRTA<small>CONTROL CENTER</small></span></a>
       <div className="sidebar-section">WORKSPACE</div><nav aria-label="Main navigation">
         {([['operations', LayoutDashboard, 'Operations'], ['experiments', Layers3, 'Experiments'], ['history', FileClock, 'Run history'], ['system', Settings2, 'System']] as const).map(([key, Icon, title]) => <button key={key} aria-label={title} className={view === key ? 'nav-item active' : 'nav-item'} aria-current={view === key ? 'page' : undefined} onClick={() => setView(key)}><Icon size={18} /><span>{title}</span>{view === key && <ChevronRight size={15} />}</button>)}
-      </nav><div className="sidebar-map"><span className="dot" /><div><strong>{scenario?.id ?? 'W100'}</strong><small>Research warehouse</small></div><Layers3 size={15} /></div>
+      </nav><div className="sidebar-map"><span className="dot" /><div><strong>{displayedScenario?.id ?? 'W100'}</strong><small>{displayedScenario?.label ?? 'Research warehouse'}</small></div><Layers3 size={15} /></div>
       <div className="sidebar-bottom"><div className="local-icon"><ShieldCheck size={17} /></div><div><strong>Local workspace</strong><small>Research operations</small></div></div>
     </aside>
     <div className="main-shell"><header className="topbar"><div className="breadcrumbs">Workspace <ChevronRight size={12} /><span>{view === 'operations' ? 'Warehouse operations' : view === 'history' ? 'Run history' : view === 'experiments' ? 'Experiments' : 'System'}</span></div><div className="topbar-right"><span className="local-chip"><ShieldCheck size={12} /> Local only</span><span className={`connection ${health ? 'connected' : ''}`}><span className={`dot ${health ? '' : 'offline'}`} />{health ? 'Backend connected' : loading ? 'Connecting…' : 'Backend offline'}</span></div></header>
       <main id="workspace" tabIndex={-1}>
-        {catalogueError && <div className="notice error" role="alert"><strong>{health ? 'Some data could not be loaded.' : 'Local backend unavailable.'}</strong> {catalogueError}<button className="text-button" onClick={refresh}>Try again</button></div>}
+        {(catalogueError || mapError) && <div className="notice error" role="alert"><strong>{health ? 'Some data could not be loaded.' : 'Local backend unavailable.'}</strong> {[catalogueError, mapError].filter(Boolean).join(' · ')}<button className="text-button" onClick={refresh}>Try again</button></div>}
         <div hidden={view !== 'operations'}>
           <div className="section-intro"><div><span className="eyebrow">WAREHOUSE CONTROL</span><h1>Warehouse operations<span className="title-dot">.</span></h1><p>Configure a run. Observe the fleet. Inspect the evidence.</p></div><button className="button" onClick={refresh}><RefreshCw size={14} className={loading ? 'spin' : ''} /> Refresh workspace</button></div>
-          <div className="job-toolbar"><div className="warehouse-label"><span className="live-square"><Warehouse size={18} /></span><strong>{scenario?.id ?? 'Warehouse'}</strong><span>Headless simulation</span></div><label className="job-picker">Selected job<select aria-label="Selected job" value={jobId ?? ''} onChange={e => { if (e.target.value) openJob(e.target.value); else setJobId(null) }}><option value="">Choose a job</option>{jobId && !jobs.some(j => j.id === jobId) && <option value={jobId}>{jobId.slice(0, 8)}</option>}{jobs.map(j => <option value={j.id} key={j.id}>{j.id.slice(0, 8)} · {human(j.status)} · {String(j.plan?.request?.strategy ?? j.kind)}</option>)}</select></label>{job && active(job) && <button className="button" onClick={() => void cancelJob()} disabled={cancelling || job.status === 'cancel_requested'}><Square size={12} />{cancelling || job.status === 'cancel_requested' ? 'Cancellation requested…' : 'Cancel run'}</button>}</div>
+          <div className="job-toolbar"><div className="warehouse-label"><span className="live-square"><Warehouse size={18} /></span><strong>{displayedScenario?.id ?? 'Warehouse'}</strong><span>{displayedScenario?.label ?? 'Headless simulation'}</span></div><label className="job-picker">Selected job<select aria-label="Selected job" value={jobId ?? ''} onChange={e => { if (e.target.value) openJob(e.target.value); else setJobId(null) }}><option value="">Choose a job</option>{jobId && !jobs.some(j => j.id === jobId) && <option value={jobId}>{jobId.slice(0, 8)}</option>}{jobs.map(j => <option value={j.id} key={j.id}>{j.id.slice(0, 8)} · {human(j.status)} · {String(j.plan?.request?.strategy ?? j.kind)}</option>)}</select></label>{job && active(job) && <button className="button" onClick={() => void cancelJob()} disabled={cancelling || job.status === 'cancel_requested'}><Square size={12} />{cancelling || job.status === 'cancel_requested' ? 'Cancellation requested…' : 'Cancel run'}</button>}</div>
           <div className="overview-stats">
             <Stat icon={<Bot size={18} />} label={frame ? 'Robots observed' : 'Requested robots'} value={display(frame?.payload.robots.length ?? job?.plan.effective.robots, 0)} note={frame ? 'From copied fleet state' : job ? 'Effective run configuration' : 'Choose or launch a run'} />
             <Stat icon={<Layers3 size={18} />} label="Completed orders" value={frame ? `${display(frame.payload.orders?.completed, 0)} / ${display(frame.payload.orders?.total, 0)}` : metrics?.data ? `${display(metrics.data.orders_completed, 0)} / ${display(metrics.data.orders, 0)}` : '—'} note={frame ? `${display(frame.payload.orders?.pending, 0)} pending · ${display(frame.payload.orders?.in_progress, 0)} in progress` : 'No inferred completion counts'} />
@@ -121,9 +143,9 @@ export default function App() {
           </div>
           {jobError && <div className="notice error" role="alert">{jobError}</div>}{actionError && <div className="notice error" role="alert">{actionError}</div>}
           <div className="operations-grid">
-            <RunSetup scenario={scenario} strategies={strategies} canObserve={canObserve} activeJob={jobs.some(active)} disabled={!canLaunch} onRefresh={refresh} onLaunched={j => { setJobs(items => sortJobs([j, ...items])); openJob(j.id) }} />
+            <RunSetup scenario={scenario} scenarios={scenarios} scenarioId={scenarioId} onScenarioChange={id => { if (!jobs.some(active)) { setScenarioId(id); if (!jobScenarioId) setGeometry(null) } }} strategies={strategies} canObserve={canObserve} activeJob={jobs.some(active)} disabled={!canLaunch} onRefresh={refresh} onLaunched={j => { setJobs(items => sortJobs([j, ...items])); openJob(j.id) }} />
             <div className="map-column"><div className="observation-strip"><span className={`badge ${frame ? live ? 'good' : 'recorded' : 'neutral'}`}><Radio size={12} />{source}</span><span className="muted">{frame ? `t = ${frame.sim_time_exact} s` : job?.telemetry.reason ?? 'Select an observed run for actual robot state'}</span></div>
-              <WarehouseMap geometry={geometry} frame={frame} selected={robotId} onSelect={setRobotId} loading={loading} />
+              <WarehouseMap geometry={geometry} frame={frame} selected={robotId} onSelect={setRobotId} loading={loading || mapLoading} />
               <div className="playback-bar"><div className="playback-top"><span><FileClock size={15} /><strong>Sampled recording</strong></span><span className="muted">{drops ? `${display(drops, 0)} dropped samples` : job?.telemetry.recording_complete ? 'Recording complete' : 'Actual captured cells · no interpolation'}</span></div><div className="playback-actions">
                 <button className="icon-button" aria-label="First recording sample" disabled={!recording.frames.length} onClick={() => recording.seek(0)}><SkipBack size={17} /></button>
                 <button className="button small primary" disabled={!job?.telemetry.available || recording.loading} onClick={() => recording.frames.length ? recording.toggle() : void recording.load()}>{recording.loading ? <LoaderCircle size={14} className="spin" /> : recording.playing ? <Pause size={14} /> : <Play size={14} />}{recording.loading ? 'Loading…' : recording.playing ? 'Pause' : recording.frames.length ? 'Play' : 'Play recording'}</button>
@@ -143,9 +165,9 @@ export default function App() {
             <section className="panel results-panel"><div className="panel-heading"><div><span className="eyebrow">ORIGINAL SCIENTIFIC OUTPUT</span><h2>Run metrics</h2></div><Database size={17} className="muted" /></div><div className="result-metrics">{cards.map(c => <div key={c.key}><span>{c.label}</span><strong>{display(c.value)} <small>{c.value === null ? '' : c.unit}</small></strong></div>)}</div><div className="results-note">{metrics?.availability === 'legacy' ? 'Legacy schema: order makespan was not recorded.' : metrics ? `Original ${metrics.availability} metrics · no values recomputed.` : 'Metrics appear when the original runner writes valid artifacts.'}</div><button className="text-button" onClick={() => setView('history')}>Inspect run artifacts <ArrowUpRight size={14} /></button></section></div>
           <div className="workspace-footer"><span><ShieldCheck size={12} /> Fixed scientific infrastructure · policy is the research variable</span><span>Local browser access · ROS/Gazebo deferred</span></div>
         </div>
-        {view === 'experiments' && <ExperimentsView strategies={strategies} capacity={scenario?.capacity??100} activeJob={jobs.some(active)} disabled={!canLaunch} onLaunched={j=>{setJobs(items=>sortJobs([j,...items]));openJob(j.id)}} />}
+        {view === 'experiments' && <ExperimentsView strategies={strategies} capacity={referenceScenario?.capacity??100} activeJob={jobs.some(active)} disabled={!canLaunch} onLaunched={j=>{setJobs(items=>sortJobs([j,...items]));openJob(j.id)}} />}
         {view === 'history' && <HistoryView onOpenJob={openJob} />}
-        {view === 'system' && <div className="system-view"><div className="section-intro"><div><span className="eyebrow">LOCAL ENVIRONMENT</span><h1>System</h1><p>Capabilities and catalogue values read directly from the backend.</p></div><button className="button" onClick={refresh}><RefreshCw size={14} /> Refresh</button></div><div className="system-grid"><section className="panel system-card"><h2><Wifi size={18} /> Backend connection</h2><dl className="detail-list"><dt>Status</dt><dd>{health ? 'Connected' : 'Offline'}</dd><dt>Version</dt><dd>{health?.version ?? '—'}</dd><dt>Access</dt><dd>Loopback only</dd><dt>Service mode</dt><dd>{health ? health.read_only ? 'Read-only' : 'Operational' : '—'}</dd></dl><a className="text-button" href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Open backend API documentation <ArrowUpRight size={14} /></a></section><section className="panel system-card"><h2><ShieldCheck size={18} /> Available capabilities</h2>{[['simulation_launch', 'Single-run controls'], ['telemetry', 'Observed single-run state'], ['experiment_control', 'Experiment runner API'], ['paired_comparison', 'Paired comparison'], ['ilp', 'Learned rules']].map(([key, label]) => { const c = capabilities[key] as Capability | undefined; return <div className="capability-row" key={key}><span>{label}</span><span className={`badge ${c?.readable ? 'good' : 'neutral'}`}>{c?.readable ? 'Available' : 'Unavailable'}</span></div> })}</section><section className="panel system-card"><h2><Activity size={18} /> Registered strategies</h2><p className="muted">Registration is separate from scientific review/approval.</p>{strategies.map(s => <div className="strategy-row" key={s.id} title={s.review_status}><strong>{human(s.id)}</strong><code>{s.implementation}</code></div>)}</section><section className="panel system-card"><h2><Layers3 size={18} /> Scenario provenance</h2><dl className="detail-list"><dt>Map</dt><dd>{scenario?.id ?? '—'}</dd><dt>Capacity</dt><dd>{display(scenario?.capacity, 0)} homes</dd><dt>Directed edges</dt><dd>{display(geometry?.directed_edges.length, 0)}</dd>{Object.entries(scenario?.hashes ?? {}).map(([key, value]) => <div className="hash-row" key={key}><dt>{human(key)} SHA-256</dt><dd title={value}>{value.slice(0, 16)}…</dd></div>)}</dl><details className="provenance"><summary>Read-only effective configuration</summary><pre>{JSON.stringify(scenario?.settings ?? {}, null, 2)}</pre></details></section></div></div>}
+        {view === 'system' && <div className="system-view"><div className="section-intro"><div><span className="eyebrow">LOCAL ENVIRONMENT</span><h1>System</h1><p>Capabilities and catalogue values read directly from the backend.</p></div><button className="button" onClick={refresh}><RefreshCw size={14} /> Refresh</button></div><div className="system-grid"><section className="panel system-card"><h2><Wifi size={18} /> Backend connection</h2><dl className="detail-list"><dt>Status</dt><dd>{health ? 'Connected' : 'Offline'}</dd><dt>Version</dt><dd>{health?.version ?? '—'}</dd><dt>Access</dt><dd>Loopback only</dd><dt>Service mode</dt><dd>{health ? health.read_only ? 'Read-only' : 'Operational' : '—'}</dd></dl><a className="text-button" href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Open backend API documentation <ArrowUpRight size={14} /></a></section><section className="panel system-card"><h2><ShieldCheck size={18} /> Available capabilities</h2>{[['simulation_launch', 'Single-run controls'], ['telemetry', 'Observed single-run state'], ['experiment_control', 'Experiment runner API'], ['paired_comparison', 'Paired comparison'], ['ilp', 'Learned rules']].map(([key, label]) => { const c = capabilities[key] as Capability | undefined; return <div className="capability-row" key={key}><span>{label}</span><span className={`badge ${c?.readable ? 'good' : 'neutral'}`}>{c?.readable ? 'Available' : 'Unavailable'}</span></div> })}</section><section className="panel system-card"><h2><Activity size={18} /> Registered strategies</h2><p className="muted">Registration is separate from scientific review/approval.</p>{strategies.map(s => <div className="strategy-row" key={s.id} title={s.review_status}><strong>{human(s.id)}</strong><code>{s.implementation}</code></div>)}</section><section className="panel system-card"><h2><Layers3 size={18} /> Scenario provenance</h2><dl className="detail-list"><dt>Map</dt><dd>{displayedScenario?.id ?? '—'}</dd><dt>Capacity</dt><dd>{display(displayedScenario?.capacity, 0)} homes</dd><dt>Directed edges</dt><dd>{display(geometry?.directed_edges.length, 0)}</dd>{Object.entries(displayedScenario?.hashes ?? {}).map(([key, value]) => <div className="hash-row" key={key}><dt>{human(key)} SHA-256</dt><dd title={value}>{value.slice(0, 16)}…</dd></div>)}</dl><details className="provenance"><summary>Read-only effective configuration</summary><pre>{JSON.stringify(displayedScenario?.settings ?? {}, null, 2)}</pre></details></section></div></div>}
       </main>
     </div>
   </div>

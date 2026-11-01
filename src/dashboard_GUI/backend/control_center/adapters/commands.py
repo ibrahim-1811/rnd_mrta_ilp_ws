@@ -8,7 +8,8 @@ from pathlib import Path
 import os
 
 from fastapi import HTTPException
-from control_center.adapters.catalogue import REPO, CONFIG, load_scenario, strategies
+from control_center.adapters.catalogue import REPO, strategies
+from control_center.adapters.scenarios import ScenarioError, load_scenario, scenario
 from control_center.schemas.jobs import RunSpec
 from control_center.storage.files import open_source, digest, read_json
 
@@ -54,7 +55,7 @@ class CommandPlanner:
         files = {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
                  for package in ('mrta_core', 'simulation_env', 'task_management')
                  for p in sorted((REPO / 'src' / package).rglob('*.py'))}
-        for p in (CONFIG, config.map_path, config.orders_path, REPO / 'pixi.lock', REPO / 'pixi.toml'):
+        for p in (config.config_path, config.map_path, config.orders_path, REPO / 'pixi.lock', REPO / 'pixi.toml'):
             if p.is_file():
                 files[str(p)] = hashlib.sha256(p.read_bytes()).hexdigest()
         if not self.python.is_file():
@@ -73,7 +74,12 @@ class CommandPlanner:
     def build(self, spec, job_id):
         from simulation_env.fleet import home_bank
         from mrta_core.orders import load_orders_csv, select_orders
-        config, warehouse = load_scenario()
+        scenario_id = spec.scenario_id if isinstance(spec, RunSpec) else 'W100'
+        try:
+            scenario_meta = scenario(scenario_id)
+            config, warehouse = load_scenario(scenario_id)
+        except ScenarioError as exc:
+            fail(str(exc), 422)
         if isinstance(spec, RunSpec) and spec.input_id:
             from control_center.adapters.inputs import InputStore
             config = replace(config, orders_path=InputStore(self.data_dir).resolve(spec.input_id))
@@ -91,7 +97,8 @@ class CommandPlanner:
             if not source_matches():
                 fail('Original runner changed since observation parity; use CLI mode', 503)
         sources = self.inputs(config, observed=observed)
-        common = dict(scenario_id='W100', config=asdict(config), capacity=capacity)
+        common = dict(scenario_id=scenario_id, scenario_identity=scenario_meta['identity'],
+                      scenario_hashes=scenario_meta['hashes'], config=asdict(config), capacity=capacity)
         warnings = ['Dirty source is recorded by the original runner; files can still change during execution.',
                     'No live motion telemetry; simulated time is available only where original logs/artifacts record it.']
         grid = []
@@ -106,7 +113,7 @@ class CommandPlanner:
                 quantum_s=config.dispatch_quantum_s if spec.quantum_s is None else spec.quantum_s,
                 speed_mps=config.speed_mps if spec.speed_mps is None else spec.speed_mps)
             script = REPO / 'src/simulation_env/scripts/run_workload.py'
-            argv = [str(self.python), str(script), '--config', str(CONFIG), '--strategy', spec.strategy,
+            argv = [str(self.python), str(script), '--config', str(config.config_path), '--strategy', spec.strategy,
                     '--robots', str(counts[0]), '--orders', str(spec.orders), '--seed', str(effective['seed']),
                     '--window', str(effective['window']), '--quantum', str(effective['quantum_s']),
                     '--speed', str(effective['speed_mps']), '--progress', str(spec.progress_interval_s),

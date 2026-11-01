@@ -27,17 +27,23 @@ Two terminals, Gazebo kept open between runs:
     ros2 launch simulation_env gazebo.launch.py robots:=100
     ros2 launch simulation_env warehouse_sim.launch.py \
         start_gazebo:=false orders:=true robots:=100
+
+A scenario other than the reference is chosen with one argument on both
+commands: ``scenario:=<id>`` (an id of src/dashboard_GUI/config/scenarios.yaml,
+for example ``scenario:=my_map``). Its config names its own world.
 """
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+from simulation_env.scenario_registry import resolve_config
 
 
 def _source_tree(share):
@@ -55,25 +61,84 @@ def _source_tree(share):
     return source if os.path.isdir(source) else None
 
 
-def generate_launch_description():
+def launch_nodes(context, *args, **kwargs):
+    """Resolve config_file / scenario:=<id> to one config, then build the nodes."""
 
     share = get_package_share_directory("simulation_env")
 
-    # The one config: the source tree's, so edits apply without a
+    # The reference config: the source tree's, so edits apply without a
     # rebuild; the installed copy only if there is no source tree.
     source = _source_tree(share)
     default_config = os.path.join(
         source if source else share, "config", "warehouse.yaml"
     )
 
-    config_file = LaunchConfiguration("config_file")
+    # config_file, or a registered scenario id, or the reference config.
+    config_file = resolve_config(
+        context.launch_configurations.get("config_file", ""),
+        context.launch_configurations.get("scenario", ""),
+        source,
+        default_config,
+    )
     world_file = LaunchConfiguration("world_file")
     start_gazebo = LaunchConfiguration("start_gazebo")
     headless = LaunchConfiguration("headless")
 
+    return [
+        # Gazebo with this run's robots parked on their start cells.
+        # It stops a Gazebo already running this world first, and
+        # finishes before the fleet node below starts.
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(share, "launch", "gazebo.launch.py")
+            ),
+            launch_arguments={
+                "config_file": config_file,
+                "world_file": world_file,
+                "robots": LaunchConfiguration("robots"),
+                "headless": headless,
+            }.items(),
+            condition=IfCondition(start_gazebo),
+        ),
+        # Fleet deployment and live state publishing.
+        Node(
+            package="simulation_env",
+            executable="fleet_node",
+            name="mrta_fleet",
+            output="screen",
+            emulate_tty=True,
+            parameters=[
+                {
+                    # Only the config path: every simulation constant
+                    # lives in the YAML, never duplicated here.
+                    "config_file": config_file,
+                    "wait_for_gazebo": 60.0,
+                    "load_orders": LaunchConfiguration("orders"),
+                    "run_workload": LaunchConfiguration("orders"),
+                    "strategy": LaunchConfiguration("strategy"),
+                    "speed_mps": LaunchConfiguration("speed"),
+                    "window": LaunchConfiguration("window"),
+                    "dispatch_quantum_s": LaunchConfiguration("quantum"),
+                    "dataset": LaunchConfiguration("dataset"),
+                    "order_limit": LaunchConfiguration("order_limit"),
+                    "verbose": LaunchConfiguration("verbose"),
+                    "progress_interval_s": LaunchConfiguration("progress"),
+                    "robots": LaunchConfiguration("robots"),
+                }
+            ],
+        ),
+    ]
+
+
+def generate_launch_description():
+
     return LaunchDescription(
         [
-            DeclareLaunchArgument("config_file", default_value=default_config),
+            # Which config: config_file, or else the registered
+            # scenario:=<id> (src/dashboard_GUI/config/scenarios.yaml), not
+            # both; neither means the reference config/warehouse.yaml.
+            DeclareLaunchArgument("config_file", default_value=""),
+            DeclareLaunchArgument("scenario", default_value=""),
             # Empty means "derive it from gazebo.world_name in the config".
             DeclareLaunchArgument("world_file", default_value=""),
             DeclareLaunchArgument("start_gazebo", default_value="true"),
@@ -116,47 +181,6 @@ def generate_launch_description():
             # Fleet size for this run; 0 keeps fleet.robot_count from the
             # config. Gazebo is given exactly this many robots at start.
             DeclareLaunchArgument("robots", default_value="0"),
-            # Gazebo with this run's robots parked on their start cells.
-            # It stops a Gazebo already running this world first, and
-            # finishes before the fleet node below starts.
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(share, "launch", "gazebo.launch.py")
-                ),
-                launch_arguments={
-                    "config_file": config_file,
-                    "world_file": world_file,
-                    "robots": LaunchConfiguration("robots"),
-                    "headless": headless,
-                }.items(),
-                condition=IfCondition(start_gazebo),
-            ),
-            # Fleet deployment and live state publishing.
-            Node(
-                package="simulation_env",
-                executable="fleet_node",
-                name="mrta_fleet",
-                output="screen",
-                emulate_tty=True,
-                parameters=[
-                    {
-                        # Only the config path: every simulation constant
-                        # lives in the YAML, never duplicated here.
-                        "config_file": config_file,
-                        "wait_for_gazebo": 60.0,
-                        "load_orders": LaunchConfiguration("orders"),
-                        "run_workload": LaunchConfiguration("orders"),
-                        "strategy": LaunchConfiguration("strategy"),
-                        "speed_mps": LaunchConfiguration("speed"),
-                        "window": LaunchConfiguration("window"),
-                        "dispatch_quantum_s": LaunchConfiguration("quantum"),
-                        "dataset": LaunchConfiguration("dataset"),
-                        "order_limit": LaunchConfiguration("order_limit"),
-                        "verbose": LaunchConfiguration("verbose"),
-                        "progress_interval_s": LaunchConfiguration("progress"),
-                        "robots": LaunchConfiguration("robots"),
-                    }
-                ],
-            ),
+            OpaqueFunction(function=launch_nodes),
         ]
     )

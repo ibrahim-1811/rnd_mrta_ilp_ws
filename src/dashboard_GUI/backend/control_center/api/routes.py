@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from control_center import __version__
 from control_center.adapters import catalogue
+from control_center.adapters.scenarios import InvalidScenario, UnknownScenario, UnsafeScenarioId
 from control_center.adapters.tables import rows
 from control_center.schemas.responses import Envelope, result
 from control_center.services.pagination import cursor, fingerprint, offset
@@ -77,9 +78,16 @@ def scenarios():
 
 @router.get('/scenarios/{scenario_id}/map', response_model=Envelope)
 def geometry(scenario_id: str):
-    if scenario_id != 'W100':
-        raise HTTPException(404, 'Unknown scenario')
-    return result(source_call(catalogue.geometry))
+    try:
+        return result(catalogue.geometry(scenario_id))
+    except UnsafeScenarioId as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except UnknownScenario as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except InvalidScenario as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except (ImportError, OSError, ValueError) as exc:
+        raise HTTPException(503, f'Production source unavailable: {type(exc).__name__}: {exc}') from exc
 
 
 @router.get('/runs', response_model=Envelope)

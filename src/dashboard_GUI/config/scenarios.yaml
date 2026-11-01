@@ -1,0 +1,22 @@
+version: 1
+scenarios:
+  - id: W100
+    label: W100 research warehouse
+    config: ../../simulation_env/config/warehouse.yaml
+    reference: true
+    provenance: tracked-scientific-reference
+  - id: my_map
+    label: my_map custom warehouse
+    config: ../../simulation_env/config/my_map.yaml
+    reference: false
+    provenance: owner-custom-map
+  - id: my_map_20
+    label: my_map_20
+    config: ../../simulation_env/config/my_map_20.yaml
+    reference: false
+    provenance: maps-folder
+  - id: my_map_60
+    label: my_map_60
+    config: ../../simulation_env/config/my_map_60.yaml
+    reference: false
+    provenance: maps-folder

@@ -165,6 +165,13 @@ def run_step(name, argv, cwd, folder, *, timeout=180):
 
 
 def start(runtime, *, dev=False):
+    # Every Excel file in maps/ becomes a selectable scenario.
+    subprocess.run(
+        [str(ROOT / '.pixi/envs/default/bin/python'), str(ROOT / 'src/simulation_env/scripts/build_scenario_bundle.py'), '--sync'],
+        cwd=ROOT,
+        env=environment(),
+        check=False,
+    )
     check_ports()
     folder = logs_directory()
     children, handles = [], []

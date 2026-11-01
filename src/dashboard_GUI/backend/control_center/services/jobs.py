@@ -294,8 +294,8 @@ class JobManager:
         if ok:
             from control_center.adapters.catalogue import load_scenario
             from control_center.adapters.validation import validate_manifest
-            config, warehouse = load_scenario()
             spec = (RunSpec if job['kind'] == 'run' else ExperimentSpec).model_validate(plan['request'])
+            config, warehouse = load_scenario(spec.scenario_id if isinstance(spec, RunSpec) else 'W100')
             if isinstance(spec, RunSpec) and spec.input_id:
                 from dataclasses import replace
                 from control_center.adapters.inputs import InputStore

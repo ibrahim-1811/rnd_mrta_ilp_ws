@@ -6,6 +6,7 @@ robots are visible straight away, standing on their start cells; a run
 makes them move.
 
     ros2 launch simulation_env gazebo.launch.py robots:=100
+    ros2 launch simulation_env gazebo.launch.py scenario:=my_map robots:=100
 
 Starting it again first stops the Gazebo already running this world, so
 there is only ever one. ``robots:=0`` (the default) takes the fleet size
@@ -21,6 +22,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 
+from simulation_env.scenario_registry import resolve_config
 from simulation_env.gazebo_world import stop_gazebo, world_file_for, write_fleet_world
 
 
@@ -37,7 +39,12 @@ def start_gazebo(context, *args, **kwargs):
     """Stop any Gazebo of this world, write the fleet world, start Gazebo."""
 
     share = get_package_share_directory("simulation_env")
-    config = context.launch_configurations["config_file"]
+    config = resolve_config(
+        context.launch_configurations.get("config_file", ""),
+        context.launch_configurations.get("scenario", ""),
+        _source_tree(share),
+        os.path.join(_source_tree(share) or share, "config", "warehouse.yaml"),
+    )
     world = context.launch_configurations.get("world_file") or world_file_for(
         config, share
     )
@@ -60,17 +67,13 @@ def start_gazebo(context, *args, **kwargs):
 
 def generate_launch_description():
 
-    share = get_package_share_directory("simulation_env")
-    source = _source_tree(share)
-
     return LaunchDescription(
         [
-            DeclareLaunchArgument(
-                "config_file",
-                default_value=os.path.join(
-                    source if source else share, "config", "warehouse.yaml"
-                ),
-            ),
+            # Which config: config_file, or else the registered
+            # scenario:=<id> (src/dashboard_GUI/config/scenarios.yaml),
+            # (not both); neither means the reference config/warehouse.yaml.
+            DeclareLaunchArgument("config_file", default_value=""),
+            DeclareLaunchArgument("scenario", default_value=""),
             # Empty means "derive it from gazebo.world_name in the config".
             DeclareLaunchArgument("world_file", default_value=""),
             # Robots to park; 0 keeps fleet.robot_count from the config.
