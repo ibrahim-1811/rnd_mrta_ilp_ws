@@ -299,6 +299,7 @@ class WorkloadResult:
     # ticks refused inside an open window, not decisions -- several per
     # window, and always more than `decisions`.
     quantum_holds: int = 0
+    allocator_decision_s: list[float] = field(default_factory=list)
     # (free robots, window orders) -> how many decisions had that shape.
     decision_shapes: dict = field(default_factory=dict)
     # (sim_time, free robots, window orders) per decision, in order.
@@ -2315,6 +2316,8 @@ class WorkloadExecutor:
 
         self._record_decision(free, eligible)
 
+        allocating = perf_counter()
+
         with self._stage("allocator"):
             assignments = self.allocator.assign(
                 self.warehouse,
@@ -2325,6 +2328,9 @@ class WorkloadExecutor:
                 battery=battery,
                 timing=self._decision_timing(free),
             )
+
+        # Observation only: wall time never feeds back into a decision.
+        self.result.allocator_decision_s.append(perf_counter() - allocating)
 
         # The allocation contract first, for every strategy and with or
         # without a battery: a malformed decision is the strategy's

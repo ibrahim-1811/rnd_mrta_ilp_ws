@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from hashlib import sha256
 import json
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -31,12 +32,13 @@ from typing import Mapping, Sequence
 import pandas as pd
 
 from ilp_learning.bk_builder import candidate_pairs, derive_est_finish_s
-from ilp_learning.matcher import BatchMatcher
+from ilp_learning.matcher import BatchMatcher, PickKey
 from ilp_learning.predicates import CandidatePair, TierAFacts
 from ilp_learning.rule_artifact import load_rule_artifact
 from ilp_learning.rule_compiler import RuleProgram
-from ilp_learning.train_rules import load_induction_run
-from simulation_env.seed_split import workload_seed_of
+from ilp_learning.train_rules import InductionRun, load_induction_run
+from simulation_env.failures import FAILURE_FILE
+from simulation_env.seed_split import role_of, workload_seed_of
 
 
 # Both steps sit above the predicates' tie tolerance. Their largest total, at a
@@ -195,11 +197,61 @@ def pooled(results: Sequence[Mapping]) -> dict:
     return merged
 
 
-def evaluate_runs(run_dirs: Sequence[Path | str], program: RuleProgram) -> dict:
-    """Per-seed results and the pool of a program over recorded induction runs."""
+def load_validation_run(run_dir: Path | str) -> InductionRun:
+    """A finished recorded run whose workload is a validation seed."""
+    path = Path(run_dir)
+    manifest = json.loads((path / "run.json").read_text(encoding="utf-8"))
+    seed = workload_seed_of(manifest["orders_path"])
+    if role_of(seed) != "validation":
+        raise ValueError(f"{path}: workload seed {seed} is not a validation seed")
+    if (path / FAILURE_FILE).exists():
+        raise ValueError(f"{path} records a failed run")
+    return InductionRun(manifest, pd.read_parquet(path / "decisions.parquet"))
+
+
+def random_key(repeat: int) -> PickKey:
+    """A repeatable random order of candidates, the same for every replay of `repeat`."""
+
+    def key(pair: CandidatePair) -> tuple:
+        digest = sha256(f"{repeat}|{pair.robot_id}|{pair.order_id}".encode()).hexdigest()
+        return (digest, 0.0, 0.0, pair.robot_id)
+
+    return key
+
+
+def teacher_key(teacher: set[tuple[str, str]]) -> PickKey:
+    """Oracle diagnostic: the teacher's own pairs first, then the frozen fields."""
+
+    def key(pair: CandidatePair) -> tuple:
+        rank = 0 if (pair.robot_id, pair.order_id) in teacher else 1
+        return (rank, pair.fifo_position, pair.c_static_m, pair.robot_id)
+
+    return key
+
+
+def key_agreement(frame: pd.DataFrame, program: RuleProgram, keys: Sequence[PickKey] = ()) -> dict:
+    """Agreed teacher pairs per key over choice-bearing decisions; no keys means teacher-key."""
+    agreed = [0] * max(len(keys), 1)
+    teacher_pairs = 0
+    eligible = frame[frame["eligible"] & frame["choice_bearing"]]
+    for _, rows in eligible.groupby("decision_id"):
+        chosen = rows[rows["selected"]]
+        teacher = set(zip(chosen["robot_id"], chosen["order_id"]))
+        if not teacher:
+            continue
+        teacher_pairs += len(teacher)
+        pairs = candidate_pairs(rows)
+        for index, key in enumerate(keys or [teacher_key(teacher)]):
+            picks = BatchMatcher("iterative", pick_key=key).match_pairs(pairs, program)
+            agreed[index] += len({(a.robot_id, a.order_id) for a in picks} & teacher)
+    return {"agreed": agreed, "teacher_pairs": teacher_pairs}
+
+
+def evaluate_runs(run_dirs: Sequence[Path | str], program: RuleProgram, load=load_induction_run) -> dict:
+    """Per-seed results and the pool of a program over recorded runs."""
     per_seed = {}
     for run_dir in run_dirs:
-        run = load_induction_run(run_dir)
+        run = load(run_dir)
         frame = run.decisions.assign(est_finish_s=derive_est_finish_s(run.decisions, run.manifest))
         per_seed[workload_seed_of(run.manifest["orders_path"])] = evaluate_frame(frame, program)
     return {

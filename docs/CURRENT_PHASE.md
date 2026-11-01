@@ -14,7 +14,7 @@ Uncommitted on `research/outcome-aware-ilp` at `bf5c8d7`, awaiting review. Detai
 
 Run tests in a shell without ROS sourced: the `launch_testing` pytest plugin aborts startup otherwise. A tree without `.git` fails one provenance test by design. Gazebo, colcon and the C++ test are not covered by these checks.
 
-M2: six corrections and the permitted-column firewall are implemented with regression tests. D1 was approved on 2026-10-31 (DECISIONS.md, "M3 Execution Semantics Amendment"), and the matcher implements it as `iterative` mode. The M3 learner code is implemented and tested: `train_rules.py`, the rule compiler, artifact and trace, and `ILPAllocationStrategy` (`ilp`). No learned rule has been evaluated yet: `runs/m3_dev` holds `nearest_astar` teacher runs only, validation seeds 111-115 are unused, and the G5 and G8 values in [.scratch/m3-popper-learner/preregistration.md](../.scratch/m3-popper-learner/preregistration.md) are not final, so that pre-registration has not taken effect.
+M2: six corrections and the permitted-column firewall are implemented with regression tests. D1 was approved on 2026-10-31 (DECISIONS.md, "M3 Execution Semantics Amendment"), and the matcher implements it as `iterative` mode. The M3 learner code is implemented and tested: `train_rules.py`, the rule compiler, artifact and trace, and `ILPAllocationStrategy` (`ilp`). Induction results are in [.scratch/m3-popper-learner/induction_report.md](../.scratch/m3-popper-learner/induction_report.md). The pre-registration is frozen by its 2026-11-01 amendment. `pixi run m3-induction` and `pixi run m3-validation` reproduce the evidence and the gates; validation seeds 111-115 run once, from tag `m3-evidence-1`.
 
 ## Documentation freeze — 28 October 2026
 

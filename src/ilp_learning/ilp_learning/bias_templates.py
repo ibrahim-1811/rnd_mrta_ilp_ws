@@ -41,6 +41,7 @@ TIER_B_CONGESTION_PREDICATES = [
 
 def generate_bias_pl(
     include_tier_b: bool = True,
+    exclude: tuple[str, ...] = (),
     max_vars: int = 4,
     max_body: int = 4,
     max_clauses: int = 5,
@@ -60,7 +61,7 @@ def generate_bias_pl(
         "%% Body declarations",
     ]
 
-    preds = list(BASE_PREDICATES)
+    preds = [entry for entry in BASE_PREDICATES if entry[0] not in exclude]
     if include_tier_b:
         preds.extend(TIER_B_CONGESTION_PREDICATES)
 

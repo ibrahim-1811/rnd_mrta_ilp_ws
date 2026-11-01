@@ -1,8 +1,8 @@
 # M3 pre-registration: Popper recovery of nearest_astar
 
-Status: ready-for-human
+Status: frozen at tag `m3-evidence-1`
 
-Written before any validation run. No seed in 111-115 has been used for M3. Revised 2026-10-31 with the researcher's decisions. Takes effect when the G5, G8 and battery values below are filled from induction data and the researcher approves them. After that, any change to a gate, arm or value makes the result exploratory.
+Written before any validation run. No seed in 111-115 has been used for M3. Revised 2026-10-31 with the researcher's decisions. Frozen by the 2026-11-01 amendment below. After that, any change to a gate, arm or value makes the result exploratory.
 
 Semantics: docs/DECISIONS.md, "M3 Execution Semantics Amendment (2026-10-31)".
 
@@ -147,4 +147,19 @@ G8 kept with justified bounds and a precision assessment. G9 accepted provisiona
 
 ## Still needed before validation
 
-Researcher approval of the G5 and G8 values above and of the battery specification, and a clean evidence commit.
+Done by the amendment below, once the evidence commit is tagged.
+
+## Amendment 2026-11-01 (researcher decisions, before any validation seed)
+
+1. **Fidelity.** The definitions in `src/ilp_learning/ilp_learning/fidelity.py` are accepted. Exact-pair (frozen key), tie-neutral, distinct-cost and exact-decision are reported separately. Distinct-cost jitter is diagnostic only: it runs in replay, never in deployment, and it cannot reorder unequal-cost pairs.
+2. **Keys.** Random-key is 20 repeated deterministic random candidate orderings under the same learned rules and the same matcher. G2 uses its mean, and compares the learned rule with every single three-argument Tier A literal and every pair of them except R and O, each under the same 20 orderings. Teacher-key is an oracle diagnostic that puts the teacher's selected pairs first. The recorded data holds which pairs were selected, not the order in which they were taken. It is not called a ceiling, because that is not proven. Neither is an independent learned policy, so both are replay diagnostics and neither runs closed-loop.
+3. **Stop rule.** The primary stop rule applies to quantum 3. Quantum 0 is secondary: its failures are reported, with no tuning, exclusion or concealment.
+4. **G5 at quantum 0, 30 robots.** The limit gets a resolution floor of one incorrect pick in the pooled validation population, 1 / teacher pairs. Both the zero-tolerance result and the amended result are reported.
+5. **G8.** Margin = min(delta, 5%). Any smaller justified margin stands. Inconclusive results are reported as inconclusive.
+6. **Battery probe.** Approved as specified above, once, on induction seed 104. It records its configuration, events and results.
+7. **Limits at the tag.** G5 limits, G8 margins, G6 and G10 are computed by `pixi run m3-induction` from the tagged commit, before any validation seed, and stored in `summary.json`. Those values replace the tables above if they differ.
+8. **Controls.** G10 runs at all six conditions. The `earliest_finish` control relabels the same recorded states, so `bk.pl` can be compared byte for byte (G11). Its labels follow that strategy's greedy order. Sampling seeds for G6 are 20261029, 20261030 and 20261031.
+9. **G9.** Runtime is per-decision allocator wall time, measured while up to 8 runs share the machine, for both the learned rule and the teacher.
+10. **Unchanged.** Popper's objective, vocabulary, search budget and rule selection.
+
+Backup seeds 116-120 and final seeds 201-230 are not used.

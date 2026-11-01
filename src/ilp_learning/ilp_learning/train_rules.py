@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 import json
 from pathlib import Path
+import random
 from typing import Any, Mapping, Sequence
 
 import pandas as pd
@@ -138,6 +139,45 @@ def _training_decisions(
     return decisions
 
 
+def permute_labels(frame: pd.DataFrame, seed: int) -> pd.DataFrame:
+    """G10 control: each decision's selection moved to random disjoint eligible pairs."""
+    rng = random.Random(seed)
+    selected = pd.Series(False, index=frame.index)
+    for _, rows in frame[frame["eligible"]].groupby("decision_id", sort=True):
+        wanted = int(rows["selected"].sum())
+        taken_robots, taken_orders = set(), set()
+        for index in rng.sample(list(rows.index), len(rows)):
+            if wanted == 0:
+                break
+            robot, order = rows.at[index, "robot_id"], rows.at[index, "order_id"]
+            if robot not in taken_robots and order not in taken_orders:
+                selected.at[index] = True
+                taken_robots.add(robot)
+                taken_orders.add(order)
+                wanted -= 1
+    return frame.assign(selected=selected)
+
+
+def relabel_earliest_finish(frame: pd.DataFrame) -> pd.DataFrame:
+    """G10 control: the same states, labelled by earliest_finish's own greedy sweep."""
+    selected = pd.Series(False, index=frame.index)
+    for _, rows in frame[frame["eligible"]].groupby("decision_id", sort=True):
+        wanted = int(rows["selected"].sum())
+        ordered = rows.sort_values(
+            ["est_finish_s", "c_static_m", "fifo_position", "robot_id"], kind="stable"
+        )
+        taken_robots, taken_orders = set(), set()
+        for index, row in ordered.iterrows():
+            if wanted == 0:
+                break
+            if row["robot_id"] not in taken_robots and row["order_id"] not in taken_orders:
+                selected.at[index] = True
+                taken_robots.add(row["robot_id"])
+                taken_orders.add(row["order_id"])
+                wanted -= 1
+    return frame.assign(selected=selected)
+
+
 def _check_against_popper(result: PopperResult, compiled: CompiledRules) -> None:
     """The interpreter must see what Popper saw, or the artifact is not this rule."""
     if result.score is None or compiled.pruned or not compiled.program.clauses:
@@ -166,6 +206,9 @@ def train(
     max_body: int = 4,
     k_max: int = K_MAX,
     repo: Path | str | None = None,
+    exclude_predicates: Sequence[str] = (),
+    permute_seed: int | None = None,
+    relabel_finish: bool = False,
 ) -> dict[str, Any]:
     """Runs -> thresholds, BK, Tier A bias, examples, Popper, compile, artifact."""
     runs = [load_induction_run(path) for path in run_dirs]
@@ -178,6 +221,10 @@ def train(
         )
         for run in runs
     }
+    if relabel_finish:
+        frames = {run_id: relabel_earliest_finish(frame) for run_id, frame in frames.items()}
+    if permute_seed is not None:
+        frames = {run_id: permute_labels(frame, permute_seed) for run_id, frame in frames.items()}
 
     # Thresholds over the eligible rows of every choice-bearing decision.
     thresholds = fit_thresholds_from_frames(
@@ -219,7 +266,11 @@ def train(
     builder.write_bk_pl(kb_dir / "bk.pl")
     write_exs_pl(examples, kb_dir / "exs.pl")
     bias = generate_bias_pl(
-        include_tier_b=False, max_vars=max_vars, max_body=max_body, max_clauses=k_max
+        include_tier_b=False,
+        exclude=tuple(exclude_predicates),
+        max_vars=max_vars,
+        max_body=max_body,
+        max_clauses=k_max,
     )
     (kb_dir / "bias.pl").write_text(bias, encoding="utf-8")
     thresholds.save_json(out_path / "thresholds.json")
@@ -238,6 +289,11 @@ def train(
         "schema_version": SCHEMA_VERSION,
         "teacher": teacher,
         "arm": ARM,
+        "control": {
+            "exclude_predicates": sorted(exclude_predicates),
+            "permute_seed": permute_seed,
+            "relabel_earliest_finish": relabel_finish,
+        },
         "raw_clauses": list(compiled.raw),
         "clauses": [
             {"rank": rank, "clause": clause.text, "metrics": metrics.as_dict()}
@@ -310,6 +366,9 @@ def main() -> int:
     parser.add_argument("--decisions", type=int, default=DEFAULT_DECISION_CAP)
     parser.add_argument("--corpus-seed", type=int, default=DEFAULT_CORPUS_SEED)
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_S)
+    parser.add_argument("--exclude", nargs="*", default=[], help="G10 control: predicates left out")
+    parser.add_argument("--permute-seed", type=int, help="G10 control: permute the labels")
+    parser.add_argument("--relabel-finish", action="store_true", help="G10 control: earliest_finish labels")
     args = parser.parse_args()
 
     artifact = train(
@@ -319,6 +378,9 @@ def main() -> int:
         decision_cap=args.decisions,
         corpus_seed=args.corpus_seed,
         timeout_s=args.timeout,
+        exclude_predicates=args.exclude,
+        permute_seed=args.permute_seed,
+        relabel_finish=args.relabel_finish,
         repo=Path(__file__).resolve().parents[3],
     )
     print(f"clauses  : {len(artifact['clauses'])} kept, {len(artifact['pruned_clauses'])} pruned")

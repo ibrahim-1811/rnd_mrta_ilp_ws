@@ -103,6 +103,8 @@ def run_metrics(executor, *, strategy: str, seed: int, wall_s: float) -> dict:
         "recovery_waiting_s": float(phases["recovery"]["waiting_time_s"]),
         "total_service_s": float(totals["service_time_s"]),
         "allocator_cpu_s": result.perf.get("allocator", 0.0),
+        "allocator_decision_worst_s": max(result.allocator_decision_s, default=0.0),
+        "allocator_decision_median_s": median(result.allocator_decision_s) if result.allocator_decision_s else 0.0,
         "mission_build_cpu_s": result.perf.get("mission_build", 0.0),
         "decisions": result.decisions,
         "choice_bearing_decisions": result.choice_bearing,

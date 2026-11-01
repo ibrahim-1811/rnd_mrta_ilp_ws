@@ -178,3 +178,14 @@ SD alone does not promise a pass: the CI must also clear the mean offset. At 100
 ## Reproduction
 
 Outputs live under `runs/m3_induction/` (ignored by git): `q3/`, `q0/`, `rules/`, `closed_loop/`, `fidelity.json`, `derived_choice_bearing.json`, `logs/`.
+
+## Reproduction at 4bcf6eb
+
+`pixi run m3-induction --out runs/m3_evidence --jobs 8`, clean tree, all manifests at `4bcf6eb`, compared with `runs/m3_induction` (`6a9e0bc`):
+
+- 54/54 fidelity results, all G5 limits, all G8 deltas and paired SDs: identical.
+- 42/42 closed-loop runs: identical `order_makespan_s` and `mean_completion_time_s`.
+- 44/48 rule artifacts: identical text, including all 6 full-data rules.
+- 4/48 differ: q0 70 loso_106 and loso_110, q0 100 loso_108 and loso_109.
+
+Atom names in `bk.pl` and `exs.pl` are keyed hashes and changed between the two runs, which changes Popper's search order among near-tied programs. Retraining q0 70 loso_110 twice on `4bcf6eb` gave identical `bk.pl`, `exs.pl` and rule text, so a fixed commit reproduces exactly. Learned text at q0 70 and q0 100 is sensitive to atom names, which are identifiers and carry no meaning. No effect was measured at q3.

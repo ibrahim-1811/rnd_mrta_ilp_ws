@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from typing import Iterable, Mapping, Protocol, Sequence
+from typing import Callable, Iterable, Mapping, Protocol, Sequence
 
 import numpy as np
 import pandas as pd
@@ -28,6 +28,7 @@ from ilp_learning.predicates import CandidatePair
 FALLBACK_RULE_RANK = 999  # above any clause_rank; the fallback tier decides first
 FORCED = "forced"         # tie_level of a pick with no alternative pair left
 BY_MATCHING = "matching"  # tie_level of a one-shot pick: no single key field decided it
+PickKey = Callable[[CandidatePair], tuple]
 KEY_FIELDS = ("tier", "clause_rank", "fifo_position", "c_static_m", "est_finish_s", "robot_id")
 
 
@@ -96,10 +97,12 @@ class BatchMatcher:
 
     MODES = ("iterative", "cardinality", "greedy")
 
-    def __init__(self, mode: str = "cardinality") -> None:
+    def __init__(self, mode: str = "cardinality", pick_key: PickKey | None = None) -> None:
+        """pick_key replaces the four key fields after clause_rank. Diagnostics only."""
         if mode not in self.MODES:
             raise ValueError(f"Unknown matching mode '{mode}'; expected one of {self.MODES}")
         self.mode = mode
+        self.pick_key = pick_key
 
     def match_pairs(
         self, pairs: Sequence[CandidatePair], rule_program: RuleCoverage | None = None
@@ -127,9 +130,12 @@ class BatchMatcher:
             for pair in remaining:
                 rank = ranks.get((pair.robot_id, pair.order_id))
                 tier, clause_rank = (1, FALLBACK_RULE_RANK) if rank is None else (0, rank)
-                keyed.append(
-                    (tier, clause_rank, pair.fifo_position, pair.c_static_m, pair.est_finish_s, pair.robot_id)
+                order = (
+                    self.pick_key(pair)
+                    if self.pick_key is not None
+                    else (pair.fifo_position, pair.c_static_m, pair.est_finish_s, pair.robot_id)
                 )
+                keyed.append((tier, clause_rank, *order))
 
             first = min(range(len(keyed)), key=keyed.__getitem__)
             runner_up = min((k for i, k in enumerate(keyed) if i != first), default=None)
