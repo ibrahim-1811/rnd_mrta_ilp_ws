@@ -1,0 +1,45 @@
+name: gui
+on:
+  push:
+    branches: [traffic/rmf-integration]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The backend runs the science interpreter at the repo root .pixi env
+  # (control_center/adapters/commands.py), so pixi comes first.
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+      - name: Create backend environment
+        working-directory: src/dashboard_GUI/backend
+        run: |
+          pixi run python -m venv .venv
+          .venv/bin/pip install -e '.[test]'
+      - name: Backend tests
+        working-directory: src/dashboard_GUI/backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src/mrta_core:${{ github.workspace }}/src/simulation_env:${{ github.workspace }}/src/task_management
+        run: .venv/bin/python -m pytest tests -q
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/dashboard_GUI/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/dashboard_GUI/frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build  # runs tsc --noEmit first
