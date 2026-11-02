@@ -1,5 +1,25 @@
 # Current Development Phase
 
+## Tier B online parity — 1 November 2026
+
+Uncommitted on `research/outcome-aware-ilp`, awaiting review. The seven Tier B congestion predicates now have one definition (`DecisionFacts` in `ilp_learning/predicates.py`), read by `bk.pl` and by rule execution. Online values come from `pair_features` in `simulation_env/congestion.py`, the code that records `features.parquet`. A rule artifact using Tier B carries its thresholds, and a rule without its features or thresholds is refused. `run_workload.py` and `run_experiment.py` take `--features`; `train_rules` takes `--tier-b`. Default training stays Tier A. Proposal mapping: [.scratch/research-alignment/proposal-map.md](../.scratch/research-alignment/proposal-map.md).
+
+| Check | Measured |
+|---|---|
+| Research suite with `runs/m2_acceptance`, `pixi run test` equivalent | 883 passed |
+| Lint, `ruff check src` | clean |
+| Live picks against offline replay, 30 and 100 robots, q0 and q3, seed 42, 300 orders | 0 mismatches over 607 decisions |
+| Replay test with corrupted live values | fails on all five clauses, as it should |
+| Tier A before and after: `bk.pl`, `bias.pl`, `exs.pl`, 4,097 decision rows, 150 outcome rows | identical |
+
+Decision time on that run, Tier A against Tier A+B at 100 robots: median 0.029 s against 0.106 s at q3, 0.007 s against 0.037 s at q0; worst 1.3 s against 2.6 s. That is a hand-written one-clause rule with no witness variable; a learned rule was far slower (see M4 groundwork). None of this is evidence for H2 or H3.
+
+## M4 groundwork — 1 November 2026
+
+Uncommitted, awaiting review. `simulation_env/teacher_panel.py` records what each of the six teachers would pick at every decision of one run, without acting; `--teacher-panel` on both runners, `--label-teacher` on `train_rules`. A teacher in the panel reproduces its own live picks exactly, and the panel changes no result. Research suite: 890 passed; `ruff check src` clean.
+
+M4 is not done, and no gate has run. The first exploratory attempt failed to imitate `multi_criteria` and collapsed to `auction`, and a learned Tier B rule took 95 s at one 100-robot decision: [.scratch/m4-single-teacher/exploratory-2026-11-01.md](../.scratch/m4-single-teacher/exploratory-2026-11-01.md).
+
 ## Sprint 0 status — 31 October 2026
 
 Uncommitted on `research/outcome-aware-ilp` at `bf5c8d7`, awaiting review. Details, classification and proposed commits: [.scratch/sprint0/status.md](../.scratch/sprint0/status.md).
