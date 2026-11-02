@@ -43,6 +43,7 @@ from ilp_learning.sampler import (
     stratified_decisions,
     write_exs_pl,
 )
+from ilp_learning.supervision.multi_teacher import POLICIES, consensus_labelled
 from ilp_learning.supervision.single_teacher import build_single_teacher_supervision
 from ilp_learning.thresholds import (
     DECISION_DISCRETIZATIONS,
@@ -237,20 +238,24 @@ def train(
     tier_b: bool = False,
     label_teacher: str | None = None,
     extended: bool = False,
+    label_policy: str | None = None,
 ) -> dict[str, Any]:
     """Runs -> thresholds, BK, bias, examples, Popper, compile, artifact.
 
     tier_b adds the congestion predicates; it needs each run's features.parquet.
     label_teacher takes labels from that teacher in the run's panel, keeping the
     decisions, and with them bk.pl, those of the run's own strategy (``teacher``).
-    extended adds the relative cost, order age and load predicates.
+    extended adds the relative cost, order age and load predicates. label_policy
+    takes labels from the votes of the whole panel instead.
     """
     runs = [load_induction_run(path) for path in run_dirs]
     _check_corpus(runs, teacher)
     if tier_b and any(run.features is None for run in runs):
         raise TrainingError(f"--tier-b needs {FEATURES_FILE} beside every run")
-    if label_teacher and any(run.teacher_labels is None for run in runs):
-        raise TrainingError(f"--label-teacher needs {LABELS_FILE} beside every run")
+    if label_teacher and label_policy:
+        raise TrainingError("labels come from one teacher or from the panel, not both")
+    if (label_teacher or label_policy) and any(run.teacher_labels is None for run in runs):
+        raise TrainingError(f"panel labels need {LABELS_FILE} beside every run")
     manifests = [run.manifest for run in runs]
 
     frames = {
@@ -262,6 +267,11 @@ def train(
     if label_teacher:
         frames = {
             run.run_id: panel_labelled(frames[run.run_id], run.teacher_labels, label_teacher)
+            for run in runs
+        }
+    if label_policy:
+        frames = {
+            run.run_id: consensus_labelled(frames[run.run_id], run.teacher_labels, label_policy)
             for run in runs
         }
     if relabel_finish:
@@ -356,7 +366,7 @@ def train(
 
     artifact = {
         "schema_version": SCHEMA_VERSION,
-        "teacher": label_teacher or teacher,
+        "teacher": label_teacher or (f"panel_{label_policy}" if label_policy else teacher),
         "behaviour_policy": teacher,
         "arm": ARM,
         "control": {
@@ -444,6 +454,7 @@ def main() -> int:
     parser.add_argument("--relabel-finish", action="store_true", help="G10 control: earliest_finish labels")
     parser.add_argument("--tier-b", action="store_true", help="add the congestion predicates")
     parser.add_argument("--extended", action="store_true", help="add relative cost, age and load")
+    parser.add_argument("--label-policy", choices=POLICIES, help="labels from the panel's votes")
     parser.add_argument("--label-teacher", help="labels from this teacher in the run's panel")
     args = parser.parse_args()
 
@@ -460,6 +471,7 @@ def main() -> int:
         tier_b=args.tier_b,
         label_teacher=args.label_teacher,
         extended=args.extended,
+        label_policy=args.label_policy,
         repo=Path(__file__).resolve().parents[3],
     )
     print(f"clauses  : {len(artifact['clauses'])} kept, {len(artifact['pruned_clauses'])} pruned")

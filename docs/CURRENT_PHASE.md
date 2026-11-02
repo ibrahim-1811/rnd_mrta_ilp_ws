@@ -18,7 +18,7 @@ Decision time on that run, Tier A against Tier A+B at 100 robots: median 0.029 s
 
 Uncommitted, awaiting review. `simulation_env/teacher_panel.py` records what each of the six teachers would pick at every decision of one run, without acting; `--teacher-panel` on both runners, `--label-teacher` on `train_rules`. A teacher in the panel reproduces its own live picks exactly, and the panel changes no result. Research suite: 890 passed; `ruff check src` clean.
 
-M4 is not done, and no gate has run. The first exploratory attempt failed to imitate `multi_criteria` and collapsed to `auction`, and a learned Tier B rule took 95 s at one 100-robot decision: [.scratch/m4-single-teacher/exploratory-2026-11-01.md](../.scratch/m4-single-teacher/exploratory-2026-11-01.md).
+M4 and M5 are not done, and no gate has run. Research suite on 2026-11-02: 917 passed; `ruff check src` clean. The 95 s decision is fixed (2.9 s, identical decisions). The extended vocabulary and both M5 label policies are built, off by default, and `bk.pl` and `bias.pl` are byte-identical between M4 and M5. On training seeds, M4 reaches 0.08-0.38 fidelity to `multi_criteria`, because finish time and order age explain at most 0.42-0.61 of its picks; the rest are its battery terms. Neither M4 nor M5 beats `nearest_astar`. Results: [.scratch/m4-single-teacher/exploratory-2026-11-01.md](../.scratch/m4-single-teacher/exploratory-2026-11-01.md). Decisions: DECISIONS.md, "M4-M6 Decisions (2026-11-02)". M6 is not started; rollout cost is unprofiled, and Friedman, Holm and Wilcoxon code does not exist.
 
 ## Sprint 0 status — 31 October 2026
 

@@ -473,6 +473,11 @@ The final statistical method should be frozen before the main experiment campaig
 
 ## Statistical Evaluation Protocol
 
+Decided 2026-11-02 (DECISIONS.md, "M4-M6 Decisions"): the primary test is
+now Friedman across policies, as the proposal states, then pairwise
+Wilcoxon with Holm, with the paired t-interval reported beside them. The
+text below still describes the 2026-10-27 proposal for everything else.
+
 PROPOSED 2026-10-27 (M0), to be frozen by the researcher before the
 final campaign (M8). The paired t-interval exists in
 `simulation_env/paired.py`; Holm, Wilcoxon and the effect size do not

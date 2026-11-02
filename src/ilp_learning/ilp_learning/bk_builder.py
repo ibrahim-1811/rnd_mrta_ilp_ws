@@ -65,7 +65,7 @@ ALLOWED_FEATURE_COLUMNS = frozenset({
 })
 # Recorded at the decision, but they are the behaviour policy's own action and
 # identity: legal input to drop, never to read, or the teacher leaks into bk.pl.
-POLICY_COLUMNS = frozenset({"selected", "strategy"})
+POLICY_COLUMNS = frozenset({"selected", "strategy", "abstain"})
 
 REQUIRED_DECISION_COLUMNS = (
     "decision_id", "robot_id", "order_id", "eligible", "sim_time", "c_static_m", "fifo_position",

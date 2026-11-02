@@ -143,8 +143,12 @@ class StratifiedExampleSampler:
 
             decision_id = int(dec_id)
             d_atom = tracker.get_or_create_decision(run_id, decision_id, g["sim_time"].iloc[0])
+            # An abstained pair (M5) is neither: the teachers disagreed about it.
+            unselected = ~contested[selected_col]
+            if "abstain" in contested.columns:
+                unselected &= ~contested["abstain"]
             negatives = self._sample_negatives(
-                run_id, decision_id, positives, contested[~contested[selected_col]]
+                run_id, decision_id, positives, contested[unselected]
             )
 
             for rows, is_positive, origin in (
