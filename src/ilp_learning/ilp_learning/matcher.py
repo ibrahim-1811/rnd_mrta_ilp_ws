@@ -110,7 +110,9 @@ class BatchMatcher:
         """Match pairs that are already eligible, the form online execution uses."""
         if self.mode == "iterative":
             return self._match_iterative(pairs, rule_program)
-        return self.match(pd.DataFrame(pairs, columns=REQUIRED_COLUMNS), rule_program=rule_program)
+        return self.match(
+            pd.DataFrame(pairs, columns=CandidatePair._fields), rule_program=rule_program
+        )
 
     def _match_iterative(
         self, pairs: Sequence[CandidatePair], rule_program: RuleCoverage | None
@@ -187,9 +189,11 @@ class BatchMatcher:
 
         _require_tie_break_data(valid_df)
 
+        # Every pair field the table has: congestion rules read beyond the required five.
+        fields = [c for c in CandidatePair._fields if c in valid_df.columns]
         pairs = [
-            CandidatePair(*row)
-            for row in valid_df[list(REQUIRED_COLUMNS)].itertuples(index=False, name=None)
+            CandidatePair(**dict(zip(fields, row)))
+            for row in valid_df[fields].itertuples(index=False, name=None)
         ]
         if self.mode == "iterative":
             if rule_coverage_fn is not None:

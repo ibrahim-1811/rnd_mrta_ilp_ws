@@ -1097,6 +1097,7 @@ class ILPAllocationStrategy(BatchAllocationStrategy):
         self.matching = matching
         self._program = None
         self._matcher = None
+        self._executor = None
 
         if self.rule_artifact is not None:
             from ilp_learning.matcher import BatchMatcher
@@ -1112,6 +1113,10 @@ class ILPAllocationStrategy(BatchAllocationStrategy):
         # count is the decision_id the run records.
         self._decisions = 0
         self.rule_trace: list[dict] = []
+
+    def bind_executor(self, executor):
+        # Read only: a congestion rule sees the fleet state, nothing else.
+        self._executor = executor
 
     def parameters(self) -> dict:
         return {"matching": self.matching}
@@ -1139,16 +1144,37 @@ class ILPAllocationStrategy(BatchAllocationStrategy):
         timing = _require_timing(self.name, timing)
 
         from ilp_learning.matcher import maximum_cardinality
-        from ilp_learning.predicates import CandidatePair
+        from ilp_learning.predicates import TIER_B_FEATURES, CandidatePair
 
         eligible = _eligible(self, warehouse, robots, orders, fifo_position, cache, battery)
+        congestion = {}
+
+        if self._program.needs_congestion:
+            if self._executor is None:
+                raise ValueError("ilp: a congestion rule needs the executor's fleet state")
+
+            from simulation_env.congestion import pair_features
+
+            engine = self._executor.engine
+            congestion = {
+                (row["robot_id"], row["order_id"]): {k: row[k] for k in TIER_B_FEATURES}
+                for row in pair_features(engine, warehouse, robots, orders, eligible)
+            }
+
         decision_id = self._decisions
         self._decisions += 1
 
         by_pair = {(c.robot_id, c.order_id): c for c in eligible}
         picks = self._matcher.match_pairs(
             [
-                CandidatePair(c.robot_id, c.order_id, c.cost, timing.finish_s(c), c.fifo_position)
+                CandidatePair(
+                    c.robot_id,
+                    c.order_id,
+                    c.cost,
+                    timing.finish_s(c),
+                    c.fifo_position,
+                    **congestion.get((c.robot_id, c.order_id), {}),
+                )
                 for c in eligible
             ],
             self._program,

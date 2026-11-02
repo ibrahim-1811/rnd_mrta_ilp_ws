@@ -1,11 +1,11 @@
 """M1: decision-time congestion and route-overlap features (diagnostic).
 
 Approved for investigation 2026-10-27 (DECISIONS.md, "Research
-Direction After the Audit"); not part of the dataset schema and not
-offered to any strategy. The probe computes them for every candidate
-pair at every decision and writes them beside the run, so M1 can test
-whether they predict the realized residual before anyone proposes them
-as learner predicates.
+Direction After the Audit"); not part of the dataset schema. A recorded
+run can write them for every candidate pair at every decision beside
+its tables, and the M1-screened ones feed the Tier B ILP predicates: a
+rule reads them through pair_features, the code that recorded its
+training data. No other strategy is offered them.
 
 Everything is a function of the state S_t at the decision instant t:
 
@@ -204,6 +204,42 @@ def candidate_features(state, robot_id, order, route, delta, warehouse, service_
     }
 
 
+def pair_features(engine, warehouse, robots, orders, candidates) -> list[dict]:
+    """The features of each candidate with a route, at this decision.
+
+    ``robots`` are the ones on offer: their plans are not in S_t.
+    """
+
+    state = fleet_state(engine, warehouse, exclude=frozenset(r for r, _ in robots))
+    by_id = {order.order_id: order for order in orders}
+    rows = []
+
+    for candidate in candidates:
+        if candidate.route.plan is None:
+            continue
+
+        robot = engine.robots[candidate.robot_id]
+        delta = float(engine.resolution / Fraction(robot.speed_mps).limit_denominator(10**6))
+
+        rows.append(
+            {
+                "robot_id": candidate.robot_id,
+                "order_id": candidate.order_id,
+                **candidate_features(
+                    state,
+                    candidate.robot_id,
+                    by_id[candidate.order_id],
+                    candidate.route,
+                    delta,
+                    warehouse,
+                    engine.service_seconds,
+                ),
+            }
+        )
+
+    return rows
+
+
 class FeatureObserver:
     """Wraps a strategy; records features at each decision; decides nothing.
 
@@ -225,34 +261,17 @@ class FeatureObserver:
         executor = self.executor
         engine = executor.engine
         decision_id = executor.result.decisions - 1
-        offered = frozenset(robot_id for robot_id, _ in robots)
 
-        state = fleet_state(engine, warehouse, exclude=offered)
-        by_id = {order.order_id: order for order in orders}
-
-        for candidate in self.inner.score(warehouse, robots, orders, fifo_position, cache):
-            if candidate.route.plan is None:
-                continue
-
-            robot = engine.robots[candidate.robot_id]
-            delta = float(engine.resolution / Fraction(robot.speed_mps).limit_denominator(10**6))
-
-            self.rows.append(
-                {
-                    "decision_id": decision_id,
-                    "robot_id": candidate.robot_id,
-                    "order_id": candidate.order_id,
-                    **candidate_features(
-                        state,
-                        candidate.robot_id,
-                        by_id[candidate.order_id],
-                        candidate.route,
-                        delta,
-                        warehouse,
-                        engine.service_seconds,
-                    ),
-                }
+        self.rows.extend(
+            {"decision_id": decision_id, **row}
+            for row in pair_features(
+                engine,
+                warehouse,
+                robots,
+                orders,
+                self.inner.score(warehouse, robots, orders, fifo_position, cache),
             )
+        )
 
         return self.inner.assign(
             warehouse, robots, orders, fifo_position, cache, battery=battery, timing=timing

@@ -24,6 +24,11 @@ from ilp_learning.atoms import ProvenanceTracker
 from ilp_learning.predicates import (
     TIE_TOLERANCE,
     TIER_A_SIGNATURES,
+    TIER_B_FEATURES,
+    TIER_B_SIGNATURES,
+    TIER_B_SOURCE,
+    TIER_B_THRESHOLDED,
+    DecisionFacts,
     CandidatePair,
     TierAFacts,
 )
@@ -99,9 +104,13 @@ def derive_est_finish_s(df: pd.DataFrame, run_manifest: Mapping[str, Any] | None
 
 
 def candidate_pairs(rows: pd.DataFrame) -> list[CandidatePair]:
-    """One decision's rows as the pair set the Tier A predicates are defined over."""
+    """One decision's rows as the pair set the predicates are defined over."""
     columns = ["robot_id", "order_id", "c_static_m", "est_finish_s", "fifo_position"]
-    return [CandidatePair(*row) for row in rows[columns].itertuples(index=False, name=None)]
+    features = [c for c in TIER_B_FEATURES if c in rows.columns]
+    return [
+        CandidatePair(*row[:5], **dict(zip(features, row[5:])))
+        for row in rows[columns + features].itertuples(index=False, name=None)
+    ]
 
 
 class BKBuilder:
@@ -137,6 +146,27 @@ class BKBuilder:
         atoms = {"robot": r_atoms, "order": o_atoms}
         facts = TierAFacts(candidate_pairs(rows))
         for name, kinds in TIER_A_SIGNATURES.items():
+            for values in facts.relation(name):
+                self.add_fact(
+                    name, d_atom, *(atoms[kind][v] for kind, v in zip(kinds, values))
+                )
+
+    def _add_tier_b_facts(
+        self,
+        d_atom: str,
+        r_atoms: Mapping[str, str],
+        o_atoms: Mapping[str, str],
+        rows: pd.DataFrame,
+    ) -> None:
+        """Emit the shared Tier B relations a decision has data for: M1-screened congestion."""
+        atoms = {"robot": r_atoms, "order": o_atoms}
+        facts = DecisionFacts(candidate_pairs(rows), self.thresholds)
+        for name, kinds in TIER_B_SIGNATURES.items():
+            source = TIER_B_SOURCE[name]
+            if source not in rows.columns or rows[source].isna().all():
+                continue
+            if name in TIER_B_THRESHOLDED and self.thresholds is None:
+                continue
             for values in facts.relation(name):
                 self.add_fact(
                     name, d_atom, *(atoms[kind][v] for kind, v in zip(kinds, values))
@@ -199,58 +229,13 @@ class BKBuilder:
             for r_id in robots:
                 r_atoms[r_id] = self.tracker.get_or_create_robot(run_id, int(dec_id), str(r_id))
 
-                # Robot-level local density (Tier 2 survivor)
-                if self.thresholds and "local_density" in g.columns:
-                    r_rows = g[g["robot_id"] == r_id]
-                    if len(r_rows) > 0 and pd.notna(r_rows["local_density"].iloc[0]):
-                        dens = float(r_rows["local_density"].iloc[0])
-                        if self.thresholds.categorize("local_density", dens) == "low":
-                            self.add_fact("low_local_density", d_atom, r_atoms[r_id])
-
             o_atoms: dict[str, str] = {}
             for o_id in orders:
                 o_atoms[o_id] = self.tracker.get_or_create_order(run_id, int(dec_id), str(o_id))
 
             self._add_tier_a_facts(d_atom, r_atoms, o_atoms, g)
 
-            # Per-robot Tier B congestion ranking
-            for r_id in robots:
-                r_atom = r_atoms[r_id]
-                r_group = g[g["robot_id"] == r_id].copy()
-
-                if len(r_group) == 0:
-                    continue
-
-                # Tier B M1-screened congestion predicates
-                if "occupied_now" in r_group.columns and r_group["occupied_now"].notna().any():
-                    for o_id in self._lowest(r_group, "occupied_now", "order_id"):
-                        self.add_fact("lowest_occupied_for_robot", d_atom, r_atom, o_atoms[o_id])
-
-                    if self.thresholds:
-                        for _, row in r_group.iterrows():
-                            if pd.notna(row["occupied_now"]):
-                                if self.thresholds.categorize("occupied_now", float(row["occupied_now"])) == "high":
-                                    self.add_fact("high_occupied_now", d_atom, r_atom, o_atoms[row["order_id"]])
-
-                if "st_conflict_robots" in r_group.columns and r_group["st_conflict_robots"].notna().any():
-                    for o_id in self._lowest(r_group, "st_conflict_robots", "order_id"):
-                        self.add_fact("fewest_conflict_robots_for_robot", d_atom, r_atom, o_atoms[o_id])
-
-                    if self.thresholds:
-                        for _, row in r_group.iterrows():
-                            if pd.notna(row["st_conflict_robots"]):
-                                if self.thresholds.categorize("st_conflict_robots", float(row["st_conflict_robots"])) == "high":
-                                    self.add_fact("high_conflict_robots", d_atom, r_atom, o_atoms[row["order_id"]])
-
-                if "st_conflicts_30s" in r_group.columns and r_group["st_conflicts_30s"].notna().any():
-                    for o_id in self._lowest(r_group, "st_conflicts_30s", "order_id"):
-                        self.add_fact("fewest_conflicts_for_robot", d_atom, r_atom, o_atoms[o_id])
-
-                if self.thresholds and "overlap_ratio" in r_group.columns:
-                    for _, row in r_group.iterrows():
-                        if pd.notna(row["overlap_ratio"]):
-                            if self.thresholds.categorize("overlap_ratio", float(row["overlap_ratio"])) == "low":
-                                self.add_fact("low_route_overlap", d_atom, r_atom, o_atoms[row["order_id"]])
+            self._add_tier_b_facts(d_atom, r_atoms, o_atoms, g)
 
         return self.facts
 

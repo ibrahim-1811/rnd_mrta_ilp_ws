@@ -3,7 +3,7 @@
 Enforces:
 1. No eval, exec or Prolog at run time: clause text becomes a small AST, which a
    join over ilp_learning.predicates interprets.
-2. Permitted vocabulary only: any predicate outside Tier A, any constant, and any
+2. Permitted vocabulary only: any predicate outside Tiers A and B, any constant, and any
    head other than assign/3 is refused, so a rule cannot name an identifier
    (docs/DECISIONS.md, "Identifiers").
 3. Clause rank: Laplace training precision (TP+1)/(TP+FP+2), then smaller body,
@@ -15,12 +15,18 @@ Enforces:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from fractions import Fraction
 import re
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
-from ilp_learning.predicates import TIER_A_SIGNATURES, CandidatePair, TierAFacts
+from ilp_learning.predicates import (
+    PREDICATE_SIGNATURES,
+    TIER_B_SIGNATURES,
+    CandidatePair,
+    DecisionFacts,
+    TierAFacts,
+)
 
 
 K_MAX = 5  # learned clauses kept, M1 Acceptance Record item 5
@@ -156,9 +162,9 @@ def parse_clause(text: str) -> Clause:
     body = []
     for atom in _split_atoms(parts[1]):
         name, args = _parse_atom(atom)
-        if name not in TIER_A_SIGNATURES:
+        if name not in PREDICATE_SIGNATURES:
             raise RuleRefused(f"predicate '{name}' is outside the permitted set")
-        expected = ("decision", *TIER_A_SIGNATURES[name])
+        expected = ("decision", *PREDICATE_SIGNATURES[name])
         if len(args) != len(expected):
             raise RuleRefused(f"{name} takes {len(expected)} arguments: {text!r}")
         for variable, kind in zip(args, expected):
@@ -176,10 +182,19 @@ class RuleProgram:
     """Clauses in rank order; clause_rank is the position here."""
 
     clauses: tuple[Clause, ...] = ()
+    thresholds: Any = field(default=None, compare=False)
+
+    @property
+    def needs_congestion(self) -> bool:
+        return any(
+            literal.predicate in TIER_B_SIGNATURES
+            for clause in self.clauses
+            for literal in clause.body
+        )
 
     def coverage(self, pairs: Sequence[CandidatePair]) -> dict[tuple[str, str], int]:
         """(robot, order) -> lowest rank of a clause firing on it, on this pair set."""
-        facts = TierAFacts(pairs)
+        facts = DecisionFacts(pairs, self.thresholds)
         ranks: dict[tuple[str, str], int] = {}
         for rank, clause in enumerate(self.clauses):
             for pair in clause.covers(facts):
@@ -279,11 +294,14 @@ class CompiledRules:
 
 
 def compile_rules(
-    raw_rules: Sequence[str], examples: Sequence[DecisionExamples], k_max: int = K_MAX
+    raw_rules: Sequence[str],
+    examples: Sequence[DecisionExamples],
+    k_max: int = K_MAX,
+    thresholds: Any = None,
 ) -> CompiledRules:
     """Parse, rank and cap a learned program using training coverage only."""
     clauses = list({clause.text: clause for clause in map(parse_clause, raw_rules)}.values())
-    facts_of = [TierAFacts(decision.pairs) for decision in examples]
+    facts_of = [DecisionFacts(decision.pairs, thresholds) for decision in examples]
     covered = {clause: _coverage(clause, facts_of) for clause in clauses}
     metrics = {clause: _metrics(covered[clause], examples) for clause in clauses}
 
@@ -297,7 +315,7 @@ def compile_rules(
     ]
     return CompiledRules(
         raw=tuple(raw_rules),
-        program=RuleProgram(tuple(kept)),
+        program=RuleProgram(tuple(kept), thresholds),
         pruned=tuple(c.text for c in ranked if c not in kept),
         clause_metrics=tuple(metrics[c] for c in kept),
         program_metrics=_metrics(union, examples),

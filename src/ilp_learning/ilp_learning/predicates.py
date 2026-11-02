@@ -1,4 +1,4 @@
-"""Decision-time Tier A body predicates: the one implementation.
+"""Decision-time body predicates, Tier A and Tier B: the one implementation.
 
 bk.pl (offline, on all eligible pairs of a decision) and rule execution
 (online, on the pairs still remaining in an iterative matching) both read
@@ -7,7 +7,7 @@ fires on cannot drift apart (M2 spec 3.2, docs/DECISIONS.md, "M3 Execution
 Semantics Amendment (2026-10-31)", item 1).
 
 A relation is defined over whichever pair set it is given. Nothing here reads
-an outcome, a selection, or anything but the five decision-time values of
+an outcome, a selection, or anything but the decision-time values of
 CandidatePair. Ids are carried for joins and traceability; no relation
 compares them (order_id breaks no tie that could change a fact).
 """
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Iterable, NamedTuple, Sequence
 
-from ilp_learning.bias_templates import BASE_PREDICATES
+from ilp_learning.bias_templates import BASE_PREDICATES, TIER_B_CONGESTION_PREDICATES
 
 
 TIE_TOLERANCE = 1e-9  # exact-tie width of the rank predicates, M2 spec 3.2
@@ -37,6 +37,36 @@ def _argument_kinds(types: str) -> tuple[str, ...]:
 TIER_A_SIGNATURES: dict[str, tuple[str, ...]] = {
     name: _argument_kinds(types) for name, _arity, types, _directions in BASE_PREDICATES
 }
+TIER_B_SIGNATURES: dict[str, tuple[str, ...]] = {
+    name: _argument_kinds(types)
+    for name, _arity, types, _directions in TIER_B_CONGESTION_PREDICATES
+}
+PREDICATE_SIGNATURES = {**TIER_A_SIGNATURES, **TIER_B_SIGNATURES}
+
+# Tier B predicate -> the congestion feature it reads (simulation_env.congestion).
+_LOWEST_FOR_ROBOT = {
+    "lowest_occupied_for_robot": "occupied_now",
+    "fewest_conflict_robots_for_robot": "st_conflict_robots",
+    "fewest_conflicts_for_robot": "st_conflicts_30s",
+}
+_BANDED = {
+    "low_route_overlap": ("overlap_ratio", "low"),
+    "high_occupied_now": ("occupied_now", "high"),
+    "high_conflict_robots": ("st_conflict_robots", "high"),
+}
+TIER_B_SOURCE = {
+    **_LOWEST_FOR_ROBOT,
+    **{name: feature for name, (feature, _band) in _BANDED.items()},
+    "low_local_density": "local_density",
+}
+TIER_B_THRESHOLDED = frozenset({*_BANDED, "low_local_density"})
+TIER_B_FEATURES = tuple(sorted(set(TIER_B_SOURCE.values())))
+
+_UNKNOWN = float("nan")
+
+
+class MissingCongestionData(ValueError):
+    """A Tier B fact was asked of pairs without it: refused, or a rule would just not fire."""
 
 
 class CandidatePair(NamedTuple):
@@ -47,6 +77,12 @@ class CandidatePair(NamedTuple):
     c_static_m: float
     est_finish_s: float
     fifo_position: int
+    # Tier B only, blank unless a rule needs them.
+    local_density: float = _UNKNOWN
+    occupied_now: float = _UNKNOWN
+    overlap_ratio: float = _UNKNOWN
+    st_conflict_robots: float = _UNKNOWN
+    st_conflicts_30s: float = _UNKNOWN
 
 
 def _levels(values: Iterable[tuple[float, str]]) -> list[list[str]]:
@@ -157,3 +193,58 @@ class TierAFacts:
             for i, older in enumerate(queue)
             for later in queue[i + 1 : i + 1 + PRIOR_FIFO_REACH]
         )
+
+
+class DecisionFacts(TierAFacts):
+    """Tier A and Tier B relations of one pair set.
+
+    ``thresholds`` is the training ThresholdModel: the same cutoffs bk.pl used
+    (anything with its ``categorize``). Comparisons are tie-inclusive, as in Tier A.
+    """
+
+    def __init__(self, pairs: Sequence[CandidatePair], thresholds=None) -> None:
+        super().__init__(pairs)
+        self.thresholds = thresholds
+
+    def relation(self, name: str) -> frozenset[tuple[str, ...]]:
+        if name not in TIER_B_SIGNATURES:
+            return super().relation(name)
+        if name not in self._relations:
+            self._build_tier_b(name)
+        return self._relations[name]
+
+    def _known(self, feature: str) -> list[CandidatePair]:
+        known = [p for p in self.pairs if getattr(p, feature) == getattr(p, feature)]
+        if self.pairs and not known:
+            raise MissingCongestionData(f"no pair of this decision has {feature}")
+        return known
+
+    def _band(self, feature: str, value: float) -> str:
+        if self.thresholds is None:
+            raise MissingCongestionData(f"{feature} needs the training thresholds")
+        return self.thresholds.categorize(feature, float(value))
+
+    def _build_tier_b(self, name: str) -> None:
+        feature = TIER_B_SOURCE[name]
+        known = self._known(feature)
+        if name in _LOWEST_FOR_ROBOT:
+            lowest: dict[str, float] = {}
+            for pair in known:
+                value = getattr(pair, feature)
+                lowest[pair.robot_id] = min(value, lowest.get(pair.robot_id, value))
+            self._relations[name] = frozenset(
+                (p.robot_id, p.order_id)
+                for p in known
+                if getattr(p, feature) <= lowest[p.robot_id] + TIE_TOLERANCE
+            )
+        elif name in _BANDED:
+            band = _BANDED[name][1]
+            self._relations[name] = frozenset(
+                (p.robot_id, p.order_id)
+                for p in known
+                if self._band(feature, getattr(p, feature)) == band
+            )
+        else:
+            self._relations[name] = frozenset(
+                (p.robot_id,) for p in known if self._band(feature, getattr(p, feature)) == "low"
+            )

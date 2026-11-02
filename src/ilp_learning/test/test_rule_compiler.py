@@ -47,7 +47,7 @@ def test_canonical_text_ignores_variable_names_and_body_order():
     "text",
     [
         "assign(A,B,C):- robot_is_first(A,B,C).",                # outside the set
-        "assign(A,B,C):- lowest_occupied_for_robot(A,B,C).",     # Tier B
+        "assign(A,B,C):- makespan_low(A,B,C).",     # Tier B
         "assign(A,B,C):- nearest_static(A,robot_000,C).",        # constant
         "assign(A,B,C):- nearest_static(A,B,'o0001').",          # quoted constant
         "assign(A,B,C):- closer_static(A,B,C,3).",               # number

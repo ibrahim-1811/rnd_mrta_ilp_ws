@@ -5,7 +5,9 @@ identity by file hash (docs/DECISIONS.md, "Strategy Identity"). It carries raw a
 compiled clauses, ranks, per-clause training metrics, thresholds and bias hashes,
 source runs with their workload hashes, git state, Popper version, solver settings,
 and a hash of its own content. Loading re-checks that hash and re-parses every
-clause, so an edited or out-of-vocabulary file is refused, not executed.
+clause, so an edited or out-of-vocabulary file is refused, not executed. A rule that
+reads congestion also carries the cutoffs it learned with, since it cannot fire
+the same way without them.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ilp_learning.rule_compiler import RuleProgram, parse_clause
+from ilp_learning.thresholds import ThresholdModel
 
 
 SCHEMA_VERSION = "mrta-rule-artifact/1"
@@ -48,6 +51,16 @@ def write_rule_artifact(path: Path | str, artifact: Mapping[str, Any]) -> dict[s
     return sealed
 
 
+def _thresholds_of(path: Path | str, artifact: Mapping[str, Any]) -> ThresholdModel:
+    stored = artifact.get("thresholds")
+    if stored is None:
+        raise RuleArtifactError(f"rule artifact {path}: congestion rule without thresholds")
+    thresholds = ThresholdModel(stored["cutoffs"], stored["metadata"])
+    if thresholds.sha256 != artifact["thresholds_sha256"]:
+        raise RuleArtifactError(f"rule artifact {path}: thresholds do not match their hash")
+    return thresholds
+
+
 def load_rule_artifact(path: Path | str) -> tuple[RuleProgram, dict[str, Any]]:
     """The executable program of an artifact, and the artifact, after checking both."""
     artifact = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -69,4 +82,7 @@ def load_rule_artifact(path: Path | str) -> tuple[RuleProgram, dict[str, Any]]:
         if clause.text != entry["clause"]:
             raise RuleArtifactError(f"rule artifact {path}: clause is not canonical")
         clauses.append(clause)
-    return RuleProgram(tuple(clauses)), artifact
+    program = RuleProgram(tuple(clauses))
+    if not program.needs_congestion:
+        return program, artifact
+    return RuleProgram(tuple(clauses), _thresholds_of(path, artifact)), artifact

@@ -234,7 +234,8 @@ def strategy_identities(strategies) -> dict:
 
 def workload_command(
     run_dir, strategy, robots, seed, orders, export,
-    orders_file=None, quantum=None, window=None, purpose=None,
+    orders_file=None, quantum=None, window=None, purpose=None, features=False,
+    teacher_panel=False,
 ) -> list:
     """The run_workload.py command line of one run.
 
@@ -270,18 +271,26 @@ def workload_command(
     if export:
         cmd.append("--export")
 
+    if features:
+        cmd.append("--features")
+
+    if teacher_panel:
+        cmd.append("--teacher-panel")
+
     return cmd
 
 
 def run_one(
     out, strategy, robots, seed, orders, export,
-    orders_file=None, quantum=None, window=None, purpose=None,
+    orders_file=None, quantum=None, window=None, purpose=None, features=False,
+    teacher_panel=False,
 ):
     run_dir = run_dir_of(out, strategy, robots, seed)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = workload_command(
-        run_dir, strategy, robots, seed, orders, export, orders_file, quantum, window, purpose
+        run_dir, strategy, robots, seed, orders, export, orders_file, quantum, window, purpose,
+        features, teacher_panel,
     )
 
     started = time.perf_counter()
@@ -316,6 +325,12 @@ def main() -> int:
     parser.add_argument("--orders", type=int, default=0, help="0 = the whole order file")
     parser.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     parser.add_argument("--export", action="store_true", help="also write CSV and Prolog")
+    parser.add_argument(
+        "--features", action="store_true", help="also write the congestion features of each run"
+    )
+    parser.add_argument(
+        "--teacher-panel", action="store_true", help="also write each teacher's picks of each run"
+    )
     parser.add_argument(
         "--workload-orders",
         type=int,
@@ -391,6 +406,8 @@ def main() -> int:
         "quantum": args.quantum,
         "window": args.window,
         "purpose": args.purpose,
+        "features": args.features,
+        "teacher_panel": args.teacher_panel,
         "strategy_sha256": identities,
     }
 
@@ -437,7 +454,8 @@ def main() -> int:
                     lambda run: run_one(
                         out, *run, args.orders, args.export, files.get(run[2]),
                         quantum=args.quantum, window=args.window,
-                        purpose=args.purpose,
+                        purpose=args.purpose, features=args.features,
+                        teacher_panel=args.teacher_panel,
                     ),
                     pending,
                 ),

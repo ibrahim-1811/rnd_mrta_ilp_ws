@@ -368,6 +368,13 @@ class WorkloadExecutor:
         self.queue = queue
         self.allocator = allocator
 
+        # A strategy that reads the fleet (ILP congestion rules) gets read
+        # access here; the assign() contract stays the same for all.
+        bind = getattr(allocator, "bind_executor", None)
+
+        if bind is not None:
+            bind(self)
+
         # The allocation candidate window (S0). ``fleet_size`` is the
         # frozen default; ``legacy`` is the pre-S0
         # ``min(available_robots, pending)`` rule, kept only so the

@@ -27,6 +27,7 @@ from mrta_core.sim_config import load_sim_config
 from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from simulation_env.battery_ledger import battery_report_lines
+from simulation_env.congestion import FeatureObserver
 from simulation_env.dataset import RunRecorder, build_manifest
 from simulation_env.failures import (
     EXECUTION_ERROR,
@@ -37,6 +38,7 @@ from simulation_env.failures import (
     write_failure,
 )
 from simulation_env.fleet import build_fleet, home_stations
+from simulation_env.teacher_panel import PANEL_FILE, TeacherPanel
 from simulation_env.seed_split import (
     ROLES,
     SUBROLES,
@@ -144,6 +146,24 @@ def main() -> int:
         help=(
             "with --dataset, also write decisions.csv/outcomes.csv and "
             "Prolog bk.pl/exs.pl beside the Parquet tables"
+        ),
+    )
+    parser.add_argument(
+        "--features",
+        action="store_true",
+        help=(
+            "with --dataset, also write features.parquet: the decision-time "
+            "congestion features of every candidate pair. Observation only; "
+            "it changes no result"
+        ),
+    )
+    parser.add_argument(
+        "--teacher-panel",
+        action="store_true",
+        help=(
+            "with --dataset, also write teacher_labels.parquet: what each "
+            "teacher would pick at each decision of this run. Recorded, "
+            "never acted on; it changes no result"
         ),
     )
     parser.add_argument(
@@ -258,6 +278,14 @@ def main() -> int:
         parser.error(str(refused))
 
     allocator = get_batch_strategy(args.strategy, seed=seed, **strategy_options)
+    if args.features and not args.dataset:
+        parser.error("--features needs --dataset")
+
+    if args.teacher_panel and not args.dataset:
+        parser.error("--teacher-panel needs --dataset")
+
+    panel = TeacherPanel(allocator, seed=seed) if args.teacher_panel else None
+    observer = FeatureObserver(panel or allocator) if args.features else None
 
     # The manifest is built before the run, from the inputs only, so
     # the run_id names what is about to be measured rather than what
@@ -329,7 +357,7 @@ def main() -> int:
         warehouse=warehouse,
         robots=robots,
         queue=queue,
-        allocator=allocator,
+        allocator=observer or panel or allocator,
         resolution=config.resolution_m,
         speed_mps=speed,
         service_seconds={
@@ -348,6 +376,12 @@ def main() -> int:
         recorder=recorder,
         strategy_name=args.strategy,
     )
+
+    if observer is not None:
+        observer.executor = executor
+
+    if panel is not None:
+        panel.executor = executor
 
     print("  traffic    : local reactive grid traffic")
 
@@ -507,6 +541,18 @@ def main() -> int:
         if args.strategy == "ilp":
             trace = allocator.write_rule_trace(run_dir, manifest["run_id"])
             print(f"  rule trace       : {trace.name}")
+
+        if observer is not None:
+            import pandas as pd
+
+            pd.DataFrame(observer.rows).to_parquet(run_dir / "features.parquet")
+            print("  features         : features.parquet")
+
+        if panel is not None:
+            import pandas as pd
+
+            pd.DataFrame(panel.rows).to_parquet(run_dir / PANEL_FILE)
+            print(f"  teacher labels   : {PANEL_FILE}")
 
         if args.export:
             from simulation_env.dataset_export import write_csv, write_prolog

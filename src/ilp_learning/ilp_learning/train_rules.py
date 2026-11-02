@@ -32,6 +32,7 @@ from ilp_learning.popper_runner import (
     popper_version,
     run_popper,
 )
+from ilp_learning.predicates import TIER_B_FEATURES
 from ilp_learning.rule_artifact import SCHEMA_VERSION, write_rule_artifact
 from ilp_learning.rule_compiler import K_MAX, CompiledRules, DecisionExamples, compile_rules
 from ilp_learning.sampler import (
@@ -45,6 +46,7 @@ from ilp_learning.sampler import (
 from ilp_learning.supervision.single_teacher import build_single_teacher_supervision
 from ilp_learning.thresholds import (
     DECISION_DISCRETIZATIONS,
+    DEFAULT_DISCRETIZATIONS,
     fit_thresholds_from_frames,
     induction_seeds_of,
 )
@@ -54,6 +56,9 @@ from simulation_env.seed_split import check_run_is_induction, workload_seed_of
 
 
 ARTIFACT_FILE = "rule_artifact.json"
+FEATURES_FILE = "features.parquet"
+LABELS_FILE = "teacher_labels.parquet"
+PAIR_KEYS = ["decision_id", "robot_id", "order_id"]
 ARM = "A"
 TERCILES = 3
 
@@ -66,6 +71,8 @@ class TrainingError(RuntimeError):
 class InductionRun:
     manifest: Mapping[str, Any]
     decisions: pd.DataFrame
+    features: pd.DataFrame | None = None
+    teacher_labels: pd.DataFrame | None = None
 
     @property
     def run_id(self) -> str:
@@ -79,7 +86,13 @@ def load_induction_run(run_dir: Path | str) -> InductionRun:
     check_run_is_induction(manifest)
     if (path / FAILURE_FILE).exists():
         raise TrainingError(f"{path} records a failed run")
-    return InductionRun(manifest, pd.read_parquet(path / "decisions.parquet"))
+    features, labels = path / FEATURES_FILE, path / LABELS_FILE
+    return InductionRun(
+        manifest,
+        pd.read_parquet(path / "decisions.parquet"),
+        pd.read_parquet(features) if features.exists() else None,
+        pd.read_parquet(labels) if labels.exists() else None,
+    )
 
 
 def _check_corpus(runs: Sequence[InductionRun], teacher: str) -> None:
@@ -178,6 +191,16 @@ def relabel_earliest_finish(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.assign(selected=selected)
 
 
+def panel_labelled(frame: pd.DataFrame, labels: pd.DataFrame, teacher: str) -> pd.DataFrame:
+    """The same decisions, selected as this panel teacher would have (M2 spec 6.3)."""
+    picks = labels[labels["teacher"] == teacher]
+    if picks.empty:
+        raise TrainingError(f"the panel has no label from {teacher}")
+    chosen = set(zip(picks["decision_id"], picks["robot_id"], picks["order_id"]))
+    keys = zip(frame["decision_id"], frame["robot_id"], frame["order_id"])
+    return frame.assign(selected=[key in chosen for key in keys])
+
+
 def _check_against_popper(result: PopperResult, compiled: CompiledRules) -> None:
     """The interpreter must see what Popper saw, or the artifact is not this rule."""
     if result.score is None or compiled.pruned or not compiled.program.clauses:
@@ -209,10 +232,21 @@ def train(
     exclude_predicates: Sequence[str] = (),
     permute_seed: int | None = None,
     relabel_finish: bool = False,
+    tier_b: bool = False,
+    label_teacher: str | None = None,
 ) -> dict[str, Any]:
-    """Runs -> thresholds, BK, Tier A bias, examples, Popper, compile, artifact."""
+    """Runs -> thresholds, BK, bias, examples, Popper, compile, artifact.
+
+    tier_b adds the congestion predicates; it needs each run's features.parquet.
+    label_teacher takes labels from that teacher in the run's panel, keeping the
+    decisions, and with them bk.pl, those of the run's own strategy (``teacher``).
+    """
     runs = [load_induction_run(path) for path in run_dirs]
     _check_corpus(runs, teacher)
+    if tier_b and any(run.features is None for run in runs):
+        raise TrainingError(f"--tier-b needs {FEATURES_FILE} beside every run")
+    if label_teacher and any(run.teacher_labels is None for run in runs):
+        raise TrainingError(f"--label-teacher needs {LABELS_FILE} beside every run")
     manifests = [run.manifest for run in runs]
 
     frames = {
@@ -221,19 +255,35 @@ def train(
         )
         for run in runs
     }
+    if label_teacher:
+        frames = {
+            run.run_id: panel_labelled(frames[run.run_id], run.teacher_labels, label_teacher)
+            for run in runs
+        }
     if relabel_finish:
         frames = {run_id: relabel_earliest_finish(frame) for run_id, frame in frames.items()}
     if permute_seed is not None:
         frames = {run_id: permute_labels(frame, permute_seed) for run_id, frame in frames.items()}
 
+    # The frames bk.pl is built from stay decision tables; the pairs that metrics
+    # and thresholds read also carry the features.
+    paired = frames
+    if tier_b:
+        paired = {
+            run.run_id: frames[run.run_id].merge(
+                run.features[[*PAIR_KEYS, *TIER_B_FEATURES]], on=PAIR_KEYS, how="left"
+            )
+            for run in runs
+        }
+
     # Thresholds over the eligible rows of every choice-bearing decision.
     thresholds = fit_thresholds_from_frames(
         [
             frame[frame["eligible"] & frame["choice_bearing"]]
-            for frame in frames.values()
+            for frame in paired.values()
         ],
         seeds_used=induction_seeds_of(manifests),
-        spec=DECISION_DISCRETIZATIONS,
+        spec=DEFAULT_DISCRETIZATIONS if tier_b else DECISION_DISCRETIZATIONS,
     )
 
     chosen = stratified_decisions(_strata(runs), cap=decision_cap, seed=corpus_seed)
@@ -256,7 +306,12 @@ def train(
             continue
         rows = frames[run.run_id]
         rows = rows[rows["decision_id"].isin(wanted)]
-        builder.build_from_frames(run.run_id, rows, run_manifest=run.manifest)
+        features = None
+        if tier_b:
+            features = run.features[run.features["decision_id"].isin(wanted)]
+        builder.build_from_frames(
+            run.run_id, rows, features_df=features, run_manifest=run.manifest
+        )
         examples.extend(
             build_single_teacher_supervision(
                 run.run_id, rows, tracker, run_manifest=run.manifest, k_neg=k_neg, seed=corpus_seed
@@ -266,7 +321,7 @@ def train(
     builder.write_bk_pl(kb_dir / "bk.pl")
     write_exs_pl(examples, kb_dir / "exs.pl")
     bias = generate_bias_pl(
-        include_tier_b=False,
+        include_tier_b=tier_b,
         exclude=tuple(exclude_predicates),
         max_vars=max_vars,
         max_body=max_body,
@@ -282,12 +337,15 @@ def train(
     if not result.success:
         raise TrainingError(f"Popper failed: {result.raw_output[-2000:]}")
 
-    compiled = compile_rules(result.rules, _training_decisions(frames, examples, tracker), k_max)
+    compiled = compile_rules(
+        result.rules, _training_decisions(paired, examples, tracker), k_max, thresholds
+    )
     _check_against_popper(result, compiled)
 
     artifact = {
         "schema_version": SCHEMA_VERSION,
-        "teacher": teacher,
+        "teacher": label_teacher or teacher,
+        "behaviour_policy": teacher,
         "arm": ARM,
         "control": {
             "exclude_predicates": sorted(exclude_predicates),
@@ -337,7 +395,7 @@ def train(
             "max_vars": max_vars,
             "max_body": max_body,
             "max_clauses": k_max,
-            "tier_b": False,
+            "tier_b": tier_b,
         },
         "sampling": {
             "corpus_seed": corpus_seed,
@@ -348,6 +406,8 @@ def train(
             "negatives": sum(not e.is_positive for e in examples),
         },
     }
+    if tier_b:
+        artifact["thresholds"] = thresholds.to_dict()
     sealed = write_rule_artifact(out_path / ARTIFACT_FILE, artifact)
 
     # Wall time varies between identical runs, so it stays out of the artifact.
@@ -369,6 +429,8 @@ def main() -> int:
     parser.add_argument("--exclude", nargs="*", default=[], help="G10 control: predicates left out")
     parser.add_argument("--permute-seed", type=int, help="G10 control: permute the labels")
     parser.add_argument("--relabel-finish", action="store_true", help="G10 control: earliest_finish labels")
+    parser.add_argument("--tier-b", action="store_true", help="add the congestion predicates")
+    parser.add_argument("--label-teacher", help="labels from this teacher in the run's panel")
     args = parser.parse_args()
 
     artifact = train(
@@ -381,6 +443,8 @@ def main() -> int:
         exclude_predicates=args.exclude,
         permute_seed=args.permute_seed,
         relabel_finish=args.relabel_finish,
+        tier_b=args.tier_b,
+        label_teacher=args.label_teacher,
         repo=Path(__file__).resolve().parents[3],
     )
     print(f"clauses  : {len(artifact['clauses'])} kept, {len(artifact['pruned_clauses'])} pruned")
