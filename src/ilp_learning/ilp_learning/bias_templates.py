@@ -39,12 +39,26 @@ TIER_B_CONGESTION_PREDICATES = [
 ]
 
 
+# Approved 2026-11-02 for M4-M6: relative cost, order age and load (M2 spec 5.2).
+# Tier A stays as M3 froze it, so these are switched on, never added to it.
+EXTENDED_PREDICATES = [
+    ("near_best_cost_for_robot", 3, "(decision,robot,order)", "(in,in,in)"),
+    ("best_finish_for_order", 3, "(decision,robot,order)", "(in,in,in)"),
+    ("oldest_eligible_for_robot", 3, "(decision,robot,order)", "(in,in,in)"),
+    ("aging_window_order", 2, "(decision,order)", "(in,in)"),
+    ("batch_contention", 1, "(decision,)", "(in,)"),
+    ("high_fleet_busy_ratio", 1, "(decision,)", "(in,)"),
+    ("high_queue_pressure", 1, "(decision,)", "(in,)"),
+]
+
+
 def generate_bias_pl(
     include_tier_b: bool = True,
     exclude: tuple[str, ...] = (),
     max_vars: int = 4,
     max_body: int = 4,
     max_clauses: int = 5,
+    include_extended: bool = False,
 ) -> str:
     """Generate validated Popper v4.4.0 bias.pl contents."""
     lines: list[str] = [
@@ -64,6 +78,8 @@ def generate_bias_pl(
     preds = [entry for entry in BASE_PREDICATES if entry[0] not in exclude]
     if include_tier_b:
         preds.extend(TIER_B_CONGESTION_PREDICATES)
+    if include_extended:
+        preds.extend(EXTENDED_PREDICATES)
 
     for name, arity, types, dirs in preds:
         lines.append(f"body_pred({name},{arity}).")

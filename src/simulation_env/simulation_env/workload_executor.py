@@ -2083,12 +2083,8 @@ class WorkloadExecutor:
             "window": str(self.window),
             "window_width": self._window_width,
             "dispatch_quantum_s": float(self.dispatch_quantum),
-            "free_robots": len(free),
-            "window_orders": len(window),
+            **self.decision_load(len(free), len(window)),
             "choice_bearing": len(free) * len(window) > 1,
-            "pending_orders": len(self.queue.pending()),
-            "robots_busy": len(self.active),
-            "robots_charging": len(self.charge),
         }
 
         for candidate in candidates:
@@ -2248,6 +2244,17 @@ class WorkloadExecutor:
                 "success": True,
             }
         )
+
+    def decision_load(self, free: int, window: int) -> dict:
+        """The fleet's load at this decision: recorded, and read by load rules."""
+
+        return {
+            "free_robots": free,
+            "window_orders": window,
+            "pending_orders": len(self.queue.pending()),
+            "robots_busy": len(self.active),
+            "robots_charging": len(self.charge),
+        }
 
     def _record_decision(self, free, window) -> None:
         """Record the shape of one allocation decision.

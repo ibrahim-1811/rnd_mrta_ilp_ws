@@ -1777,3 +1777,28 @@ Approved by the researcher on 2026-10-31 (decision D1), before any validation se
 ```
 
 Reason: at quantum 3 on 2,623 Phase 0 decisions, one-shot M-Card reached 0.479 fidelity to nearest_astar and iterated execution 0.99. The risk is bias toward greedy teachers in M5, so per-teacher ceilings are reported.
+
+## M4-M6 Decisions (2026-11-02)
+
+Approved by the researcher after the exploratory M4 results (`.scratch/m4-single-teacher/exploratory-2026-11-01.md`):
+
+```text
+1. Vocabulary:  an extended set, off by default so Tier A stays as M3 froze it:
+                near_best_cost_for_robot, best_finish_for_order,
+                oldest_eligible_for_robot, aging_window_order, batch_contention,
+                high_fleet_busy_ratio, high_queue_pressure (M2 spec 5.2).
+                aging_window_order reads the decision's window_orders, not the
+                configured width. cost_regret cutoff is its 25th percentile;
+                busy_ratio and queue_pressure use the 75th. Choices are made on
+                induction seeds only.
+2. Validation:  seeds 116-120 validate M4, M5 and M6 as one pool, used with
+                --purpose backup. 111-115 stay spent by M3.
+3. M4 teacher:  multi_criteria, the strongest on induction seeds 104-110 at
+                quantum 3. This replaces the spec's selection on 111-115.
+4. M5 labels:   majority (policy C1) and plurality (policy C3), both reported.
+5. Statistics:  Friedman primary, as the proposal states, then pairwise
+                Wilcoxon with Holm; the paired t-interval is reported beside
+                them. To be written into EXPERIMENT_PROTOCOL.md before M8.
+```
+
+M4, M5 and M6 share one state pool, `bk.pl`, `bias.pl`, thresholds and matcher, and differ in labels only. Labels come from the teacher panel on `nearest_astar` states.

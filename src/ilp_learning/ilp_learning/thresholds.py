@@ -16,6 +16,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
+from ilp_learning.predicates import busy_ratio, cost_regret, queue_pressure
 from simulation_env.seed_split import check_induction_purpose, workload_seed_of
 
 
@@ -30,10 +31,28 @@ DEFAULT_DISCRETIZATIONS = {
 }
 
 
+# Cutoffs of the extended vocabulary, read from add_load_columns.
+EXTENDED_DISCRETIZATIONS = {
+    "cost_regret": ("cost_regret", [25.0]),
+    "busy_ratio": ("busy_ratio", [75.0]),
+    "queue_pressure": ("queue_pressure", [75.0]),
+}
+
+
 # The cutoffs the decision table alone can fit. Tier B cutoffs need features.parquet.
 DECISION_DISCRETIZATIONS = {
     name: DEFAULT_DISCRETIZATIONS[name] for name in ("fleet_load", "free_robots")
 }
+
+
+def add_load_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """The columns the extended cutoffs are fitted on, by the online definitions."""
+    best = frame.groupby(["decision_id", "robot_id"])["c_static_m"].transform("min")
+    return frame.assign(
+        cost_regret=[cost_regret(c, b) for c, b in zip(frame["c_static_m"], best)],
+        busy_ratio=[busy_ratio(row) for row in frame.itertuples()],
+        queue_pressure=[queue_pressure(row) for row in frame.itertuples()],
+    )
 
 
 class ThresholdModel:

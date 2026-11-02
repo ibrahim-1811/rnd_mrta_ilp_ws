@@ -15,6 +15,7 @@ from ilp_learning.bias_templates import TIER_B_CONGESTION_PREDICATES
 from ilp_learning.bk_builder import BKBuilder, candidate_pairs, derive_est_finish_s
 from ilp_learning.matcher import BatchMatcher
 from ilp_learning.predicates import (
+    EXTENDED_SIGNATURES,
     PREDICATE_SIGNATURES,
     TIER_A_SIGNATURES,
     TIER_B_SIGNATURES,
@@ -48,9 +49,17 @@ TIER_B_PROGRAMS = [
     TIER_B_RULE,
     "assign(A,B,C):- fewest_conflict_robots_for_robot(A,B,C),low_local_density(A,B).",
     "assign(A,B,C):- low_route_overlap(A,B,C),nearest_static(A,B,C).",
+    "assign(A,B,C):- near_best_cost_for_robot(A,B,C),oldest_eligible_for_robot(A,B,C).",
+    "assign(A,B,C):- aging_window_order(A,C),best_finish_for_order(A,B,C).",
+    "assign(A,B,C):- batch_contention(A),nearest_static(A,B,C).",
+    "assign(A,B,C):- high_fleet_busy_ratio(A),nearest_static(A,B,C).",
+    "assign(A,B,C):- high_queue_pressure(A),nearest_static(A,B,C).",
 ]
 LIVE_THRESHOLDS = ThresholdModel(
-    {**CUTOFFS, "occupied_now": [1.0], "st_conflict_robots": [1.0], "overlap_ratio": [0.3]},
+    {
+        **CUTOFFS, "occupied_now": [1.0], "st_conflict_robots": [1.0], "overlap_ratio": [0.3],
+        "cost_regret": [0.5], "busy_ratio": [0.5], "queue_pressure": [0.5],
+    },
     {"seeds_used": [104]},
 )
 
@@ -76,7 +85,9 @@ PAIRS = [
 
 def test_vocabulary_is_the_bias():
     assert set(TIER_B_SIGNATURES) == {name for name, *_ in TIER_B_CONGESTION_PREDICATES}
-    assert PREDICATE_SIGNATURES == {**TIER_A_SIGNATURES, **TIER_B_SIGNATURES}
+    assert PREDICATE_SIGNATURES == {
+        **TIER_A_SIGNATURES, **TIER_B_SIGNATURES, **EXTENDED_SIGNATURES,
+    }
 
 
 @pytest.mark.parametrize(
@@ -93,6 +104,43 @@ def test_vocabulary_is_the_bias():
 )
 def test_relations(name, expected):
     assert DecisionFacts(PAIRS, THRESHOLDS).relation(name) == expected
+
+
+def loaded(robot, order, cost, fifo, busy=6, pending=20):
+    return CandidatePair(
+        robot, order, cost, cost, fifo, free_robots=2, window_orders=4,
+        pending_orders=pending, robots_busy=busy, robots_charging=2,
+    )
+
+
+LOADED = [
+    loaded("r1", "a", 10.0, 0), loaded("r1", "b", 11.0, 1),
+    loaded("r1", "c", 30.0, 3), loaded("r2", "b", 8.0, 1), loaded("r2", "c", 9.0, 3),
+]
+EXTENDED_THRESHOLDS = ThresholdModel(
+    {"cost_regret": [0.2], "busy_ratio": [0.5], "queue_pressure": [3.0]}
+)
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("near_best_cost_for_robot", {("r1", "a"), ("r1", "b"), ("r2", "b"), ("r2", "c")}),
+        ("best_finish_for_order", {("r1", "a"), ("r2", "b"), ("r2", "c")}),
+        ("oldest_eligible_for_robot", {("r1", "a"), ("r2", "b")}),
+        ("aging_window_order", {("c",)}),
+        ("batch_contention", {()}),
+        ("high_fleet_busy_ratio", {()}),
+        ("high_queue_pressure", set()),
+    ],
+)
+def test_extended_relations(name, expected):
+    assert DecisionFacts(LOADED, EXTENDED_THRESHOLDS).relation(name) == expected
+
+
+def test_a_load_rule_without_load_data_is_refused_not_silent():
+    with pytest.raises(MissingCongestionData):
+        DecisionFacts(PAIRS, EXTENDED_THRESHOLDS).relation("batch_contention")
 
 
 def test_a_relation_is_defined_over_the_pairs_it_is_given():
@@ -293,6 +341,19 @@ def test_tier_b_training_needs_the_features(tmp_path):
     (run / "features.parquet").unlink()
     with pytest.raises(TrainingError, match="features.parquet"):
         train([run], tmp_path / "out", tier_b=True)
+
+
+@pytest.mark.skipif(not ACCEPTANCE_RUN.exists(), reason="acceptance run not generated")
+def test_extended_training_keeps_tier_a_facts_and_seals_its_thresholds(tmp_path):
+    plain = tmp_path / "plain"
+    train([ACCEPTANCE_RUN], plain, decision_cap=20, timeout_s=30)
+    artifact = train([ACCEPTANCE_RUN], tmp_path / "x", decision_cap=20, timeout_s=30, extended=True)
+    assert artifact["thresholds"]["sha256"] == artifact["thresholds_sha256"]
+    assert "body_pred(aging_window_order" in (tmp_path / "x/kb/bias.pl").read_text()
+    assert "body_pred(aging_window_order" not in (plain / "kb/bias.pl").read_text()
+    facts = (tmp_path / "x/kb/bk.pl").read_text()
+    assert "near_best_cost_for_robot(" in facts and "batch_contention(" in facts
+    load_rule_artifact(tmp_path / "x/rule_artifact.json")
 
 
 @pytest.mark.skipif(not ACCEPTANCE_RUN.exists(), reason="acceptance run not generated")

@@ -21,6 +21,7 @@ import re
 from typing import Any, Iterable, Mapping, Sequence
 
 from ilp_learning.predicates import (
+    EXTENDED_SIGNATURES,
     PREDICATE_SIGNATURES,
     TIER_B_SIGNATURES,
     CandidatePair,
@@ -189,6 +190,14 @@ class RuleProgram:
     def needs_congestion(self) -> bool:
         return any(
             literal.predicate in TIER_B_SIGNATURES
+            for clause in self.clauses
+            for literal in clause.body
+        )
+
+    @property
+    def needs_load(self) -> bool:
+        return any(
+            literal.predicate in EXTENDED_SIGNATURES
             for clause in self.clauses
             for literal in clause.body
         )

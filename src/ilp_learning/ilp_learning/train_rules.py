@@ -47,6 +47,8 @@ from ilp_learning.supervision.single_teacher import build_single_teacher_supervi
 from ilp_learning.thresholds import (
     DECISION_DISCRETIZATIONS,
     DEFAULT_DISCRETIZATIONS,
+    EXTENDED_DISCRETIZATIONS,
+    add_load_columns,
     fit_thresholds_from_frames,
     induction_seeds_of,
 )
@@ -234,12 +236,14 @@ def train(
     relabel_finish: bool = False,
     tier_b: bool = False,
     label_teacher: str | None = None,
+    extended: bool = False,
 ) -> dict[str, Any]:
     """Runs -> thresholds, BK, bias, examples, Popper, compile, artifact.
 
     tier_b adds the congestion predicates; it needs each run's features.parquet.
     label_teacher takes labels from that teacher in the run's panel, keeping the
     decisions, and with them bk.pl, those of the run's own strategy (``teacher``).
+    extended adds the relative cost, order age and load predicates.
     """
     runs = [load_induction_run(path) for path in run_dirs]
     _check_corpus(runs, teacher)
@@ -276,6 +280,13 @@ def train(
             for run in runs
         }
 
+    spec = dict(DEFAULT_DISCRETIZATIONS if tier_b else DECISION_DISCRETIZATIONS)
+    if extended:
+        spec.update(EXTENDED_DISCRETIZATIONS)
+        paired = {
+            run_id: add_load_columns(frame[frame["eligible"]]) for run_id, frame in paired.items()
+        }
+
     # Thresholds over the eligible rows of every choice-bearing decision.
     thresholds = fit_thresholds_from_frames(
         [
@@ -283,7 +294,7 @@ def train(
             for frame in paired.values()
         ],
         seeds_used=induction_seeds_of(manifests),
-        spec=DEFAULT_DISCRETIZATIONS if tier_b else DECISION_DISCRETIZATIONS,
+        spec=spec,
     )
 
     chosen = stratified_decisions(_strata(runs), cap=decision_cap, seed=corpus_seed)
@@ -298,7 +309,7 @@ def train(
     kb_dir.mkdir(parents=True, exist_ok=True)
 
     tracker = ProvenanceTracker()
-    builder = BKBuilder(thresholds=thresholds, tracker=tracker)
+    builder = BKBuilder(thresholds=thresholds, tracker=tracker, extended=extended)
     examples: list[GroundAtomExample] = []
     for run in runs:
         wanted = chosen_by_run.get(run.run_id)
@@ -322,6 +333,7 @@ def train(
     write_exs_pl(examples, kb_dir / "exs.pl")
     bias = generate_bias_pl(
         include_tier_b=tier_b,
+        include_extended=extended,
         exclude=tuple(exclude_predicates),
         max_vars=max_vars,
         max_body=max_body,
@@ -396,6 +408,7 @@ def train(
             "max_body": max_body,
             "max_clauses": k_max,
             "tier_b": tier_b,
+            "extended": extended,
         },
         "sampling": {
             "corpus_seed": corpus_seed,
@@ -406,7 +419,7 @@ def train(
             "negatives": sum(not e.is_positive for e in examples),
         },
     }
-    if tier_b:
+    if tier_b or extended:
         artifact["thresholds"] = thresholds.to_dict()
     sealed = write_rule_artifact(out_path / ARTIFACT_FILE, artifact)
 
@@ -430,6 +443,7 @@ def main() -> int:
     parser.add_argument("--permute-seed", type=int, help="G10 control: permute the labels")
     parser.add_argument("--relabel-finish", action="store_true", help="G10 control: earliest_finish labels")
     parser.add_argument("--tier-b", action="store_true", help="add the congestion predicates")
+    parser.add_argument("--extended", action="store_true", help="add relative cost, age and load")
     parser.add_argument("--label-teacher", help="labels from this teacher in the run's panel")
     args = parser.parse_args()
 
@@ -445,6 +459,7 @@ def main() -> int:
         relabel_finish=args.relabel_finish,
         tier_b=args.tier_b,
         label_teacher=args.label_teacher,
+        extended=args.extended,
         repo=Path(__file__).resolve().parents[3],
     )
     print(f"clauses  : {len(artifact['clauses'])} kept, {len(artifact['pruned_clauses'])} pruned")

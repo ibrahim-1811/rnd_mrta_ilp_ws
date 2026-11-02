@@ -6,8 +6,8 @@ compiled clauses, ranks, per-clause training metrics, thresholds and bias hashes
 source runs with their workload hashes, git state, Popper version, solver settings,
 and a hash of its own content. Loading re-checks that hash and re-parses every
 clause, so an edited or out-of-vocabulary file is refused, not executed. A rule that
-reads congestion also carries the cutoffs it learned with, since it cannot fire
-the same way without them.
+reads congestion or load also carries the cutoffs it learned with, since it cannot
+fire the same way without them.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def write_rule_artifact(path: Path | str, artifact: Mapping[str, Any]) -> dict[s
 def _thresholds_of(path: Path | str, artifact: Mapping[str, Any]) -> ThresholdModel:
     stored = artifact.get("thresholds")
     if stored is None:
-        raise RuleArtifactError(f"rule artifact {path}: congestion rule without thresholds")
+        raise RuleArtifactError(f"rule artifact {path}: this rule needs its thresholds")
     thresholds = ThresholdModel(stored["cutoffs"], stored["metadata"])
     if thresholds.sha256 != artifact["thresholds_sha256"]:
         raise RuleArtifactError(f"rule artifact {path}: thresholds do not match their hash")
@@ -83,6 +83,6 @@ def load_rule_artifact(path: Path | str) -> tuple[RuleProgram, dict[str, Any]]:
             raise RuleArtifactError(f"rule artifact {path}: clause is not canonical")
         clauses.append(clause)
     program = RuleProgram(tuple(clauses))
-    if not program.needs_congestion:
+    if not (program.needs_congestion or program.needs_load):
         return program, artifact
     return RuleProgram(tuple(clauses), _thresholds_of(path, artifact)), artifact

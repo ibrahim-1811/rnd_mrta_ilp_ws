@@ -14,9 +14,14 @@ compares them (order_id breaks no tie that could change a fact).
 
 from __future__ import annotations
 
+from math import ceil
 from typing import Iterable, Mapping, NamedTuple, Sequence
 
-from ilp_learning.bias_templates import BASE_PREDICATES, TIER_B_CONGESTION_PREDICATES
+from ilp_learning.bias_templates import (
+    BASE_PREDICATES,
+    EXTENDED_PREDICATES,
+    TIER_B_CONGESTION_PREDICATES,
+)
 
 
 TIE_TOLERANCE = 1e-9  # exact-tie width of the rank predicates, M2 spec 3.2
@@ -29,7 +34,7 @@ _DEEPEST_LEVEL = COMPARE_LEVELS + COMPARE_REACH - 1
 
 def _argument_kinds(types: str) -> tuple[str, ...]:
     """Argument kinds after the decision, from a bias type tuple."""
-    return tuple(types.strip("()").split(","))[1:]
+    return tuple(kind for kind in types.strip("()").split(",") if kind)[1:]
 
 
 # predicate -> kinds of its arguments after D, read from the bias itself so the
@@ -41,7 +46,10 @@ TIER_B_SIGNATURES: dict[str, tuple[str, ...]] = {
     name: _argument_kinds(types)
     for name, _arity, types, _directions in TIER_B_CONGESTION_PREDICATES
 }
-PREDICATE_SIGNATURES = {**TIER_A_SIGNATURES, **TIER_B_SIGNATURES}
+EXTENDED_SIGNATURES: dict[str, tuple[str, ...]] = {
+    name: _argument_kinds(types) for name, _arity, types, _directions in EXTENDED_PREDICATES
+}
+PREDICATE_SIGNATURES = {**TIER_A_SIGNATURES, **TIER_B_SIGNATURES, **EXTENDED_SIGNATURES}
 
 # Tier B predicate -> the congestion feature it reads (simulation_env.congestion).
 _LOWEST_FOR_ROBOT = {
@@ -61,6 +69,9 @@ TIER_B_SOURCE = {
 }
 TIER_B_THRESHOLDED = frozenset({*_BANDED, "low_local_density"})
 TIER_B_FEATURES = tuple(sorted(set(TIER_B_SOURCE.values())))
+
+# What a decision knows about the fleet: WorkloadExecutor.decision_load.
+LOAD_FIELDS = ("free_robots", "window_orders", "pending_orders", "robots_busy", "robots_charging")
 
 _UNKNOWN = float("nan")
 
@@ -83,6 +94,12 @@ class CandidatePair(NamedTuple):
     overlap_ratio: float = _UNKNOWN
     st_conflict_robots: float = _UNKNOWN
     st_conflicts_30s: float = _UNKNOWN
+    # Extended vocabulary only: the decision's load, the same on all its pairs.
+    free_robots: float = _UNKNOWN
+    window_orders: float = _UNKNOWN
+    pending_orders: float = _UNKNOWN
+    robots_busy: float = _UNKNOWN
+    robots_charging: float = _UNKNOWN
 
 
 def _levels(values: Iterable[tuple[float, str]]) -> list[list[str]]:
@@ -207,8 +224,23 @@ class TierAFacts:
         )
 
 
+def cost_regret(cost: float, best: float) -> float:
+    """Relative detour of an order against the robot's cheapest (M2 spec, A1)."""
+    return (cost - best) / max(best, 1.0)
+
+
+def busy_ratio(load) -> float:
+    fleet = load.free_robots + load.robots_busy + load.robots_charging
+    return load.robots_busy / max(1, fleet)
+
+
+def queue_pressure(load) -> float:
+    fleet = load.free_robots + load.robots_busy + load.robots_charging
+    return load.pending_orders / max(1, fleet)
+
+
 class DecisionFacts(TierAFacts):
-    """Tier A and Tier B relations of one pair set.
+    """Tier A, Tier B and extended relations of one pair set.
 
     ``thresholds`` is the training ThresholdModel: the same cutoffs bk.pl used
     (anything with its ``categorize``). Comparisons are tie-inclusive, as in Tier A.
@@ -219,11 +251,78 @@ class DecisionFacts(TierAFacts):
         self.thresholds = thresholds
 
     def relation(self, name: str) -> frozenset[tuple[str, ...]]:
+        if name in EXTENDED_SIGNATURES:
+            if name not in self._relations:
+                self._build_extended(name)
+            return self._relations[name]
         if name not in TIER_B_SIGNATURES:
             return super().relation(name)
         if name not in self._relations:
             self._build_tier_b(name)
         return self._relations[name]
+
+    def _build_extended(self, name: str) -> None:
+        if name == "near_best_cost_for_robot":
+            facts = self._near_best_cost()
+        elif name == "best_finish_for_order":
+            facts = self._lowest_per(self._by_order, "est_finish_s")
+        elif name == "oldest_eligible_for_robot":
+            facts = self._lowest_per(self._by_robot, "fifo_position")
+        elif name == "aging_window_order":
+            facts = self._aging_orders()
+        else:
+            facts = self._load_fact(name)
+        self._relations[name] = frozenset(facts)
+
+    @staticmethod
+    def _lowest_per(groups: Mapping[str, list[CandidatePair]], field: str) -> set[tuple[str, str]]:
+        """Every pair at its group's minimum: a tie is fact, not a choice."""
+        facts: set[tuple[str, str]] = set()
+        for pairs in groups.values():
+            known = [p for p in pairs if getattr(p, field) == getattr(p, field)]
+            if known:
+                lowest = min(getattr(p, field) for p in known) + TIE_TOLERANCE
+                facts.update(
+                    (p.robot_id, p.order_id) for p in known if getattr(p, field) <= lowest
+                )
+        return facts
+
+    def _near_best_cost(self) -> set[tuple[str, str]]:
+        if self.thresholds is None:
+            raise MissingCongestionData("cost_regret needs the training thresholds")
+        facts: set[tuple[str, str]] = set()
+        for pairs in self._by_robot.values():
+            known = [p for p in pairs if p.c_static_m == p.c_static_m]
+            if known:
+                best = min(p.c_static_m for p in known)
+                facts.update(
+                    (p.robot_id, p.order_id)
+                    for p in known
+                    if self.thresholds.categorize("cost_regret", cost_regret(p.c_static_m, best))
+                    == "low"
+                )
+        return facts
+
+    def _aging_orders(self) -> set[tuple[str]]:
+        """Orders in the last quarter of the window at this decision."""
+        known = self._known("window_orders")
+        if not known:
+            return set()
+        last = max(1, ceil(0.75 * (known[0].window_orders - 1)))
+        return {(p.order_id,) for p in self.pairs if p.fifo_position >= last}
+
+    def _load_fact(self, name: str) -> set[tuple]:
+        known = self._known("robots_busy")
+        if not known:
+            return set()
+        load = known[0]
+        if name == "batch_contention":
+            holds = load.free_robots >= 2 and load.window_orders >= 2
+        elif name == "high_fleet_busy_ratio":
+            holds = self._band("busy_ratio", busy_ratio(load)) == "high"
+        else:
+            holds = self._band("queue_pressure", queue_pressure(load)) == "high"
+        return {()} if holds else set()
 
     def _known(self, feature: str) -> list[CandidatePair]:
         known = [p for p in self.pairs if getattr(p, feature) == getattr(p, feature)]
