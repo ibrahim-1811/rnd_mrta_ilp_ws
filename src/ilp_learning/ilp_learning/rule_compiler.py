@@ -110,7 +110,8 @@ def _satisfiable(
     if not literals:
         return True
     literal, *rest = literals
-    for values in facts.relation(literal.predicate):
+    known = {i: bound[v] for i, v in enumerate(literal.args[1:]) if v in bound}
+    for values in facts.matching(literal.predicate, known):
         extended = dict(bound)
         for variable, value in zip(literal.args[1:], values):
             if extended.setdefault(variable, value) != value:

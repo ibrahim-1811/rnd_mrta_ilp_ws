@@ -161,6 +161,18 @@ def test_bk_facts_are_the_shared_relations():
         assert found == shared.relation(name), name
 
 
+def test_an_indexed_lookup_finds_what_a_scan_finds():
+    facts = DecisionFacts(PAIRS, THRESHOLDS)
+    for name in ("closer_static", "lowest_occupied_for_robot", "oldest_fifo"):
+        arity = len(PREDICATE_SIGNATURES[name])
+        for values in facts.relation(name):
+            for position in range(arity):
+                found = facts.matching(name, {position: values[position]})
+                assert set(found) == {v for v in facts.relation(name) if v[position] == values[position]}
+        assert set(facts.matching(name, {})) == set(facts.relation(name))
+        assert list(facts.matching(name, {0: "nobody"})) == []
+
+
 def test_program_uses_its_thresholds_and_knows_it_needs_congestion():
     tier_a = RuleProgram((parse_clause("assign(A,B,C):- nearest_static(A,B,C)."),))
     tier_b = RuleProgram((parse_clause(TIER_B_RULE),), THRESHOLDS)

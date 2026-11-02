@@ -14,7 +14,7 @@ compares them (order_id breaks no tie that could change a fact).
 
 from __future__ import annotations
 
-from typing import Iterable, NamedTuple, Sequence
+from typing import Iterable, Mapping, NamedTuple, Sequence
 
 from ilp_learning.bias_templates import BASE_PREDICATES, TIER_B_CONGESTION_PREDICATES
 
@@ -113,6 +113,7 @@ class TierAFacts:
     def __init__(self, pairs: Sequence[CandidatePair]) -> None:
         self.pairs = tuple(CandidatePair(*pair) for pair in pairs)
         self._relations: dict[str, frozenset[tuple[str, ...]]] = {}
+        self._indexes: dict[tuple, dict[tuple[str, ...], list[tuple[str, ...]]]] = {}
         self._by_robot: dict[str, list[CandidatePair]] = {}
         self._by_order: dict[str, list[CandidatePair]] = {}
         for pair in self.pairs:
@@ -125,6 +126,17 @@ class TierAFacts:
         if name not in self._relations:
             self._build(name)
         return self._relations[name]
+
+    def matching(self, name: str, known: Mapping[int, str]) -> Sequence[tuple[str, ...]]:
+        """Tuples of a relation with these values at these positions, through an index."""
+        positions = tuple(sorted(known))
+        index = self._indexes.get((name, positions))
+        if index is None:
+            index = {}
+            for values in self.relation(name):
+                index.setdefault(tuple(values[i] for i in positions), []).append(values)
+            self._indexes[(name, positions)] = index
+        return index.get(tuple(known[i] for i in positions), ())
 
     def _build(self, name: str) -> None:
         if name == "candidate_pair":
