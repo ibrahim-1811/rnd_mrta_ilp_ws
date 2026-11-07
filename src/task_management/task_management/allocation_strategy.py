@@ -1150,11 +1150,12 @@ class ILPAllocationStrategy(BatchAllocationStrategy):
         congestion = {}
         load = {}
 
-        if self._program.needs_congestion or self._program.needs_load:
+        needs_battery = self._program.needs_battery
+        if self._program.needs_congestion or self._program.needs_load or needs_battery:
             if self._executor is None:
                 raise ValueError("ilp: this rule needs the executor's fleet state")
 
-        if self._program.needs_load:
+        if self._program.needs_load or needs_battery:
             load = self._executor.decision_load(len(robots), len(orders))
 
         if self._program.needs_congestion:
@@ -1181,6 +1182,16 @@ class ILPAllocationStrategy(BatchAllocationStrategy):
                     c.fifo_position,
                     **congestion.get((c.robot_id, c.order_id), {}),
                     **load,
+                    **(
+                        {
+                            "energy_margin_percent": float(c.energy.energy_margin_percent),
+                            "predicted_charger_distance_m": float(
+                                c.energy.predicted_nearest_charger_distance_m
+                            ),
+                        }
+                        if needs_battery and c.energy is not None
+                        else {}
+                    ),
                 )
                 for c in eligible
             ],

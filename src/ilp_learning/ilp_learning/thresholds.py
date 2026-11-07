@@ -16,7 +16,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-from ilp_learning.predicates import busy_ratio, cost_regret, queue_pressure
+from ilp_learning.predicates import busy_ratio, charging_share, cost_regret, queue_pressure
 from simulation_env.seed_split import check_induction_purpose, workload_seed_of
 
 
@@ -39,6 +39,14 @@ EXTENDED_DISCRETIZATIONS = {
 }
 
 
+# Cutoffs of the battery vocabulary, read from add_battery_columns.
+BATTERY_DISCRETIZATIONS = {
+    "energy_margin": ("energy_margin_percent", [25.0]),
+    "charger_distance": ("predicted_charger_distance_m", [25.0]),
+    "charging_share": ("charging_share", [75.0]),
+}
+
+
 # The cutoffs the decision table alone can fit. Tier B cutoffs need features.parquet.
 DECISION_DISCRETIZATIONS = {
     name: DEFAULT_DISCRETIZATIONS[name] for name in ("fleet_load", "free_robots")
@@ -53,6 +61,11 @@ def add_load_columns(frame: pd.DataFrame) -> pd.DataFrame:
         busy_ratio=[busy_ratio(row) for row in frame.itertuples()],
         queue_pressure=[queue_pressure(row) for row in frame.itertuples()],
     )
+
+
+def add_battery_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """The column the charging-pressure cutoff is fitted on, by the online definition."""
+    return frame.assign(charging_share=[charging_share(row) for row in frame.itertuples()])
 
 
 class ThresholdModel:

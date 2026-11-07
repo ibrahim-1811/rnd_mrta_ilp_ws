@@ -83,6 +83,6 @@ def load_rule_artifact(path: Path | str) -> tuple[RuleProgram, dict[str, Any]]:
             raise RuleArtifactError(f"rule artifact {path}: clause is not canonical")
         clauses.append(clause)
     program = RuleProgram(tuple(clauses))
-    if not (program.needs_congestion or program.needs_load):
+    if not (program.needs_congestion or program.needs_load or program.needs_battery):
         return program, artifact
     return RuleProgram(tuple(clauses), _thresholds_of(path, artifact)), artifact

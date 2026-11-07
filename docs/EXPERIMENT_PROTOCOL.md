@@ -473,15 +473,30 @@ The final statistical method should be frozen before the main experiment campaig
 
 ## Statistical Evaluation Protocol
 
-Decided 2026-11-02 (DECISIONS.md, "M4-M6 Decisions"): the primary test is
-now Friedman across policies, as the proposal states, then pairwise
-Wilcoxon with Holm, with the paired t-interval reported beside them. The
-text below still describes the 2026-10-27 proposal for everything else.
+Decided 2026-11-02 by the researcher (DECISIONS.md, "M4-M6 Decisions",
+item 5), as the proposal states:
 
-PROPOSED 2026-10-27 (M0), to be frozen by the researcher before the
-final campaign (M8). The paired t-interval exists in
-`simulation_env/paired.py`; Holm, Wilcoxon and the effect size do not
-yet (F9, "Requirements Before Outcome-Aware Training").
+```text
+omnibus test    Friedman across policies; blocks are the paired
+                workload seeds, at one fleet size and one condition
+post-hoc        pairwise Wilcoxon signed-rank on the same pairs,
+                Holm-Bonferroni adjusted
+reported beside the paired t-interval of mean d, as below
+```
+
+Not yet decided, needed before M8: which policies enter each Friedman
+test, and which pairs the post-hoc family contains. The families listed
+below (every strategy against nearest_astar, and the ILP family) are the
+2026-10-27 proposal and are the default until the researcher decides.
+
+Implementation state (2026-11-06): the paired t-interval exists in
+`simulation_env/paired.py`. Friedman, Wilcoxon, Holm and d_z are **not
+implemented** anywhere in `src` or `scripts` (F9).
+
+The block below is the 2026-10-27 proposal. Where it differs from the
+2026-11-02 decision above, the decision wins: the paired t-test is no
+longer the primary test, and Wilcoxon is no longer only a sensitivity
+check.
 
 ```text
 unit            one workload seed. d_s = metric(strategy, s) -
@@ -522,8 +537,20 @@ n               30 evaluation seeds per fleet size
 
 ## Data Split Protocol
 
-PROPOSED 2026-10-27 (M0); the training and validation seeds are the
-researcher's decision of that day (DECISIONS.md, "Seed Split").
+Frozen seed partition, as decided (DECISIONS.md, "M1 Acceptance Record",
+item 3, 2026-10-29, and "M4-M6 Decisions", item 2, 2026-11-02):
+
+```text
+104-110   ILP rule induction pool (M3-M6 training)
+101-103   development and exploratory probes (M1)
+111-115   M3 validation; spent by m3-evidence-1, not reused
+116-120   M4, M5 and M6 validation, one pool, --purpose backup
+201-230   sealed final evaluation set, untouched until M8
+1-30      conventional strategy reference sweep
+```
+
+The block below is the 2026-10-27 proposal, kept for the record. Where
+it differs from the partition above, the partition wins.
 
 ```text
 training     seeds 101-110: teacher runs whose decision rows become ILP
@@ -548,9 +575,23 @@ enforced     run_experiment.py --purpose refuses seeds outside the
 
 ## Requirements Before Outcome-Aware Training
 
-Recorded 2026-10-27 (M0) from the audit. None is implemented; each must
-be resolved before Outcome-Aware ILP is trained, and F9 before any
-final comparison.
+Recorded 2026-10-27 (M0) from the audit. Each must be resolved before
+Outcome-Aware ILP is trained, and F9 before any final comparison.
+
+State on 2026-11-06:
+
+```text
+F9         NOT implemented; method decided 2026-11-02 (above)
+F10        NOT implemented
+F12        NOT implemented; uniform demand only
+M1         DONE, accepted 2026-10-29
+features   DONE: Tier B congestion predicates run online with
+           offline/online parity (56f495f)
+supervision  objective and parameters frozen 2026-10-29 (below); how
+           J becomes examples is not yet frozen
+```
+
+Original list, 2026-10-27:
 
 ```text
 F9   statistics       Holm correction, Wilcoxon signed-rank, d_z and
@@ -582,7 +623,22 @@ supervision           the outcome-aware supervision definition frozen
 
 ## Outcome-Aware Supervision
 
-The final outcome-aware target is not yet frozen.
+Frozen 2026-10-29 (DECISIONS.md, "M1 Acceptance Record", item 2):
+
+```text
+objective   J(b) = pivot_mission_s(b) + lambda * waiting_in_h_s(b),
+            over the horizon [t_d, first tick >= t_d + H], measured by
+            counterfactual rollout from the decision state
+primary     H = 120 s, lambda = 0.50, delta = 2.0 s
+sensitivity lambda = 0.25, delta = 5.0 s
+censoring   a branch whose pivot mission does not finish inside H, or
+            whose rollout stalls or fails, gives no label of either sign
+```
+
+Not yet frozen: the rule that turns J into ILP examples (which branches
+become positives and negatives, and the role of delta). Until that is
+frozen, M6 label generation is not implemented
+(`ilp_learning/supervision/outcome_contract.py` is a contract only).
 
 Before Phase 13 begins, define and document exactly how realized outcomes are converted into:
 

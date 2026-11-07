@@ -16,6 +16,9 @@ run.json and decisions.parquet only, and refuses a run that is not induction dat
     rule_coverage   share of picks made by a rule (G3); fallback is the rest (G4)
 
 Each is reported over choice-bearing decisions (primary) and over all decisions.
+The matcher is the artifact teacher's (ilp_learning.teachers): iterative for teachers
+that pick one pair at a time, one-shot M-Card for hungarian and milp; --matching
+overrides it.
 Clause and program precision and recall are static, over all eligible pairs of
 choice-bearing decisions; a clause's picks are reported beside them.
 """
@@ -36,6 +39,7 @@ from ilp_learning.matcher import BatchMatcher, PickKey
 from ilp_learning.predicates import CandidatePair, TierAFacts
 from ilp_learning.rule_artifact import load_rule_artifact
 from ilp_learning.rule_compiler import RuleProgram
+from ilp_learning.teachers import matching_of_artifact
 from ilp_learning.train_rules import InductionRun, load_induction_run
 from simulation_env.failures import FAILURE_FILE
 from simulation_env.seed_split import role_of, workload_seed_of
@@ -69,10 +73,11 @@ def _cost_multiset(pairs: Sequence[CandidatePair]) -> Counter:
 
 
 def score_decision(
-    pairs: Sequence[CandidatePair], teacher: set[tuple[str, str]], program: RuleProgram
+    pairs: Sequence[CandidatePair], teacher: set[tuple[str, str]], program: RuleProgram,
+    matching: str = "iterative",
 ) -> dict:
     """One decision: counters, and the picks made by each clause."""
-    matcher = BatchMatcher("iterative")
+    matcher = BatchMatcher(matching)
     by_pair = {(p.robot_id, p.order_id): p for p in pairs}
     picks = matcher.match_pairs(pairs, program)
     chosen = {(a.robot_id, a.order_id) for a in picks}
@@ -119,7 +124,7 @@ def _static_quality(pairs, teacher, program: RuleProgram) -> dict[str, Counter]:
     return quality
 
 
-def evaluate_frame(frame: pd.DataFrame, program: RuleProgram) -> dict:
+def evaluate_frame(frame: pd.DataFrame, program: RuleProgram, matching: str = "iterative") -> dict:
     """Counters by scope, for one run's decision rows carrying est_finish_s."""
     totals = {scope: Counter() for scope in SCOPES}
     clause_picks: Counter = Counter()
@@ -132,7 +137,7 @@ def evaluate_frame(frame: pd.DataFrame, program: RuleProgram) -> dict:
         if not teacher:
             continue
         pairs = candidate_pairs(rows)
-        scored = score_decision(pairs, teacher, program)
+        scored = score_decision(pairs, teacher, program, matching)
         bearing = bool(rows["choice_bearing"].iloc[0])
         counts = {key: scored[key] for key in COUNTERS}
         totals["all"].update(counts)
@@ -247,13 +252,14 @@ def key_agreement(frame: pd.DataFrame, program: RuleProgram, keys: Sequence[Pick
     return {"agreed": agreed, "teacher_pairs": teacher_pairs}
 
 
-def evaluate_runs(run_dirs: Sequence[Path | str], program: RuleProgram, load=load_induction_run) -> dict:
+def evaluate_runs(run_dirs: Sequence[Path | str], program: RuleProgram, load=load_induction_run,
+                  matching: str = "iterative") -> dict:
     """Per-seed results and the pool of a program over recorded runs."""
     per_seed = {}
     for run_dir in run_dirs:
         run = load(run_dir)
         frame = run.decisions.assign(est_finish_s=derive_est_finish_s(run.decisions, run.manifest))
-        per_seed[workload_seed_of(run.manifest["orders_path"])] = evaluate_frame(frame, program)
+        per_seed[workload_seed_of(run.manifest["orders_path"])] = evaluate_frame(frame, program, matching)
     return {
         "per_seed": {
             str(seed): {
@@ -271,11 +277,15 @@ def main() -> int:
     parser.add_argument("artifact", help="rule_artifact.json")
     parser.add_argument("runs", nargs="+", help="recorded induction run directories")
     parser.add_argument("--out", required=True)
+    parser.add_argument("--matching", choices=BatchMatcher.MODES, default=None,
+                        help="default: the artifact teacher's matcher (ilp_learning.teachers)")
     args = parser.parse_args()
 
     program, artifact = load_rule_artifact(args.artifact)
-    result = evaluate_runs(args.runs, program)
+    matching = args.matching or matching_of_artifact(args.artifact)
+    result = evaluate_runs(args.runs, program, matching=matching)
     result["artifact_sha256"] = artifact["content_sha256"]
+    result["matching"] = matching
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result["pooled"]["scopes"]["choice_bearing"]["rates"]))

@@ -52,6 +52,17 @@ EXTENDED_PREDICATES = [
 ]
 
 
+# Battery vocabulary (2026-11-06, M6-MP), from the frozen eligibility equation's
+# decision-time terms (mrta_core.battery.EnergyRequirement) and the fleet's charging
+# load. Off by default, so the vocabulary M4, M5 and M6-A used stays the ablation.
+BATTERY_PREDICATES = [
+    ("best_margin_for_order", 3, "(decision,robot,order)", "(in,in,in)"),
+    ("low_energy_margin", 3, "(decision,robot,order)", "(in,in,in)"),
+    ("near_charger_after_order", 3, "(decision,robot,order)", "(in,in,in)"),
+    ("high_charging_pressure", 1, "(decision,)", "(in,)"),
+]
+
+
 def generate_bias_pl(
     include_tier_b: bool = True,
     exclude: tuple[str, ...] = (),
@@ -59,6 +70,7 @@ def generate_bias_pl(
     max_body: int = 4,
     max_clauses: int = 5,
     include_extended: bool = False,
+    include_battery: bool = False,
 ) -> str:
     """Generate validated Popper v4.4.0 bias.pl contents."""
     lines: list[str] = [
@@ -80,6 +92,8 @@ def generate_bias_pl(
         preds.extend(TIER_B_CONGESTION_PREDICATES)
     if include_extended:
         preds.extend(EXTENDED_PREDICATES)
+    if include_battery:
+        preds.extend(BATTERY_PREDICATES)
 
     for name, arity, types, dirs in preds:
         lines.append(f"body_pred({name},{arity}).")

@@ -33,6 +33,22 @@ give.
     python3 src/simulation_env/scripts/run_experiment.py --name main \\
         --robots 10 30 50 70 100 --seeds $(seq 1 30)
 
+Learned rule sets (single-teacher, pooled, panel-vote, outcome-aware)
+run in the same grid as the conventional strategies, paired on the same
+workloads:
+
+    --rules nearest_astar=runs/teachers/rules/.../rule_artifact.json \\
+            pooled=runs/teachers/rules/.../pooled/rule_artifact.json
+
+Each LABEL=ARTIFACT is its own arm, ilp_<LABEL>, with its own run
+directory, identity hash and summary.csv row key, so compare_paired.py
+treats it like any strategy. The matcher comes from the label source
+the artifact records (ilp_learning.teachers). An artifact trained on
+any seed of this experiment is refused. summary.csv records, for every
+learned run, how many picks a rule made and how many fell back
+(rule_picks, fallback_picks, fallback_rate), so a policy that only
+falls back is visible next to its result.
+
 --workloads reference runs the committed order file instead, as every
 experiment did before paired seeds: a deterministic strategy once, with
 the first seed, and only a stochastic one over every seed.
@@ -77,6 +93,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -90,7 +107,7 @@ import generate_orders
 
 ROOT = Path(__file__).resolve().parents[3]
 RUN_WORKLOAD = ROOT / "src" / "simulation_env" / "scripts" / "run_workload.py"
-PACKAGES = ("mrta_core", "simulation_env", "task_management")
+PACKAGES = ("mrta_core", "simulation_env", "task_management", "ilp_learning")
 
 for package in PACKAGES:
     if str(ROOT / "src" / package) not in sys.path:
@@ -105,8 +122,87 @@ from task_management.allocation_strategy import (  # noqa: E402
     get_batch_strategy,
     identity_sha256,
 )
+from ilp_learning.teachers import matching_for  # noqa: E402
 
 EXPERIMENT_FILE = "experiment.json"
+
+# A learned arm is ilp_<label>; the label names the rule set, not a teacher.
+RULE_LABEL = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+RULE_COLUMNS = ("rule_picks", "fallback_picks", "fallback_rate")
+
+
+def learned_arms(entries) -> dict:
+    """--rules LABEL=ARTIFACT ... -> {ilp_<label>: arm record}.
+
+    The record holds the artifact's absolute path, the matcher its label
+    source runs under, the label source itself and the seeds its
+    training runs used. Raises ValueError on a malformed entry, a
+    duplicate label, an unreadable artifact or an unknown label source.
+    """
+
+    arms = {}
+
+    for entry in entries or ():
+        label, sep, path = entry.partition("=")
+
+        if not sep or not RULE_LABEL.match(label) or not path:
+            raise ValueError(f"--rules {entry!r}: expected LABEL=ARTIFACT, label in [a-z0-9_]")
+
+        arm = f"ilp_{label}"
+
+        if arm in arms:
+            raise ValueError(f"--rules: label {label!r} given twice")
+
+        artifact = Path(path).resolve()
+
+        try:
+            record = json.loads(artifact.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(f"--rules {label}: cannot read {artifact}: {error}") from error
+
+        arms[arm] = {
+            "artifact": str(artifact),
+            "matching": matching_for(record["teacher"]),
+            "label_source": record["teacher"],
+            "training_seeds": sorted(
+                {int(run[key]) for run in record.get("source_runs", ())
+                 for key in ("seed", "workload_seed") if run.get(key) is not None}
+            ),
+        }
+
+    return arms
+
+
+def check_rule_seeds(arms, seeds) -> None:
+    """Refuse to evaluate a rule set on a workload it was trained on."""
+
+    for arm, record in arms.items():
+        leaked = sorted(set(record["training_seeds"]) & set(seeds))
+
+        if leaked:
+            raise SeedLeakageError(
+                f"{arm}: trained on seed(s) {leaked}, which this experiment evaluates on"
+            )
+
+
+def rule_control(run_dir) -> dict:
+    """How many of a learned run's picks a rule made; blank for other runs."""
+
+    trace = run_dir / "rule_trace.parquet"
+
+    if not trace.exists():
+        return dict.fromkeys(RULE_COLUMNS, "")
+
+    import pandas as pd
+
+    fallback = pd.read_parquet(trace, columns=["fallback"])["fallback"].astype(bool)
+    picks = len(fallback)
+
+    return {
+        "rule_picks": int(picks - fallback.sum()),
+        "fallback_picks": int(fallback.sum()),
+        "fallback_rate": float(fallback.mean()) if picks else "",
+    }
 
 # A strategy whose choices depend on its seed. On the reference
 # workload every other strategy is deterministic and needs one run per
@@ -226,28 +322,39 @@ def prepare(out, spec, resume, force) -> str | None:
     return None
 
 
-def strategy_identities(strategies) -> dict:
-    """strategy -> strategy_sha256, as each run's run.json will record it."""
+def strategy_identities(strategies, rules=None) -> dict:
+    """strategy or learned arm -> strategy_sha256, as each run's run.json records it."""
 
-    return {name: identity_sha256(get_batch_strategy(name).identity()) for name in strategies}
+    identities = {name: identity_sha256(get_batch_strategy(name).identity()) for name in strategies}
+
+    for arm, record in (rules or {}).items():
+        identities[arm] = identity_sha256(
+            get_batch_strategy(
+                "ilp", rule_artifact=record["artifact"], matching=record["matching"]
+            ).identity()
+        )
+
+    return identities
 
 
 def workload_command(
     run_dir, strategy, robots, seed, orders, export,
     orders_file=None, quantum=None, window=None, purpose=None, features=False,
-    teacher_panel=False,
+    teacher_panel=False, rule=None,
 ) -> list:
     """The run_workload.py command line of one run.
 
     ``quantum`` and ``window`` override the one config's dispatch
     quantum and candidate window for this experiment; None keeps the
     config's value. Either way run.json records the effective value.
+    ``rule`` is a learned arm's record (learned_arms); the run is then
+    the ilp strategy with that artifact and matcher.
     """
 
     cmd = [
         sys.executable,
         str(RUN_WORKLOAD),
-        "--strategy", strategy,
+        "--strategy", "ilp" if rule else strategy,
         "--robots", str(robots),
         "--seed", str(seed),
         "--orders", str(orders),
@@ -277,25 +384,28 @@ def workload_command(
     if teacher_panel:
         cmd.append("--teacher-panel")
 
+    if rule:
+        cmd += ["--rule-artifact", rule["artifact"], "--rule-matching", rule["matching"]]
+
     return cmd
 
 
 def run_one(
     out, strategy, robots, seed, orders, export,
     orders_file=None, quantum=None, window=None, purpose=None, features=False,
-    teacher_panel=False,
+    teacher_panel=False, rule=None,
 ):
     run_dir = run_dir_of(out, strategy, robots, seed)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = workload_command(
         run_dir, strategy, robots, seed, orders, export, orders_file, quantum, window, purpose,
-        features, teacher_panel,
+        features, teacher_panel, rule,
     )
 
     started = time.perf_counter()
 
-    # The three source packages, so the runs need no PYTHONPATH set.
+    # The source packages, so the runs need no PYTHONPATH set.
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(
         [str(ROOT / "src" / package) for package in PACKAGES]
@@ -365,6 +475,13 @@ def main() -> int:
         "to it (docs/DECISIONS.md, 'Seed Split'). Omitted: development, "
         "any seed outside the reserved final set",
     )
+    parser.add_argument(
+        "--rules",
+        nargs="+",
+        default=[],
+        metavar="LABEL=ARTIFACT",
+        help="learned rule sets to run as arms ilp_<LABEL> beside --strategies",
+    )
     parser.add_argument("--resume", action="store_true", help="run only what is missing or failed")
     parser.add_argument("--force", action="store_true", help="start again; the old directory is kept, renamed")
     args = parser.parse_args()
@@ -381,19 +498,28 @@ def main() -> int:
         except ValueError as error:
             parser.error(f"--window {args.window}: {error}")
 
+    if "ilp" in args.strategies:
+        parser.error("a learned strategy runs through --rules LABEL=ARTIFACT, not --strategies ilp")
+
+    try:
+        rules = learned_arms(args.rules)
+    except (ValueError, KeyError) as error:
+        parser.error(str(error))
+
     try:
         check_purpose(args.seeds, args.purpose)
+        check_rule_seeds(rules, args.seeds)
     except SeedLeakageError as error:
         parser.error(str(error))
 
     try:
-        identities = strategy_identities(args.strategies)
+        identities = strategy_identities(args.strategies, rules)
     except KeyError as error:
         parser.error(str(error))
 
     out = ROOT / args.out / args.name
     paired = args.workloads == "seeded"
-    grid = list(runs_for(args.strategies, args.robots, args.seeds, paired))
+    grid = list(runs_for([*args.strategies, *rules], args.robots, args.seeds, paired))
 
     # What defines the experiment; --resume must find exactly this.
     spec = {
@@ -409,6 +535,9 @@ def main() -> int:
         "features": args.features,
         "teacher_panel": args.teacher_panel,
         "strategy_sha256": identities,
+        # None without --rules, so an experiment recorded before this key
+        # existed still resumes.
+        "rules": rules or None,
     }
 
     refusal = prepare(out, spec, args.resume, args.force)
@@ -455,7 +584,7 @@ def main() -> int:
                         out, *run, args.orders, args.export, files.get(run[2]),
                         quantum=args.quantum, window=args.window,
                         purpose=args.purpose, features=args.features,
-                        teacher_panel=args.teacher_panel,
+                        teacher_panel=args.teacher_panel, rule=rules.get(run[0]),
                     ),
                     pending,
                 ),
@@ -482,6 +611,8 @@ def main() -> int:
         rows.append(
             json.loads((run_dir / "metrics.json").read_text())
             | {
+                # The arm, not "ilp": two rule sets are two strategies.
+                "strategy": run[0],
                 "workload": args.workloads,
                 "orders_sha256": manifest["orders_sha256"],
                 "line_items": manifest["line_items"],
@@ -492,6 +623,7 @@ def main() -> int:
                 "strategy_sha256": manifest.get("strategy_sha256", ""),
                 "run_dir": str(where),
             }
+            | rule_control(run_dir)
         )
 
     if rows:

@@ -19,6 +19,7 @@ from typing import Iterable, Mapping, NamedTuple, Sequence
 
 from ilp_learning.bias_templates import (
     BASE_PREDICATES,
+    BATTERY_PREDICATES,
     EXTENDED_PREDICATES,
     TIER_B_CONGESTION_PREDICATES,
 )
@@ -49,7 +50,12 @@ TIER_B_SIGNATURES: dict[str, tuple[str, ...]] = {
 EXTENDED_SIGNATURES: dict[str, tuple[str, ...]] = {
     name: _argument_kinds(types) for name, _arity, types, _directions in EXTENDED_PREDICATES
 }
-PREDICATE_SIGNATURES = {**TIER_A_SIGNATURES, **TIER_B_SIGNATURES, **EXTENDED_SIGNATURES}
+BATTERY_SIGNATURES: dict[str, tuple[str, ...]] = {
+    name: _argument_kinds(types) for name, _arity, types, _directions in BATTERY_PREDICATES
+}
+PREDICATE_SIGNATURES = {
+    **TIER_A_SIGNATURES, **TIER_B_SIGNATURES, **EXTENDED_SIGNATURES, **BATTERY_SIGNATURES
+}
 
 # Tier B predicate -> the congestion feature it reads (simulation_env.congestion).
 _LOWEST_FOR_ROBOT = {
@@ -72,6 +78,8 @@ TIER_B_FEATURES = tuple(sorted(set(TIER_B_SOURCE.values())))
 
 # What a decision knows about the fleet: WorkloadExecutor.decision_load.
 LOAD_FIELDS = ("free_robots", "window_orders", "pending_orders", "robots_busy", "robots_charging")
+# What a pair knows about energy: mrta_core.battery.EnergyRequirement, as recorded.
+BATTERY_FIELDS = ("energy_margin_percent", "predicted_charger_distance_m")
 
 _UNKNOWN = float("nan")
 
@@ -100,6 +108,9 @@ class CandidatePair(NamedTuple):
     pending_orders: float = _UNKNOWN
     robots_busy: float = _UNKNOWN
     robots_charging: float = _UNKNOWN
+    # Battery vocabulary only.
+    energy_margin_percent: float = _UNKNOWN
+    predicted_charger_distance_m: float = _UNKNOWN
 
 
 def _levels(values: Iterable[tuple[float, str]]) -> list[list[str]]:
@@ -239,6 +250,12 @@ def queue_pressure(load) -> float:
     return load.pending_orders / max(1, fleet)
 
 
+def charging_share(load) -> float:
+    """Share of the fleet in the charging workflow (robots_charging, fixed 2026-11-06)."""
+    fleet = load.free_robots + load.robots_busy + load.robots_charging
+    return load.robots_charging / max(1, fleet)
+
+
 class DecisionFacts(TierAFacts):
     """Tier A, Tier B and extended relations of one pair set.
 
@@ -251,6 +268,10 @@ class DecisionFacts(TierAFacts):
         self.thresholds = thresholds
 
     def relation(self, name: str) -> frozenset[tuple[str, ...]]:
+        if name in BATTERY_SIGNATURES:
+            if name not in self._relations:
+                self._relations[name] = frozenset(self._battery_fact(name))
+            return self._relations[name]
         if name in EXTENDED_SIGNATURES:
             if name not in self._relations:
                 self._build_extended(name)
@@ -323,6 +344,38 @@ class DecisionFacts(TierAFacts):
         else:
             holds = self._band("queue_pressure", queue_pressure(load)) == "high"
         return {()} if holds else set()
+
+    def _battery_fact(self, name: str) -> set[tuple]:
+        """Battery relations: energy margin, charger leg, and the fleet's charging load."""
+        if name == "high_charging_pressure":
+            known = self._known("robots_charging")
+            if not known:
+                return set()
+            share = charging_share(known[0])
+            # No robot charging is never pressure, whatever the fitted cutoff is.
+            return {()} if share > 0 and self._band("charging_share", share) == "high" else set()
+        if name == "best_margin_for_order":
+            known = self._known("energy_margin_percent")
+            highest: dict[str, float] = {}
+            for p in known:
+                highest[p.order_id] = max(p.energy_margin_percent, highest.get(p.order_id, p.energy_margin_percent))
+            return {
+                (p.robot_id, p.order_id) for p in known
+                if p.energy_margin_percent >= highest[p.order_id] - TIE_TOLERANCE
+            }
+        feature, cutoff = {
+            "low_energy_margin": ("energy_margin_percent", "energy_margin"),
+            "near_charger_after_order": ("predicted_charger_distance_m", "charger_distance"),
+        }[name]
+        # Tie-inclusive, as the class promises: distances are discrete, and a quartile
+        # that falls on a mass point must not leave the band empty.
+        if self.thresholds is None:
+            raise MissingCongestionData(f"{cutoff} needs the training thresholds")
+        bound = float(self.thresholds.cutoffs[cutoff][0]) + TIE_TOLERANCE
+        return {
+            (p.robot_id, p.order_id) for p in self._known(feature)
+            if getattr(p, feature) <= bound
+        }
 
     def _known(self, feature: str) -> list[CandidatePair]:
         known = [p for p in self.pairs if getattr(p, feature) == getattr(p, feature)]

@@ -1802,3 +1802,149 @@ Approved by the researcher after the exploratory M4 results (`.scratch/m4-single
 ```
 
 M4, M5 and M6 share one state pool, `bk.pl`, `bias.pl`, thresholds and matcher, and differ in labels only. Labels come from the teacher panel on `nearest_astar` states.
+
+## M6 Outcome Label Rules (2026-11-06)
+
+Specified by the researcher in the M6-1 and M6-2 task briefs. The scoring contract (M1 record item 2) is unchanged.
+
+```text
+1. Branches:  the teacher's pivot pair and its tested alternatives are scored alike;
+              which branch was the teacher's never enters the label.
+2. Positive:  the unique best completed branch, at least delta = 2.0 s better in J than
+              the second best completed branch.
+3. Negative:  a completed branch at least delta worse than the best completed branch,
+              also when there is no unique winner.
+4. Abstain:   everything else; untested pairs are never examples.
+5. Censoring: stalled branches (failed) and branches whose window or pivot mission is
+              not done inside H (censored) are never examples.
+6. Primary mode "conservative": no positive at a decision where any branch is censored
+              or failed. Sensitivity mode "m6_1": the M6-1 rule, positive among the
+              completed branches regardless.
+7. States:    M6-A probes the M4/M5 corpus decisions, replayed and proven identical, so
+              M4, M5 and M6-A share bk.pl, bias.pl and thresholds byte for byte.
+8. Seeds:     rollouts and labels refuse any run outside 104-110.
+```
+
+Remaining bias (state distribution, pivot-only action sampling, nearest_astar continuation, censoring) and the M6-B / M6-C designs: `.scratch/m6-outcome-aware/design.md`.
+
+## M6-MP Objective and Continuation Decisions (2026-11-06)
+
+Decided by the researcher during M6-MP. M6-A and its frozen M1 J are unchanged.
+
+```text
+1. Multi-pair arm (mp1): candidates span robots and orders at one recorded state
+   (behaviour pair, panel proposals, alternative robot and order, one seeded random
+   control), each forced by rollout.ForcedPair; probed decisions come from a stratified
+   sample (charging, low battery, congestion, waiting, normal, random control).
+2. Objective jw1 (fixed evaluated order set) REJECTED: best branch disagreed with the
+   whole-window sum in 4 of 6 pilot decisions; orders outside the set moved by up to
+   2,706 s.
+3. Objective jw2 ADOPTED as the proposed primary for mp1: whole-window total order flow
+   time + 0.5 x fleet waiting over 120 s, the window fixed at the decision and identical
+   in every branch; delta 2.0 s; conservative mode. Validated on 24 decisions (70 and
+   100 robots): 0 censored, labels stable for lambda 0-1 (agreement 0.94-1.00).
+4. Battery vocabulary (best_margin_for_order, low_energy_margin,
+   near_charger_after_order, high_charging_pressure) available to M4, M5 and M6 alike
+   (--battery); the vocabulary without it is the ablation.
+5. P0, continuation-policy dependence: candidates are continued by nearest_astar,
+   multi_criteria and auction; a label is given only when every policy agrees
+   (cross_policy_labels). The HPC campaign waits for the cross-policy pilot.
+6. Stage 2 (later): ILP self-refinement, outcomes collected with the learned policy
+   continuing, then retraining.
+```
+
+Evidence: `.scratch/m6-outcome-aware/design.md`; pilot outputs under `runs/m6mp_pilot/`.
+
+## Research Architecture: Four Groups (2026-11-07)
+
+Decided by the researcher. Previous artifacts (M3, M4, M5, M6-A, M6-MP, the cross-policy
+pilot) are kept as they are.
+
+```text
+A. Conventional baselines   all eight strategies run independently and are recorded
+B. Single-teacher ILP       one Popper policy per strategy, from that strategy's own runs
+                            and picks; compared with its own teacher
+C. Multi-teacher ILP        pooled demonstrations (runs of several strategies, each
+                            labelled by its own picks, no agreement required) and the
+                            existing panel votes (M5)
+D. Outcome-aware ILP        labels from measured counterfactual outcomes (jw2, mp1)
+Workloads    W100; 70, 80, 90, 100 robots; 300 orders (normal), 2,000 (main, battery and
+             charging), 10,000 and 20,000 later for long-duration validation
+Seeds        104-110 training, 116-120 validation, 201-230 sealed final test
+Cross-policy agreement is a sensitivity experiment, not a training requirement.
+```
+
+Matching per teacher (ilp_learning/teachers.py): iterative for nearest_astar,
+earliest_finish, auction and multi_criteria and M-Card for hungarian and milp, as the M3
+amendment states; iterative for random and nearest_manhattan by the same rule (one greedy
+sweep), to be confirmed by the researcher.
+
+## M6 Continuation and Per-Teacher Outcome Supervision (2026-11-07)
+
+Decided by the researcher. Amends M6-MP item 5: cross-policy agreement is no longer
+required for a label. M3-M6 artifacts and the cross-policy pilot are kept as they are.
+
+```text
+1. Baseline:     nearest_astar continuation for the initial M6 outcome-aware baseline
+                 only (train_rules --continuation nearest_astar).
+2. Per teacher:  each strategy generates its own states (its own corpus runs);
+                 alternative assignments are forced from the identical replayed state;
+                 the generating strategy continues every branch (m6_rollouts default;
+                 train_rules --continuation behaviour).
+3. Pooled:       outcome labels from those individually labelled datasets
+                 (--pooled --continuation behaviour). No teacher agreement required;
+                 every label is relative within one recorded state, so no raw score is
+                 compared across unrelated states. The pool block keeps provenance.
+4. Sensitivity:  cross-policy continuation (several policies, label only on agreement)
+                 stays available: multi-policy rollouts without --continuation.
+5. Seeds:        validation is 116-120 (--purpose backup); 111-115 stay spent by M3;
+                 201-230 stay sealed.
+```
+
+## Campaign Decisions Before the 300-Order Run (2026-11-07)
+
+Decided by the researcher before any campaign result exists.
+
+```text
+ 1. Freeze:       review, keep GUI work out, test and commit a reproducible research
+                  version before the campaign.
+ 2. Matching:     random and nearest_manhattan rules run iterative (confirmed).
+ 3. Primary D:    pooled per-teacher outcome learning (--pooled --continuation
+                  behaviour). nearest_astar continuation stays a controlled baseline.
+ 4. Probing:      48 decisions per run (QUOTA=8 x 6 strata); measure the usable label
+                  yield before deciding whether 2,000 orders need more.
+ 5. States:       matched training states (MATCHED=1, the probed decisions) primary;
+                  all available decisions secondary.
+ 6. 2,000 orders: only after 300-order training gives usable rules.
+ 7. Metric:       order_makespan_s primary (mission-time hypothesis); mean order flow
+                  time, waiting and charging reported separately.
+ 8. Fallback:     a policy with fallback_rate > 0.5 is flagged; its results are kept,
+                  but its performance is not attributed mainly to learned rules.
+ 9. Experiments:  both. A (train 70-100) first, then B (train 70-90, test at 100).
+10. Refinement:   ILP self-refinement secondary, only if time permits.
+11. Workloads:    spatial hotspot workloads first (needed for grid-awareness claims);
+                  10,000 orders optional robustness; 20,000 and held-out maps future.
+12. Popper:       300 s limit kept; measure timeouts before choosing a larger budget,
+                  which would then be identical for every compared method.
+```
+
+Gate before full evaluation (Problem A): an outcome-aware artifact counts as learned
+only if it has a nonempty program, its rules fire in closed loop, and its coverage is
+meaningful (fallback_rate <= 0.5).
+
+Measurement intervals (Problem B). They are not the same interval:
+
+```text
+M6-A frozen J   pivot_mission_s + 0.5 x fleet waiting, waiting over (t_d, t_d + 120 s]
+jw2 (mp1)       sum over the decision's window orders of (completed_at - t_d)
+                + 0.5 x fleet waiting over (t_d, t_d + 120 s].
+                A branch runs until 120 s have passed AND every window order is done
+                (rollout.horizon_stop), so the flow term can extend well past 120 s
+                and its end differs per branch; only the waiting term is fixed at 120 s.
+                completion="horizon" (sensitivity) censors any window order done
+                after t_d + 120 s.
+```
+
+Execution order: commit; 300-order teacher corpus; single- and multi-teacher training
+(check clauses, fidelity, fallback); outcome labels (check positives and rule
+learning); first closed-loop comparison. Cluster-scale training is decided after that.

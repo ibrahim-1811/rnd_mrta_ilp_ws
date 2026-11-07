@@ -35,6 +35,8 @@ What a rollout measures, from t_k (the decision time) on:
                       a wait still in progress at that tick is not yet
                       counted.
     pivot_mission_s   the forced pair's own mission time
+    pivot_done_s      t_k to the forced pair's retreat (M6 censoring)
+    rollout_status    "complete", or "stalled" when the branch stalled
     order_makespan_s  only when the rollout runs to the end (no horizon)
 """
 
@@ -45,7 +47,7 @@ from simulation_env.workload_executor import (
     PerfBudget,
     WorkloadStalledError,
 )
-from task_management.allocation_strategy import OrderAssignment
+from task_management.allocation_strategy import OrderAssignment, get_batch_strategy
 
 
 class _Stop(Exception):
@@ -222,6 +224,9 @@ def measure(executor, forced, horizon_s) -> dict:
         "pivot_mission_s": (
             pivot["retreat_finished_at"] - pivot["launched_at"] if pivot else float("nan")
         ),
+        # Decision to the pivot's retreat: M6 censors a branch whose pivot
+        # mission is not done inside H (DECISIONS.md, M1 record item 2).
+        "pivot_done_s": pivot["retreat_finished_at"] - t if pivot else float("nan"),
         "stopped_at_s": float(executor.engine.time),
     }
 
@@ -259,19 +264,26 @@ def branch(base, decision_id, alternative, horizon_s):
     forced = ForcedDecision(rollout.allocator, rollout, decision_id, alternative)
     rollout.allocator = forced
 
-    resume(rollout, None if horizon_s is None else horizon_stop(forced, horizon_s))
+    # A stalled branch is recorded as one, not allowed to end the probe:
+    # M6 must see it to exclude it (M1 record item 2, censoring).
+    status = "complete"
+    try:
+        resume(rollout, None if horizon_s is None else horizon_stop(forced, horizon_s))
+    except WorkloadStalledError:
+        status = "stalled"
 
     if forced.decided is None:
         return None
 
     measures = measure(rollout, forced, horizon_s or float("inf"))
+    measures["rollout_status"] = status
     measures["copy_s"] = copy_s
     measures["wall_s"] = time.perf_counter() - started
 
     return measures, forced.decided
 
 
-def decision_ticks(build):
+def decision_ticks(build, progress=None):
     """Pass 1: run once, and say in which tick each decision was made.
 
     Returns (executor after the run, {decision_id: tick}). Decision 0 is
@@ -287,6 +299,8 @@ def decision_ticks(build):
         ticks["n"] += 1
         for decision_id in range(len(made_in) + 1, executor.result.decisions):
             made_in[decision_id] = ticks["n"]
+        if progress is not None:
+            progress(executor)
 
     executor._external_tick = tick
     executor.run()
@@ -379,6 +393,246 @@ def probe(build, decision_ids, made_in, *, alternatives=3, horizon_s=120.0, veri
                         **measures,
                     }
                 )
+
+    executor._external_tick = tick
+    executor.run()
+
+    return rows, checks
+
+
+# ---- M6 multi-pair arm (candidate set "mp1"): force any eligible pair -------------
+#
+# ForcedDecision (M6-A) varies one robot's order. ForcedPair forces one eligible
+# (robot, order) pair of the decision, whichever robot and order it names, and
+# keeps the rest of the strategy's answer as far as a 1-to-1 assignment allows:
+#
+#     the strategy's pair of that robot and its pair of that order are taken out;
+#     the forced pair goes in; the two displaced partners are paired with each
+#     other when that pair is eligible (a swap, so the decision assigns as many
+#     pairs as before), and left for a later decision otherwise.
+#
+# Every later decision is the wrapped strategy's own, unless a continuation policy is
+# given: then decisions before and at the forced one stay the behaviour policy's (the
+# shared past and the identical forced action), and every decision after it is the
+# continuation's. score() is one shared implementation, so feasibility, costs and
+# the executor's re-checks do not depend on which policy continues. Branch rows record
+# the completion time of every window order, so an objective over a common set of
+# orders can be computed afterwards without re-running anything.
+
+
+class ForcedPair:
+    """The wrapped strategy, except that at one decision it assigns one given pair."""
+
+    def __init__(self, inner, executor, decision_id, robot_id, order_id, continuation=None):
+        self.inner = inner
+        self.executor = executor
+        self.decision_id = decision_id
+        self.robot_id = robot_id
+        self.order_id = order_id
+        self.continuation = continuation
+        self.decided = None
+        bind = getattr(continuation, "bind_executor", None)
+        if bind is not None:
+            bind(executor)
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    def assign(self, warehouse, robots, orders, fifo_position, cache=None, battery=None, timing=None):
+        current = self.executor.result.decisions - 1
+        if self.continuation is not None and current > self.decision_id:
+            return self.continuation.assign(
+                warehouse, robots, orders, fifo_position, cache, battery=battery, timing=timing
+            )
+
+        chosen = self.inner.assign(
+            warehouse, robots, orders, fifo_position, cache, battery=battery, timing=timing
+        )
+
+        if current != self.decision_id:
+            return chosen
+
+        scored = {
+            (c.robot_id, c.order_id): c
+            for c in self.inner.score(warehouse, robots, orders, fifo_position, cache, battery=battery)
+            if c.eligible
+        }
+
+        def finish(pair):
+            candidate = scored.get(pair)
+            return timing.finish_s(candidate) if candidate is not None else float("nan")
+
+        by_robot = {a.robot_id: a for a in chosen}
+        by_order = {a.order_id: a for a in chosen}
+        decision = {
+            "t": float(self.executor.engine.time),
+            "waiting_at_decision": _fleet_waiting(self.executor),
+            "window": tuple(order.order_id for order in orders),
+            "forced_robot": self.robot_id,
+            "forced_order": self.order_id,
+            "pivot_robot": self.robot_id,
+            "order": self.order_id,
+            "pairs_before": len(chosen),
+            "est_s": finish((self.robot_id, self.order_id)),
+        }
+
+        own = by_robot.get(self.robot_id)
+        holder = by_order.get(self.order_id)
+        decision["robot_had_order"] = own.order_id if own else ""
+        decision["order_had_robot"] = holder.robot_id if holder else ""
+
+        if (self.robot_id, self.order_id) not in scored:
+            # Not an eligible candidate of this decision: never forced.
+            decision["forced"] = "ineligible"
+            decision["pairs_after"] = len(chosen)
+            self.decided = decision
+            return chosen
+
+        if own is not None and own.order_id == self.order_id:
+            decision["forced"] = "strategy_pair"
+            decision["swap"] = ""
+            decision["pairs_after"] = len(chosen)
+            self.decided = decision
+            return chosen
+
+        kept = [a for a in chosen if a.robot_id != self.robot_id and a.order_id != self.order_id]
+        picked = [self._assignment(scored[(self.robot_id, self.order_id)])]
+        swap = ""
+        if own is not None and holder is not None:
+            partner = scored.get((holder.robot_id, own.order_id))
+            if partner is not None:
+                picked.append(self._assignment(partner))
+                swap = f"{holder.robot_id}:{own.order_id}"
+
+        decision["forced"] = "forced"
+        decision["swap"] = swap
+        decision["pairs_after"] = len(kept) + len(picked)
+        self.decided = decision
+        return sorted([*kept, *picked], key=lambda a: fifo_position[a.order_id])
+
+    @staticmethod
+    def _assignment(candidate):
+        return OrderAssignment(
+            robot_id=candidate.robot_id,
+            order_id=candidate.order_id,
+            cost=candidate.cost,
+            route=candidate.route,
+            energy=candidate.energy,
+        )
+
+
+def window_completion(executor, decided) -> dict:
+    """order_id -> completed_at - t for every window order completed in the branch."""
+    t = decided["t"]
+    done = {row["order_id"]: row["completed_at"] for row in executor.recorder.outcomes}
+    return {o: float(done[o]) - t for o in decided["window"] if o in done}
+
+
+def continuation_policy(name, seed):
+    """A fresh strategy instance to continue a branch with (None: the behaviour's own)."""
+    return None if name is None else get_batch_strategy(name, seed=seed)
+
+
+def branch_pair(base, decision_id, robot_id, order_id, horizon_s, continuation=None, seed=None):
+    """One ForcedPair rollout from a clone; returns (measures, decision) or None.
+
+    continuation names the policy for every decision after the forced one; None keeps
+    the behaviour policy, exactly as before.
+    """
+
+    started = time.perf_counter()
+    rollout = clone(base, rows=False)
+    copy_s = time.perf_counter() - started
+
+    forced = ForcedPair(
+        rollout.allocator, rollout, decision_id, robot_id, order_id,
+        continuation=continuation_policy(continuation, seed),
+    )
+    rollout.allocator = forced
+
+    status = "complete"
+    try:
+        resume(rollout, None if horizon_s is None else horizon_stop(forced, horizon_s))
+    except WorkloadStalledError:
+        status = "stalled"
+
+    if forced.decided is None:
+        return None
+
+    measures = measure(rollout, forced, horizon_s or float("inf"))
+    measures["rollout_status"] = status
+    measures["window_completion_s"] = window_completion(rollout, forced.decided)
+    measures["copy_s"] = copy_s
+    measures["wall_s"] = time.perf_counter() - started
+    return measures, forced.decided
+
+
+def probe_pairs(build, plan, made_in, *, horizon_s=120.0, verify=1, baseline=None,
+                continuations=(None,), seed=None, on_branch=None, on_stage=None):
+    """Pass 2 for the multi-pair arm: plan is {decision_id: [(robot_id, order_id, extra)]}.
+
+    extra is a dict copied into the row (candidate provenance). One branch per planned
+    pair and continuation policy, every branch from the same clone of the same state.
+    continuations: policy names; None is the behaviour policy itself (rows say which).
+    on_branch(done, total, row) and on_stage(text) report progress; neither changes a result.
+    """
+
+    wanted = {}
+    for decision_id in plan:
+        if decision_id in made_in and made_in[decision_id] > 1:
+            wanted.setdefault(made_in[decision_id] - 1, []).append(decision_id)
+
+    executor = build()
+    ticks = {"n": 0}
+    rows, checks = [], []
+    total = sum(len(plan[d]) for ds in wanted.values() for d in ds) * len(continuations)
+
+    def tick(sim_time, batch):
+        ticks["n"] += 1
+
+        if ticks["n"] not in wanted:
+            return
+
+        if baseline is not None and len(checks) < verify:
+            if on_stage is not None:
+                on_stage("clone check: running an untouched copy to the end of the workload")
+            whole = clone(executor)
+            resume(whole)
+            checks.append(
+                {
+                    "tick": ticks["n"],
+                    "identical": tables(whole) == baseline,
+                    "decisions": len(whole.recorder.decisions),
+                    "outcomes": len(whole.recorder.outcomes),
+                }
+            )
+
+        base = clone(executor, rows=False)
+        for decision_id in wanted[ticks["n"]]:
+            for robot_id, order_id, extra in plan[decision_id]:
+                for policy in continuations:
+                    result = branch_pair(
+                        base, decision_id, robot_id, order_id, horizon_s, continuation=policy, seed=seed
+                    )
+                    if result is None:
+                        continue
+                    measures, decided = result
+                    if on_branch is not None:
+                        on_branch(len(rows) + 1, total, {
+                            "decision_id": decision_id,
+                            "continuation": policy or getattr(executor.allocator, "name", "behaviour"),
+                            **extra, **decided, **measures,
+                        })
+                    rows.append(
+                        {
+                            "decision_id": decision_id,
+                            "continuation": policy or getattr(executor.allocator, "name", "behaviour"),
+                            **extra,
+                            **{k: v for k, v in decided.items()
+                               if k not in ("window", "waiting_at_decision", "waiting_at_horizon")},
+                            **measures,
+                        }
+                    )
 
     executor._external_tick = tick
     executor.run()

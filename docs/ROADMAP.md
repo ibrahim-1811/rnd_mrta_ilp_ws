@@ -1,5 +1,7 @@
 # Phasewise Development Roadmap
 
+> **6 November 2026:** M4 and M5 built (exploratory); M6 in progress: outcome labels from counterfactual rollouts (objective jw2 for the multi-pair arm), battery predicates, stratified sampling and multi-policy continuation built; cross-policy pilot running; HPC campaign not started. See CURRENT_PHASE.md and DECISIONS.md, "M6-MP Objective and Continuation Decisions".
+>
 > **Updated 31 October 2026.** Current measured status: [CURRENT_PHASE.md](CURRENT_PHASE.md). Demo commands: [PROJECT_HANDOVER.md](PROJECT_HANDOVER.md). M0 and M1 are closed; M2 is corrected; M3 validation ran once from `m3-evidence-1`, with mixed gates recorded in CURRENT_PHASE.md; online congestion predicates come next, then M4, M5 and M6. Earlier phase text below is a dated development record, not a new completion claim.
 
 ## Milestone plan to 20 December 2026

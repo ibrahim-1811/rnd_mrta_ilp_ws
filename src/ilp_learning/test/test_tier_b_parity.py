@@ -11,10 +11,11 @@ import pandas as pd
 import pytest
 
 from .conftest import ACCEPTANCE_RUN, artifact_content, read_manifest, run_workload
-from ilp_learning.bias_templates import TIER_B_CONGESTION_PREDICATES
+from ilp_learning.bias_templates import BATTERY_PREDICATES, TIER_B_CONGESTION_PREDICATES
 from ilp_learning.bk_builder import BKBuilder, candidate_pairs, derive_est_finish_s
 from ilp_learning.matcher import BatchMatcher
 from ilp_learning.predicates import (
+    BATTERY_SIGNATURES,
     EXTENDED_SIGNATURES,
     PREDICATE_SIGNATURES,
     TIER_A_SIGNATURES,
@@ -86,8 +87,9 @@ PAIRS = [
 def test_vocabulary_is_the_bias():
     assert set(TIER_B_SIGNATURES) == {name for name, *_ in TIER_B_CONGESTION_PREDICATES}
     assert PREDICATE_SIGNATURES == {
-        **TIER_A_SIGNATURES, **TIER_B_SIGNATURES, **EXTENDED_SIGNATURES,
+        **TIER_A_SIGNATURES, **TIER_B_SIGNATURES, **EXTENDED_SIGNATURES, **BATTERY_SIGNATURES,
     }
+    assert set(BATTERY_SIGNATURES) == {name for name, *_ in BATTERY_PREDICATES}
 
 
 @pytest.mark.parametrize(

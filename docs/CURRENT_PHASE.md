@@ -1,8 +1,159 @@
 # Current Development Phase
 
+## Status — 6 November 2026
+
+Active milestone: **M6 Outcome-Aware ILP**, chosen by the researcher on 2026-11-06. Deadline 2026-12-20.
+
+| Milestone | State |
+|---|---|
+| M0-M2 | done, committed |
+| M3 | built; validated once from tag `m3-evidence-1` with mixed gates ([validation_gates.md](../.scratch/m3-popper-learner/validation_gates.md)) |
+| Tier B online | done, committed `56f495f` |
+| M4 Single-Teacher | built, committed; exploratory on training seeds only; no gate run; validation seeds 116-120 unused |
+| M5 Multi-Teacher | built (majority, plurality), committed `9757d28`; exploratory only; no gate run |
+| M6 Outcome-Aware | M6-1, M6-2 and M6-MP built and tested, uncommitted: corpus-aligned rollouts, multi-pair candidates, jw2 objective (validated on 24 decisions), battery predicates, stratified sampling, multi-policy continuation with cross-policy labels, Slurm workflow (not submitted). Cross-policy pilot (2026-11-07): 0 positives at 70 and 100 robots; best candidate agrees across the three continuation policies in 1 of 12 decisions; gate not passed; resolved 2026-11-07: agreement is a sensitivity experiment, primary D is pooled per-teacher outcome learning (`--continuation behaviour`), `nearest_astar` continuation a controlled baseline. Groups A-D pipeline smoke-tested end to end. No outcome-aware rule learned yet |
+| M7 explanations | not built; rule trace exists |
+| M8 statistics | Friedman, Wilcoxon, Holm not implemented (F9) |
+| M9 report | not started |
+
+Next (2026-11-07, DECISIONS.md "Campaign Decisions Before the 300-Order Run"): commit the research version without the GUI work, then the 300-order teacher corpus, single- and multi-teacher training, outcome labels, and a first closed-loop comparison. Cluster-scale training is decided after that.
+
+### Dashboard control plane — 6 November 2026 (uncommitted)
+
+`src/dashboard_GUI` is now present in this research worktree and aligned with
+the current runners. It controls observed/CLI single runs, purpose-aware
+experiment matrices, logs, artifacts, metrics and paired-performance views.
+It also supervises the fixed W100 `warehouse_sim.launch.py` ROS/Gazebo path
+through `simulation_env.fleet_node`; Gazebo remains a mirror and does not add a
+planner, allocator or traffic policy. Launch is preview-gated, loopback-only,
+single-active-job, and cancellation targets only the owned process group.
+
+Measured acceptance: dashboard backend **173 passed** (one dependency
+deprecation warning), frontend **27 passed**, TypeScript/Vite production build
+passed, tiny observed/CLI parity had **56 deterministic metric keys equal** with
+real HTTP/WebSocket startup and shutdown, full research suite **991 passed in
+197.48 s**, and `pixi run lint-src` passed. The ROS packages required by the
+mirror build successfully in this checkout and the read-only launcher preflight
+finds ROS Jazzy plus `install/setup.bash`. No uncontrolled graphical Gazebo
+session or large experiment was launched during acceptance.
+
+| Check, HEAD `9757d28` | Measured 2026-11-06 |
+|---|---|
+| `pixi run test` | 917 passed in 176.88 s |
+| `pixi run lint-src` | all checks passed |
+
+### M6-1: outcome labels and cost profile (2026-11-06, uncommitted)
+
+`ilp_learning/supervision/outcome_aware.py` turns rollout J scores into labels under the frozen contract (H=120 s, lambda=0.5, delta=2 s). The unique best branch is positive if it beats the second best by at least delta. A branch at least delta worse than the best is negative; this includes the teacher's own pair. Everything else abstains, and stalled or unfinished branches are excluded. Only induction runs (104-110) with a verified clone are read. `rollout.py` now also records `pivot_done_s` and `rollout_status` (a stalled branch is recorded, not fatal); J is unchanged. Not yet wired into `train_rules`. Profile: `python -m ilp_learning.m6_profile --out runs/m6_profile`.
+
+| nearest_astar, q3, seed 104, 300 orders, 20 probed decisions | 70 robots | 100 robots |
+|---|---|---|
+| mean / max wall per branch | 3.71 / 6.51 s | 4.31 / 7.00 s |
+| probe wall per branch (pass 1, clone check, copies) | 4.27 s | 5.03 s |
+| pos / neg / abstain / excluded branches | 18 / 55 / 4 / 3 | 17 / 50 / 4 / 9 |
+| decisions with an example | 19 / 20 | 19 / 20 |
+| coverage, probed / choice-bearing | 20 / 70 | 20 / 47 |
+| teacher pair labelled negative | 12 / 20 | 13 / 20 |
+| labels SHA-256, reproduced | `19f8825b…` | `d8127cf2…` |
+
+Tests: `test_outcome_aware.py` 37 passed; ILP and M1 rollout suites 348 passed; `ruff check src` clean. One seed: not evidence for H1 or H2.
+
+### M6-2: outcome supervision in train_rules, on the M4/M5 corpus states (2026-11-06, uncommitted)
+
+`ilp_learning/m6_rollouts.py` replays each `runs/m4_corpus` run from its manifest and refuses to probe unless the replayed decision table equals the corpus in every column but `run_id`. `train_rules --outcome-rollouts DIR [--outcome-mode conservative|m6_1]` takes every example from rollout labels and writes `outcome_labels.csv` with provenance. bk.pl, bias.pl and thresholds come from the unchanged code path. Label rules: DECISIONS.md, "M6 Outcome Label Rules". Bias and the M6-B/M6-C designs: [.scratch/m6-outcome-aware/design.md](../.scratch/m6-outcome-aware/design.md).
+
+| Smoke, seed 104, 2 probed decisions per fleet size | 70 robots | 100 robots |
+|---|---|---|
+| replay vs corpus, 38 columns | identical (18,676 rows) | identical |
+| clone check | passed | passed |
+| conservative: pos / neg / abstain / excluded (censored) | 1 / 3 / 2 / 2 (2) | 1 / 5 / 1 / 1 (1) |
+| m6_1: pos / neg / abstain / excluded | 1 / 3 / 2 / 2 | 2 / 5 / 0 / 1 |
+| bk.pl, bias.pl, thresholds vs M4 `_eb` and M5 majority | identical | identical |
+| learned clauses (1 positive) | 0 | 0 |
+
+Closed loop with the 70-robot artifact, dev seed 42, 60 orders: 60/60 completed, rule_trace 0 rule picks and 60 fallback picks, as an empty program must give. Tests: 976 passed (`pixi run test`), `ruff check src` clean.
+
+Full corpus (the researcher runs it; estimated 4 h on one core from the M6-1 profile, run in parallel):
+
+```bash
+export PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management:src/ilp_learning
+ls -d runs/m4_corpus/q3/nearest_astar/r{70,100}_s1* | xargs -P 6 -I{} \
+  pixi run python -m ilp_learning.m6_rollouts {} --out runs/m6_rollouts/q3
+for r in 70 100; do for mode in conservative m6_1; do
+  pixi run python -m ilp_learning.train_rules runs/m4_corpus/q3/nearest_astar/r${r}_s1* \
+    --out runs/m6_rules/r${r}_eb_${mode} --extended --tier-b \
+    --outcome-rollouts runs/m6_rollouts/q3 --outcome-mode $mode
+done; done
+```
+
+### 2000-order battery check (2026-11-06, exploratory, seed 104, q3)
+
+`runs/m6_orders2000`: nearest_astar with features and teacher panel, then `m6_rollouts --limit 4`. Not training data.
+
+| | 70 robots | 100 robots |
+|---|---|---|
+| orders completed / makespan | 2000 / 2810 s | 2000 / 2302 s |
+| charge sessions / min SOC / charger wait | 91 / 5.7% / 5661 s | 99 / 5.4% / 1439 s |
+| battery-ineligible candidate pairs | 12.8% | 11.5% |
+| replay identical / clone check | yes / yes | yes / yes |
+| mean / max wall per branch | 54 / 94 s | 102 / 166 s |
+| conservative pos / neg / abstain / excluded (censored) | 4 / 12 / 0 / 0 | 1 / 6 / 3 / 6 (6) |
+
+At 100 robots, the decision with battery-blocked pairs (decision 328, 100 ineligible pairs) had 3 of 4 branches censored.
+
+Defect found (fixed 2026-11-06, see below): `robots_charging` (`workload_executor.decision_load`) is `len(self.charge)`. Finished trips are never removed from `self.charge`, so it counts robots that have ever charged, not robots charging now. It feeds `busy_ratio` and `queue_pressure`, and so `high_fleet_busy_ratio` and `high_queue_pressure`. It is 0 in every 300-order run, so M3-M6 results so far are unaffected. It must be fixed before any training on runs where charging happens.
+
+### robots_charging fix and multi-pair prototype (2026-11-06, uncommitted)
+
+`decision_load()["robots_charging"]` now counts charge records in `BUSY_STATES` (in the charging workflow, never offered an order) instead of `len(self.charge)`. Read only by the dataset recorder and the ILP strategy's load facts. Replays against recorded runs: 300 orders r70_s104 identical in every decision and outcome column; 2000 orders r70_s104 differs in `robots_charging` only, outcomes identical, and `free + busy + charging = 70` at every decision. The 2000-order run shows a synchronized charging wave: 69 of 70 robots in the workflow at t = 1374 s with 914 orders pending. Recorded 2000-order datasets keep the old value.
+
+Multi-pair arm `mp1` (`ilp_learning/m6_candidates.py`, `rollout.ForcedPair`, `m6_rollouts --arm mp1`): forces any eligible pair, records every window order's completion. Data only: the frozen J is not comparable across orders, so `outcome_aware` refuses mp1 rollouts until an objective is approved. Analysis and proposed J_W: `.scratch/m6-outcome-aware/design.md`, "M6-MP".
+
+Tests: `pixi run test` 991 passed. The dashboard is now the active control-plane
+work in this worktree; after mechanical formatting, `pixi run lint-src` is clean
+for all of `src`.
+
+### M6-MP: battery vocabulary, sampling, jw1 objective and pilot (2026-11-06, uncommitted)
+
+Built: battery predicates `best_margin_for_order`, `low_energy_margin`, `near_charger_after_order`, `high_charging_pressure` (`train_rules --battery`, off by default, same switch for M4/M5/M6); stratified decision sampling (`ilp_learning/m6_sampling.py`, `m6_rollouts --sample stratified --quota K --shard I/N`); matched training states (`train_rules --decisions-from DIR`); objective jw1 (`supervision/outcome_common.py`); Slurm arrays (`scripts/slurm/`, not submitted).
+
+Pilot `runs/m6mp_pilot`, 70 robots, 2000 orders, seed 104, fixed-code corpus: replay identical, clone verified, 6 sampled decisions (one per stratum + random control), 30 branches, 0 failed or unavailable. Wall time: replay 112 s, rollouts 1,794 s (mean 51.9 s per branch, max 100.6 s). jw1: 6 pos / 20 neg / 0 abstain / 4 duplicate. Completion rule "horizon" (every evaluated order done within 120 s) censors 30 of 30 branches.
+
+**Blocker:** J_W over the fixed set A(d) disagrees with the whole-window completion sum on the best branch in 4 of 6 decisions (Spearman -0.68 to 0.90); orders outside A(d) move by up to 2,706 s. jw1 does not fairly compare candidate assignments. Details: `.scratch/m6-outcome-aware/design.md`, "jw1 pilot result". M4 and M5 on the same 6 decisions with the battery vocabulary: bk.pl, bias.pl, thresholds identical.
+
+Tests: `pixi run test` 1010 passed before the last predicate fix; ILP suite + charging tests 382 passed after it; `ruff check src --exclude src/dashboard_GUI` clean.
+
+### M6-MP continuation policies (2026-11-06, uncommitted, pilot not yet run)
+
+`rollout.ForcedPair` takes a continuation policy: decisions before and at the forced one stay the behaviour policy's (identical forced action for every policy), every later decision is the continuation's. `m6_rollouts --continuations nearest_astar,multi_criteria,auction` rolls each candidate out once per policy on the same clone and the same jw2 window. `outcome_common.cross_policy_labels`: positive only if positive under every policy, negative only if negative under every policy, abstain on any disagreement, excluded if censored or failed under any policy; `cross_policy_report` gives best-branch agreement, Kendall tau and regret between policies. `train_rules` uses cross-policy labels automatically for multi-policy rollouts. Tested on the 30-robot acceptance run: same forced action and window under every policy, no continuation identical to an explicit nearest_astar continuation, a re-run identical. Tests: ILP suite + rollout + charging 415 passed; lint clean. Pilot commands: `scripts/m6_continuation_report.py`, CURRENT_PHASE below.
+
+### Live progress for rollouts (2026-11-06)
+
+`m6_rollouts` prints live status on stdout (flushed): a header, a replay heartbeat every 15 s (simulated time, orders done, robots busy and charging, decisions), the shard's sampled decisions, the clone check, then one line per branch (decision, candidate source, forced pair and swap, continuation policy, status, window orders done, flow, 120 s waiting, wall time, ETA). `--quiet` turns it off. Printing only; results unchanged (continuation and candidate tests: 19 passed).
+
+### Four research groups: strategy-specific and pooled ILP (2026-11-07, uncommitted)
+
+Group B already worked: `train_rules RUNS --teacher X` trains from X's own runs and picks. Added: `ilp_learning/teachers.py` (the eight teachers and the matcher each one's rules run under: M-Card for hungarian and milp, iterative otherwise; `python -m ilp_learning.teachers matching NAME|ARTIFACT`); `fidelity --matching` defaulting to the artifact teacher's matcher (existing artifacts resolve to iterative, unchanged); `train_rules --pooled` for group C (runs of several conventional strategies, each labelled by its own picks, the decision cap shared per strategy, a `pool` block recording each teacher's runs, decisions and examples); Slurm `scripts/slurm/make_teacher_tasks.sh`, `teacher_corpus.sbatch`, `teacher_train.sbatch` (448 corpus runs: 8 strategies x 4 sizes x 7 seeds x 300 and 2,000 orders; not submitted). Single-teacher strata and artifacts are unchanged. Tests: ILP suite 397 passed; lint clean.
+
+Closed-loop evaluation (2026-11-07, uncommitted): `run_experiment.py --rules LABEL=ARTIFACT ...` runs each learned rule set as its own arm `ilp_<label>` beside `--strategies`, on the same paired workloads. Each arm has its own directory, identity hash and `summary.csv` key, so `compare_paired.py` pairs it like a teacher. The matcher comes from `teachers.matching_for` (M-Card for hungarian/milp rules). An artifact whose `source_runs` share a seed with the experiment is refused. `--strategies ilp` is refused. `summary.csv` adds `rule_picks`, `fallback_picks` and `fallback_rate` from each run's `rule_trace.parquet`. Slurm: `scripts/slurm/teacher_eval.sbatch` (one task per fleet size; validation seeds corrected to 116-120 below; not submitted). Tests: `test_learned_arms.py` 11 passed; runner integrity, paired-seed and ILP suites 476 passed in 169 s; `ruff check src --exclude src/dashboard_GUI` clean. No campaign run.
+
+M6 continuation choice and per-teacher outcome supervision (2026-11-07, uncommitted; DECISIONS.md, "M6 Continuation and Per-Teacher Outcome Supervision"): `train_rules --continuation POLICY|behaviour` takes `mp1` labels from one continuation policy instead of requiring all to agree. `nearest_astar` is the approved baseline. `behaviour` is each run's own strategy (per teacher), and with `--pooled` it pools the teachers' outcome labels. Each label is relative within its own state. Multi-policy rollouts without the flag still give cross-policy labels (sensitivity). The artifact's `supervision` records `continuation` and `continued_by`. Slurm: `teacher_rollouts.sbatch` (new), `teacher_train.sbatch SUPERVISION=outcome|demo MATCHED=1`, `teacher_corpus.sbatch` now records the teacher panel, and `teacher_eval.sbatch` defaults to seeds 116-120 (`--purpose backup`).
+
+| Smoke, W100, 10 robots, 40 orders, quantum 3 (not evidence) | Result |
+|---|---|
+| corpus, 8 strategies x seeds 104-105 | 16/16 ok, 2-3 s each |
+| single-teacher training, 8 teachers, 30 s Popper limit | 8/8 trained; random 0 clauses, others 1-2 clauses |
+| pooled demonstrations, 8 teachers | trained, 1 clause; pool block lists all 8 |
+| per-teacher `mp1` rollouts, 3 decisions x 3 candidates | 8/8 replay identical, clone verified, all 9 branches continued by the run's own strategy |
+| outcome training, 8 teachers + pooled, `--continuation behaviour` | 9/9 trained; 3 pos / 6 neg per teacher, 24 / 48 pooled; 0 clauses (too few examples) |
+| cross-policy pilot `xpolicy_r70`, 6 decisions, read only | unanimity: no positive, training refused; `--continuation nearest_astar`: 5 pos / 19 neg, 0 clauses |
+| closed loop, 8 teachers + 18 artifacts, seed 116, `--purpose backup` | 26/26 completed, 26 distinct identities; hungarian/milp rules under M-Card; single-teacher rules made 65-100% of their own picks; the 9 empty programs fell back on 100% and are one policy in closed loop |
+
+Open before M8: F9 statistics code, F10 per-order outcome attribution, F12 spatial workload. Deferred: held-out map, G6 partial charging, rest of B6.
+
 ## Tier B online parity — 1 November 2026
 
-Uncommitted on `research/outcome-aware-ilp`, awaiting review. The seven Tier B congestion predicates now have one definition (`DecisionFacts` in `ilp_learning/predicates.py`), read by `bk.pl` and by rule execution. Online values come from `pair_features` in `simulation_env/congestion.py`, the code that records `features.parquet`. A rule artifact using Tier B carries its thresholds, and a rule without its features or thresholds is refused. `run_workload.py` and `run_experiment.py` take `--features`; `train_rules` takes `--tier-b`. Default training stays Tier A. Proposal mapping: [.scratch/research-alignment/proposal-map.md](../.scratch/research-alignment/proposal-map.md).
+Committed as `56f495f` (was uncommitted when first written). The seven Tier B congestion predicates now have one definition (`DecisionFacts` in `ilp_learning/predicates.py`), read by `bk.pl` and by rule execution. Online values come from `pair_features` in `simulation_env/congestion.py`, the code that records `features.parquet`. A rule artifact using Tier B carries its thresholds, and a rule without its features or thresholds is refused. `run_workload.py` and `run_experiment.py` take `--features`; `train_rules` takes `--tier-b`. Default training stays Tier A. Proposal mapping: [.scratch/research-alignment/proposal-map.md](../.scratch/research-alignment/proposal-map.md).
 
 | Check | Measured |
 |---|---|
@@ -16,7 +167,7 @@ Decision time on that run, Tier A against Tier A+B at 100 robots: median 0.029 s
 
 ## M4 groundwork — 1 November 2026
 
-Uncommitted, awaiting review. `simulation_env/teacher_panel.py` records what each of the six teachers would pick at every decision of one run, without acting; `--teacher-panel` on both runners, `--label-teacher` on `train_rules`. A teacher in the panel reproduces its own live picks exactly, and the panel changes no result. Research suite: 890 passed; `ruff check src` clean.
+Committed as `56f495f`, `402343c` and `9757d28` (was uncommitted when first written). `simulation_env/teacher_panel.py` records what each of the six teachers would pick at every decision of one run, without acting; `--teacher-panel` on both runners, `--label-teacher` on `train_rules`. A teacher in the panel reproduces its own live picks exactly, and the panel changes no result. Research suite: 890 passed; `ruff check src` clean.
 
 M4 and M5 are not done, and no gate has run. Research suite on 2026-11-02: 917 passed; `ruff check src` clean. The 95 s decision is fixed (2.9 s, identical decisions). The extended vocabulary and both M5 label policies are built, off by default, and `bk.pl` and `bias.pl` are byte-identical between M4 and M5. On training seeds, M4 reaches 0.08-0.38 fidelity to `multi_criteria`, because finish time and order age explain at most 0.42-0.61 of its picks; the rest are its battery terms. Neither M4 nor M5 beats `nearest_astar`. Results: [.scratch/m4-single-teacher/exploratory-2026-11-01.md](../.scratch/m4-single-teacher/exploratory-2026-11-01.md). Decisions: DECISIONS.md, "M4-M6 Decisions (2026-11-02)". M6 is not started; rollout cost is unprofiled, and Friedman, Holm and Wilcoxon code does not exist.
 
