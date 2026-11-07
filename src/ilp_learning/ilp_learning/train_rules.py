@@ -647,6 +647,8 @@ def train(
             "score": list(result.score) if result.score else None,
             "datalog": result.datalog,
             "timed_out": result.timed_out,
+            # Stopped after its grace: the rules are Popper's last incumbent.
+            "stopped_by_runner": result.stopped_by_runner,
         },
         "solver_settings": {
             "noisy": True,

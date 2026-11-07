@@ -18,6 +18,11 @@ Active milestone: **M6 Outcome-Aware ILP**, chosen by the researcher on 2026-11-
 
 Next (2026-11-07, DECISIONS.md "Campaign Decisions Before the 300-Order Run"): commit the research version without the GUI work, then the 300-order teacher corpus, single- and multi-teacher training, outcome labels, and a first closed-loop comparison. Cluster-scale training is decided after that.
 
+Two fixes found by the 300-order campaign (2026-11-07, after `551b6bf`; training and rollouts unaffected):
+
+- `fidelity` did not join `features.parquet` and scored clauses with Tier A facts only, so it failed on every learned rule using a Tier B, extended or battery predicate (7 of 8 teachers). It now joins the features as `train_rules` does and uses the program's own `DecisionFacts`. Tier A scores unchanged.
+- Popper checks its timeout only between search steps; at a 1200 s budget 5 of 6 runs overran the 60 s grace, were stopped and returned no rules. The worker now reports each new best program, and a stopped run keeps the last (`popper.stopped_by_runner` in the artifact). Validated on the failed nearest_astar case: rules and score identical to its 300 s run. hungarian, which completed at 1200 s, also learned rules identical to 300 s.
+
 ### Dashboard control plane — 6 November 2026 (uncommitted)
 
 `src/dashboard_GUI` is now present in this research worktree and aligned with
