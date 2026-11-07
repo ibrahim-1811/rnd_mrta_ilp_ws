@@ -42,6 +42,7 @@ from mrta_core.orders import OrderStatus
 from mrta_core.warehouse_map import ZoneType
 
 from simulation_env.charging import (
+    BUSY_STATES,
     DESTINATION,
     LEAVING_CHARGER_STATES,
     LEAVING_STATES,
@@ -2253,7 +2254,12 @@ class WorkloadExecutor:
             "window_orders": window,
             "pending_orders": len(self.queue.pending()),
             "robots_busy": len(self.active),
-            "robots_charging": len(self.charge),
+            # In the charging workflow now (BUSY_STATES: never offered an order).
+            # self.charge keeps each robot's latest trip after it rejoins, so
+            # its length counts robots that have ever charged.
+            "robots_charging": sum(
+                1 for record in self.charge.values() if record.state in BUSY_STATES
+            ),
         }
 
     def _record_decision(self, free, window) -> None:
