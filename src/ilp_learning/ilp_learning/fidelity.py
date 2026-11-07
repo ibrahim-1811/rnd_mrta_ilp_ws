@@ -36,11 +36,11 @@ import pandas as pd
 
 from ilp_learning.bk_builder import candidate_pairs, derive_est_finish_s
 from ilp_learning.matcher import BatchMatcher, PickKey
-from ilp_learning.predicates import CandidatePair, TierAFacts
+from ilp_learning.predicates import TIER_B_FEATURES, CandidatePair, DecisionFacts
 from ilp_learning.rule_artifact import load_rule_artifact
 from ilp_learning.rule_compiler import RuleProgram
 from ilp_learning.teachers import matching_of_artifact
-from ilp_learning.train_rules import InductionRun, load_induction_run
+from ilp_learning.train_rules import FEATURES_FILE, PAIR_KEYS, InductionRun, load_induction_run
 from simulation_env.failures import FAILURE_FILE
 from simulation_env.seed_split import role_of, workload_seed_of
 
@@ -108,8 +108,12 @@ def score_decision(
 
 
 def _static_quality(pairs, teacher, program: RuleProgram) -> dict[str, Counter]:
-    """tp/fp/fn on the decision's full pair set: per clause, and -1 for the program."""
-    facts = TierAFacts(pairs)
+    """tp/fp/fn on the decision's full pair set: per clause, and -1 for the program.
+
+    The facts are the program's own (DecisionFacts with its thresholds), as in rule
+    execution, so congestion, load and battery predicates are scored like Tier A.
+    """
+    facts = DecisionFacts(pairs, program.thresholds)
     quality: dict[str, Counter] = {}
     union: set = set()
     for rank, clause in enumerate(program.clauses):
@@ -211,7 +215,25 @@ def load_validation_run(run_dir: Path | str) -> InductionRun:
         raise ValueError(f"{path}: workload seed {seed} is not a validation seed")
     if (path / FAILURE_FILE).exists():
         raise ValueError(f"{path} records a failed run")
-    return InductionRun(manifest, pd.read_parquet(path / "decisions.parquet"))
+    features = path / FEATURES_FILE
+    return InductionRun(
+        manifest,
+        pd.read_parquet(path / "decisions.parquet"),
+        pd.read_parquet(features) if features.exists() else None,
+    )
+
+
+def with_features(run: InductionRun) -> pd.DataFrame:
+    """The run's decision rows with its Tier B features, as train_rules joins them.
+
+    A rule that uses a congestion predicate reads these columns; without the run's
+    features.parquet such a rule cannot be scored and the predicates say so.
+    """
+    if run.features is None:
+        return run.decisions
+    return run.decisions.merge(
+        run.features[[*PAIR_KEYS, *TIER_B_FEATURES]], on=PAIR_KEYS, how="left"
+    )
 
 
 def random_key(repeat: int) -> PickKey:
@@ -258,7 +280,7 @@ def evaluate_runs(run_dirs: Sequence[Path | str], program: RuleProgram, load=loa
     per_seed = {}
     for run_dir in run_dirs:
         run = load(run_dir)
-        frame = run.decisions.assign(est_finish_s=derive_est_finish_s(run.decisions, run.manifest))
+        frame = with_features(run).assign(est_finish_s=derive_est_finish_s(run.decisions, run.manifest))
         per_seed[workload_seed_of(run.manifest["orders_path"])] = evaluate_frame(frame, program, matching)
     return {
         "per_seed": {

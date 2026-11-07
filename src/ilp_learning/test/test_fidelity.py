@@ -97,3 +97,52 @@ def test_a_teacher_pair_outside_the_eligible_set_is_refused():
     table = frame([(0, "r1", "a", 1, 0, True, True)]).assign(eligible=False)
     with pytest.raises(ValueError):
         evaluate_frame(table, EMPTY)
+
+
+# ---- Tier B rules scored offline (2026-11-07) ---------------------------------------
+# A learned rule with a congestion predicate reads the run's features.parquet; fidelity
+# joins it as train_rules does, and refuses (never silently mis-scores) without it.
+
+def _tier_b_program():
+    from ilp_learning.rule_artifact import load_rule_artifact
+
+    from .test_tier_b_parity import LIVE_THRESHOLDS, TIER_B_RULE, congestion_artifact
+
+    def make(tmp_path):
+        program, _ = load_rule_artifact(
+            congestion_artifact(tmp_path, clauses=[TIER_B_RULE], thresholds=LIVE_THRESHOLDS))
+        return program
+
+    return make
+
+
+def test_a_congestion_rule_is_scored_with_the_runs_features(tmp_path):
+    from ilp_learning.fidelity import evaluate_runs
+
+    from .conftest import ACCEPTANCE_RUN
+
+    if not (ACCEPTANCE_RUN / "features.parquet").exists():
+        pytest.skip("runs/m2_acceptance absent")
+    program = _tier_b_program()(tmp_path)
+    assert program.needs_congestion
+    result = evaluate_runs([ACCEPTANCE_RUN], program)
+    clause_picks = next(iter(result["per_seed_results"].values()))["clause_picks"]
+    assert sum(clause_picks.values()) > 0
+
+
+def test_a_congestion_rule_without_features_is_refused(tmp_path):
+    import shutil
+
+    from ilp_learning.fidelity import evaluate_runs
+    from ilp_learning.predicates import MissingCongestionData
+
+    from .conftest import ACCEPTANCE_RUN
+
+    if not ACCEPTANCE_RUN.exists():
+        pytest.skip("runs/m2_acceptance absent")
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    for name in ("run.json", "decisions.parquet"):
+        shutil.copy(ACCEPTANCE_RUN / name, bare / name)
+    with pytest.raises(MissingCongestionData):
+        evaluate_runs([bare], _tier_b_program()(tmp_path))
