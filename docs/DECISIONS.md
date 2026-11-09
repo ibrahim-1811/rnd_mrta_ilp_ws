@@ -1978,3 +1978,32 @@ A corrected rule set runs under its teacher's matcher (cardinality for
 hungarian and milp); a pooled one under the default. The plain mp1 rollouts
 are not affordable at 5000 orders as designed (about 9 min per branch, about
 10 h per shard); the rollout horizon is an open decision.
+
+## Intermediate Workload and Gate 1 (2026-11-09)
+
+Decided by the researcher:
+
+```text
+workload        1500 orders at 70-100 robots before 5000: about one charge per
+                robot (benchmark: 70-90 charging sessions per run), steady
+                congestion, about 4-5 min per run on one hpc1 core (AMD EPYC
+                9554), under 1.3 GB
+Gate 1          is "better than the teacher" possible at all? The oracle
+                (ilp_learning.m6_oracle) for nearest_astar, multi_criteria and
+                milp at 70-100 robots on validation seeds 116-120:
+  option A      300 orders, --objective wholerun: every branch runs to the end;
+                lowest order makespan wins, ties within delta broken by the sum
+                of completion times (the exact rollout objective)
+  option B      1500 orders, --objective horizon: every branch stops 120 s after
+                the decision; a window order costs its completion time if done,
+                else 120 s plus its best static finish estimate at the decision
+                (optimistic remaining time), plus 0.5 x fleet waiting in 120 s
+                (approved 2026-11-09); approximate, cost independent of the
+                workload length
+                Both run (A first). A branch beats the teacher's only by delta 2 s.
+cluster         hpc1/hpc3 partitions; the cluster allows 5 tasks per job array,
+                so tasks are packed into multi-core jobs (xargs inside one job)
+```
+
+The jw2 oracle at 1500 orders is not affordable (about 4.5 min per decision on
+hpc1, about 450 decisions per run).

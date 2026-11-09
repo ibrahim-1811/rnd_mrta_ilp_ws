@@ -59,3 +59,26 @@ def test_overrides_are_the_pairs_the_run_then_makes():
             assert v["gain_s"] >= 2.0  # decisive by the jw2 delta
     assert executor.finished()
     assert _run_to_end(executor, lambda _: False)
+
+
+@needs_run
+@pytest.mark.parametrize("objective", ["wholerun", "horizon"])
+def test_other_objectives_decide_and_the_run_makes_the_pick(objective):
+    manifest, build = _build()
+    executor, verdicts = oracle_run(build, run_id=manifest["run_id"], behaviour=manifest["strategy"],
+                                    max_decisions=1, objective=objective, manifest=manifest)
+    (v,) = verdicts
+    assert v["verdict"] in {"keep", "override", "no_choice"}
+    if v["verdict"] != "no_choice":
+        assert v["teacher_score"] is not None
+    if v["verdict"] == "override":
+        robot, order = v["pair"].split(":")
+        d = pd.DataFrame(executor.recorder.decisions)
+        row = d[(d["decision_id"] == v["decision_id"]) & (d["robot_id"] == robot) & (d["order_id"] == order)]
+        assert row["selected"].all() and len(row) == 1 and v["gain_s"] >= 2.0
+    assert executor.finished()
+
+
+def test_unknown_objective_is_refused():
+    with pytest.raises(ValueError, match="unknown objective"):
+        oracle_run(lambda: None, run_id="r", behaviour="nearest_astar", objective="best")
