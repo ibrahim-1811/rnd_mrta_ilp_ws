@@ -1948,3 +1948,31 @@ jw2 (mp1)       sum over the decision's window orders of (completed_at - t_d)
 Execution order: commit; 300-order teacher corpus; single- and multi-teacher training
 (check clauses, fidelity, fallback); outcome labels (check positives and rule
 learning); first closed-loop comparison. Cluster-scale training is decided after that.
+
+## Long Workload, Workload Fact and Outcome-Corrected Labels (2026-11-07)
+
+Decided by the researcher after the 300-order experiment A (no charging in any
+300-order run; group D outcome rules empty or nearly so):
+
+```text
+long workload   5000 orders at 70/80/90/100 robots replaces 2000: about
+                6.5-6.9% SOC per order gives 4-5 charge cycles per robot
+                (2000 gives 1-2). Measured on one run (nearest_astar, 100
+                robots, seed 104): 300 charging sessions, 21% of robot time
+                waiting, 16.5 min wall, 2.6 GB peak
+balance metric  spread of orders, distance and energy across robots,
+                reporting only
+workload fact   a decision-time "work done so far" predicate per robot
+                (past only, never robot_id); approved, not yet built
+group D labels  outcome-corrected demonstrations (train_rules
+                --outcome-correct): the teacher's own picks of the probed
+                decisions, corrected where its own continuation shows its
+                pair lost by delta to a decisive best branch; pairwise
+                preferences stay a later sensitivity option
+cluster         training on the cluster; the researcher submits jobs
+```
+
+A corrected rule set runs under its teacher's matcher (cardinality for
+hungarian and milp); a pooled one under the default. The plain mp1 rollouts
+are not affordable at 5000 orders as designed (about 9 min per branch, about
+10 h per shard); the rollout horizon is an open decision.

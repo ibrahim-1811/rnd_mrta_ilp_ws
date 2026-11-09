@@ -23,6 +23,14 @@ Two fixes found by the 300-order campaign (2026-11-07, after `551b6bf`; training
 - `fidelity` did not join `features.parquet` and scored clauses with Tier A facts only, so it failed on every learned rule using a Tier B, extended or battery predicate (7 of 8 teachers). It now joins the features as `train_rules` does and uses the program's own `DecisionFacts`. Tier A scores unchanged.
 - Popper checks its timeout only between search steps; at a 1200 s budget 5 of 6 runs overran the 60 s grace, were stopped and returned no rules. The worker now reports each new best program, and a stopped run keeps the last (`popper.stopped_by_runner` in the artifact). Validated on the failed nearest_astar case: rules and score identical to its 300 s run. hungarian, which completed at 1200 s, also learned rules identical to 300 s.
 
+Outcome-corrected labels for group D (2026-11-09, uncommitted; DECISIONS.md "Long Workload, Workload Fact and Outcome-Corrected Labels"):
+
+- `supervision/outcome_corrected.py` and `train_rules --outcome-correct`: the teacher's picks of the probed decisions, corrected where its own continuation shows its pair lost by delta. 9 tests; research suite 1058 passed.
+- 300-order experiment A, development outputs in the campaign checkout (`runs/teachers/dev/corrected/o300`): all 9 rule sets non-empty (before: 6 of 9 empty), using congestion, battery and load predicates; about 70% of probed decisions corrected.
+- Closed loop on validation seeds 116-120 (20 paired runs each): no corrected policy beats its teacher except random (-40.2 s); nearest_astar +8.3 s, multi_criteria +17.3 s, the others within noise. Problem A gate: rules non-empty, but fallback above 50% for auction, hungarian and milp, and no gain.
+- Explanation prototype (`runs/teachers/analysis/explain_picks.py` in the campaign checkout): every pick of a run in words, clause re-checked against the pairs left at that round.
+- Next: an oracle rollout policy at 300 orders to measure the reachable gain before cluster runs.
+
 ### Dashboard control plane — 6 November 2026 (uncommitted)
 
 `src/dashboard_GUI` is now present in this research worktree and aligned with

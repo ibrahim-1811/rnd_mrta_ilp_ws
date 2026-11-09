@@ -65,6 +65,11 @@ from ilp_learning.supervision.outcome_common import (
     summarize_common,
     write_common_labels,
 )
+from ilp_learning.supervision.outcome_corrected import (
+    corrected_examples,
+    corrections,
+    summarize_corrections,
+)
 from ilp_learning.supervision.single_teacher import build_single_teacher_supervision
 from ilp_learning.teachers import TEACHERS
 from ilp_learning.thresholds import (
@@ -300,6 +305,7 @@ def train(
     outcome_objective: str = "jw2",
     pooled: bool = False,
     continuation: str | None = None,
+    outcome_correct: bool = False,
 ) -> dict[str, Any]:
     """Runs -> thresholds, BK, bias, examples, Popper, compile, artifact.
 
@@ -324,8 +330,15 @@ def train(
     the sensitivity experiment). "behaviour" means each run's own strategy: per-teacher
     outcome supervision, and with pooled, outcome labels pooled over teachers. Every
     label is relative within one recorded state; no score is compared across states.
+    outcome_correct (group D) keeps the teacher's own picks of the probed decisions and
+    corrects them where the run's own continuation shows the teacher's pair lost by delta
+    (supervision.outcome_corrected); it needs mp1 rollouts and continuation "behaviour".
     """
     runs = [load_induction_run(path) for path in run_dirs]
+    if outcome_correct and (outcome_rollouts is None or continuation != BEHAVIOUR):
+        raise TrainingError(
+            f"--outcome-correct needs --outcome-rollouts and --continuation {BEHAVIOUR}: "
+            "each teacher's picks are corrected by its own continuation")
     pooled_outcome = pooled and outcome_rollouts is not None
     if pooled_outcome and continuation != BEHAVIOUR:
         raise TrainingError(
@@ -433,6 +446,7 @@ def train(
     objectives: set[str] = set()
     examples: list[GroundAtomExample] = []
     outcome_frames: list[pd.DataFrame] = []
+    fixes_all: list = []
     for run in runs:
         wanted = chosen_by_run.get(run.run_id)
         if not wanted:
@@ -459,7 +473,21 @@ def train(
                 len(json.loads((Path(src) / "probe.json").read_text(encoding="utf-8")).get("continuations") or [1])
                 for src in sources
             }
-            if arms == {MP1_ARM} and continuation is not None:
+            if outcome_correct:
+                if arms != {MP1_ARM}:
+                    raise TrainingError(f"run {run.run_id}: --outcome-correct needs mp1 rollouts")
+                labels = common_labels(
+                    run_paths[run.run_id], sources, mode=outcome_mode, config=common,
+                    continuation=run.manifest["strategy"],
+                )
+                labels = labels[labels["decision_id"].isin(wanted)]
+                fixes = corrections(labels)
+                fixes_all.extend(fixes)
+                probed_rows = rows[rows["decision_id"].isin(set(labels["decision_id"]))]
+                examples.extend(corrected_examples(
+                    run.run_id, probed_rows, fixes, tracker, k_neg=k_neg, seed=corpus_seed))
+                objectives.add(common.objective)
+            elif arms == {MP1_ARM} and continuation is not None:
                 # One continuation policy's labels; "behaviour" is the run's own strategy.
                 policy = run.manifest["strategy"] if continuation == BEHAVIOUR else continuation
                 labels = common_labels(
@@ -552,6 +580,10 @@ def train(
                 "chosen_decisions_without_rollouts": len(chosen)
                 - int(all_labels[["run_id", "decision_id"]].drop_duplicates().shape[0]),
             }
+            if outcome_correct:
+                supervision["kind"] = "outcome_corrected"
+                supervision["corrections"] = summarize_corrections(
+                    fixes_all, int(all_labels[["run_id", "decision_id"]].drop_duplicates().shape[0]))
     if outcome and supervision is None:
         supervision = {
             "objective": "m1_frozen_J",
@@ -602,7 +634,9 @@ def train(
 
     artifact = {
         "schema_version": SCHEMA_VERSION,
-        "teacher": "outcome_aware"
+        "teacher": ("outcome_corrected:" + "+".join(sorted({r.manifest["strategy"] for r in runs})))
+        if outcome_correct
+        else "outcome_aware"
         if outcome
         else "pooled:" + "+".join(sorted({r.manifest["strategy"] for r in runs}))
         if pooled
@@ -724,6 +758,11 @@ def main() -> int:
         "--decisions-from", type=Path,
         help="train only on the decisions probed in these rollout directories (any depth)",
     )
+    parser.add_argument(
+        "--outcome-correct", action="store_true",
+        help="group D: the teacher's picks, corrected where its own continuation shows its pair "
+        "lost by delta (needs --outcome-rollouts and --continuation behaviour)",
+    )
     args = parser.parse_args()
 
     given = {json.loads((Path(r) / "run.json").read_text())["run_id"] for r in args.runs}
@@ -773,6 +812,7 @@ def main() -> int:
         outcome_objective=args.outcome_objective,
         pooled=args.pooled,
         continuation=args.continuation,
+        outcome_correct=args.outcome_correct,
         repo=Path(__file__).resolve().parents[3],
     )
     print(f"clauses  : {len(artifact['clauses'])} kept, {len(artifact['pruned_clauses'])} pruned")
