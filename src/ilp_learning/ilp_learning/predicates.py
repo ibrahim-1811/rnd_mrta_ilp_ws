@@ -20,6 +20,7 @@ from typing import Iterable, Mapping, NamedTuple, Sequence
 from ilp_learning.bias_templates import (
     BASE_PREDICATES,
     BATTERY_PREDICATES,
+    WORKLOAD_PREDICATES,
     EXTENDED_PREDICATES,
     TIER_B_CONGESTION_PREDICATES,
 )
@@ -53,8 +54,12 @@ EXTENDED_SIGNATURES: dict[str, tuple[str, ...]] = {
 BATTERY_SIGNATURES: dict[str, tuple[str, ...]] = {
     name: _argument_kinds(types) for name, _arity, types, _directions in BATTERY_PREDICATES
 }
+WORKLOAD_SIGNATURES: dict[str, tuple[str, ...]] = {
+    name: _argument_kinds(types) for name, _arity, types, _directions in WORKLOAD_PREDICATES
+}
 PREDICATE_SIGNATURES = {
-    **TIER_A_SIGNATURES, **TIER_B_SIGNATURES, **EXTENDED_SIGNATURES, **BATTERY_SIGNATURES
+    **TIER_A_SIGNATURES, **TIER_B_SIGNATURES, **EXTENDED_SIGNATURES, **BATTERY_SIGNATURES,
+    **WORKLOAD_SIGNATURES,
 }
 
 # Tier B predicate -> the congestion feature it reads (simulation_env.congestion).
@@ -80,6 +85,8 @@ TIER_B_FEATURES = tuple(sorted(set(TIER_B_SOURCE.values())))
 LOAD_FIELDS = ("free_robots", "window_orders", "pending_orders", "robots_busy", "robots_charging")
 # What a pair knows about energy: mrta_core.battery.EnergyRequirement, as recorded.
 BATTERY_FIELDS = ("energy_margin_percent", "predicted_charger_distance_m")
+# What a robot has done so far: its cumulative distance at the decision (features.parquet).
+WORKLOAD_FIELDS = ("robot_distance_m",)
 
 _UNKNOWN = float("nan")
 
@@ -111,6 +118,8 @@ class CandidatePair(NamedTuple):
     # Battery vocabulary only.
     energy_margin_percent: float = _UNKNOWN
     predicted_charger_distance_m: float = _UNKNOWN
+    # Workload vocabulary only.
+    robot_distance_m: float = _UNKNOWN
 
 
 def _levels(values: Iterable[tuple[float, str]]) -> list[list[str]]:
@@ -268,6 +277,10 @@ class DecisionFacts(TierAFacts):
         self.thresholds = thresholds
 
     def relation(self, name: str) -> frozenset[tuple[str, ...]]:
+        if name in WORKLOAD_SIGNATURES:
+            if name not in self._relations:
+                self._relations[name] = frozenset(self._workload_fact(name))
+            return self._relations[name]
         if name in BATTERY_SIGNATURES:
             if name not in self._relations:
                 self._relations[name] = frozenset(self._battery_fact(name))
@@ -376,6 +389,14 @@ class DecisionFacts(TierAFacts):
             (p.robot_id, p.order_id) for p in self._known(feature)
             if getattr(p, feature) <= bound
         }
+
+    def _workload_fact(self, name: str) -> set[tuple]:
+        """least_driven_robot: the robots on offer that have driven least so far (ties kept)."""
+        known = self._known("robot_distance_m")
+        if not known:
+            return set()
+        least = min(p.robot_distance_m for p in known) + TIE_TOLERANCE
+        return {(p.robot_id,) for p in known if p.robot_distance_m <= least}
 
     def _known(self, feature: str) -> list[CandidatePair]:
         known = [p for p in self.pairs if getattr(p, feature) == getattr(p, feature)]

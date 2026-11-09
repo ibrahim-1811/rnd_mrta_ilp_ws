@@ -25,6 +25,8 @@ from ilp_learning.predicates import (
     TIE_TOLERANCE,
     BATTERY_FIELDS,
     BATTERY_SIGNATURES,
+    WORKLOAD_FIELDS,
+    WORKLOAD_SIGNATURES,
     EXTENDED_SIGNATURES,
     LOAD_FIELDS,
     TIER_A_SIGNATURES,
@@ -63,7 +65,7 @@ ALLOWED_FEATURE_COLUMNS = frozenset({
     "overlap_cells", "overlap_ratio", "occupied_now",
     "st_conflicts", "st_conflict_robots", "st_conflicts_30s",
     "dropoff_load", "shelf_load", "local_density",
-    "robot_soc_percent",
+    "robot_soc_percent", "robot_distance_m",
 })
 # Recorded at the decision, but they are the behaviour policy's own action and
 # identity: legal input to drop, never to read, or the teacher leaks into bk.pl.
@@ -110,7 +112,8 @@ def derive_est_finish_s(df: pd.DataFrame, run_manifest: Mapping[str, Any] | None
 def candidate_pairs(rows: pd.DataFrame) -> list[CandidatePair]:
     """One decision's rows as the pair set the predicates are defined over."""
     columns = ["robot_id", "order_id", "c_static_m", "est_finish_s", "fifo_position"]
-    features = [c for c in (*TIER_B_FEATURES, *LOAD_FIELDS, *BATTERY_FIELDS) if c in rows.columns]
+    features = [c for c in (*TIER_B_FEATURES, *LOAD_FIELDS, *BATTERY_FIELDS, *WORKLOAD_FIELDS)
+                if c in rows.columns]
     return [
         CandidatePair(*row[:5], **dict(zip(features, row[5:])))
         for row in rows[columns + features].itertuples(index=False, name=None)
@@ -126,10 +129,12 @@ class BKBuilder:
         tracker: ProvenanceTracker | None = None,
         extended: bool = False,
         battery: bool = False,
+        workload: bool = False,
     ) -> None:
         self.thresholds = thresholds
         self.extended = extended
         self.battery = battery
+        self.workload = workload
         self.tracker = tracker or ProvenanceTracker()
         self.facts: list[str] = []
 
@@ -212,6 +217,20 @@ class BKBuilder:
                     name, d_atom, *(atoms[kind][v] for kind, v in zip(kinds, values))
                 )
 
+    def _add_workload_facts(
+        self,
+        d_atom: str,
+        r_atoms: Mapping[str, str],
+        rows: pd.DataFrame,
+    ) -> None:
+        """Emit the workload relations of one decision as ground facts."""
+        if "robot_distance_m" not in rows.columns:
+            raise ValueError("the workload vocabulary needs robot_distance_m in features.parquet")
+        facts = DecisionFacts(candidate_pairs(rows), self.thresholds)
+        for name in WORKLOAD_SIGNATURES:
+            for (robot_id,) in facts.relation(name):
+                self.add_fact(name, d_atom, r_atoms[robot_id])
+
     def build_from_frames(
         self,
         run_id: str,
@@ -280,6 +299,8 @@ class BKBuilder:
                 self._add_extended_facts(d_atom, r_atoms, o_atoms, g)
             if self.battery:
                 self._add_battery_facts(d_atom, r_atoms, o_atoms, g)
+            if self.workload:
+                self._add_workload_facts(d_atom, r_atoms, g)
 
         return self.facts
 

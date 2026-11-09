@@ -1963,7 +1963,9 @@ long workload   5000 orders at 70/80/90/100 robots replaces 2000: about
 balance metric  spread of orders, distance and energy across robots,
                 reporting only
 workload fact   a decision-time "work done so far" predicate per robot
-                (past only, never robot_id); approved, not yet built
+                (past only, never robot_id): least_driven_robot(D,R) over
+                robot_distance_m, the robot's cumulative distance, switched
+                on with --workload (built 2026-11-09)
 group D labels  outcome-corrected demonstrations (train_rules
                 --outcome-correct): the teacher's own picks of the probed
                 decisions, corrected where its own continuation shows its

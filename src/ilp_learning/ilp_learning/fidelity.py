@@ -36,7 +36,7 @@ import pandas as pd
 
 from ilp_learning.bk_builder import candidate_pairs, derive_est_finish_s
 from ilp_learning.matcher import BatchMatcher, PickKey
-from ilp_learning.predicates import TIER_B_FEATURES, CandidatePair, DecisionFacts
+from ilp_learning.predicates import TIER_B_FEATURES, WORKLOAD_FIELDS, CandidatePair, DecisionFacts
 from ilp_learning.rule_artifact import load_rule_artifact
 from ilp_learning.rule_compiler import RuleProgram
 from ilp_learning.teachers import matching_of_artifact
@@ -231,8 +231,9 @@ def with_features(run: InductionRun) -> pd.DataFrame:
     """
     if run.features is None:
         return run.decisions
+    extra = [c for c in WORKLOAD_FIELDS if c in run.features.columns]
     return run.decisions.merge(
-        run.features[[*PAIR_KEYS, *TIER_B_FEATURES]], on=PAIR_KEYS, how="left"
+        run.features[[*PAIR_KEYS, *TIER_B_FEATURES, *extra]], on=PAIR_KEYS, how="left"
     )
 
 

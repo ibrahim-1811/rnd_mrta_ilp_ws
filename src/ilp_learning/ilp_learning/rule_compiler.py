@@ -22,6 +22,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from ilp_learning.predicates import (
     BATTERY_SIGNATURES,
+    WORKLOAD_SIGNATURES,
     EXTENDED_SIGNATURES,
     PREDICATE_SIGNATURES,
     TIER_B_SIGNATURES,
@@ -199,6 +200,14 @@ class RuleProgram:
     def needs_battery(self) -> bool:
         return any(
             literal.predicate in BATTERY_SIGNATURES
+            for clause in self.clauses
+            for literal in clause.body
+        )
+
+    @property
+    def needs_workload(self) -> bool:
+        return any(
+            literal.predicate in WORKLOAD_SIGNATURES
             for clause in self.clauses
             for literal in clause.body
         )

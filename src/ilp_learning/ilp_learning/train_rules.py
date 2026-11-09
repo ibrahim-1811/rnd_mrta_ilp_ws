@@ -306,6 +306,7 @@ def train(
     pooled: bool = False,
     continuation: str | None = None,
     outcome_correct: bool = False,
+    workload: bool = False,
 ) -> dict[str, Any]:
     """Runs -> thresholds, BK, bias, examples, Popper, compile, artifact.
 
@@ -350,6 +351,11 @@ def train(
     _check_corpus(runs, teacher, pooled)
     if tier_b and any(run.features is None for run in runs):
         raise TrainingError(f"--tier-b needs {FEATURES_FILE} beside every run")
+    if workload and any(run.features is None or "robot_distance_m" not in run.features.columns
+                        for run in runs):
+        raise TrainingError(
+            f"--workload needs robot_distance_m in {FEATURES_FILE}: record the runs with --features "
+            "after 2026-11-09")
     if label_teacher and label_policy:
         raise TrainingError("labels come from one teacher or from the panel, not both")
     if (label_teacher or label_policy) and any(run.teacher_labels is None for run in runs):
@@ -400,6 +406,13 @@ def train(
             )
             for run in runs
         }
+    if workload:
+        paired = {
+            run.run_id: paired[run.run_id].merge(
+                run.features[[*PAIR_KEYS, "robot_distance_m"]], on=PAIR_KEYS, how="left"
+            )
+            for run in runs
+        }
 
     spec = dict(DEFAULT_DISCRETIZATIONS if tier_b else DECISION_DISCRETIZATIONS)
     if extended:
@@ -442,7 +455,8 @@ def train(
     kb_dir.mkdir(parents=True, exist_ok=True)
 
     tracker = ProvenanceTracker()
-    builder = BKBuilder(thresholds=thresholds, tracker=tracker, extended=extended, battery=battery)
+    builder = BKBuilder(thresholds=thresholds, tracker=tracker, extended=extended, battery=battery,
+                        workload=workload)
     objectives: set[str] = set()
     examples: list[GroundAtomExample] = []
     outcome_frames: list[pd.DataFrame] = []
@@ -456,6 +470,10 @@ def train(
         features = None
         if tier_b:
             features = run.features[run.features["decision_id"].isin(wanted)]
+        elif workload:
+            # Only the workload column: no Tier B fact without --tier-b.
+            features = run.features.loc[run.features["decision_id"].isin(wanted),
+                                        [*PAIR_KEYS, "robot_distance_m"]]
         builder.build_from_frames(
             run.run_id, rows, features_df=features, run_manifest=run.manifest
         )
@@ -612,6 +630,7 @@ def train(
         include_tier_b=tier_b,
         include_extended=extended,
         include_battery=battery,
+        include_workload=workload,
         exclude=tuple(exclude_predicates),
         max_vars=max_vars,
         max_body=max_body,
@@ -696,6 +715,7 @@ def train(
             "tier_b": tier_b,
             "extended": extended,
             "battery": battery,
+            "workload": workload,
             "only_decisions": only_decisions is not None,
         },
         "sampling": {
@@ -744,6 +764,8 @@ def main() -> int:
     )
     parser.add_argument("--outcome-mode", choices=OUTCOME_MODES, default=OUTCOME_PRIMARY_MODE)
     parser.add_argument("--battery", action="store_true", help="add the battery predicates")
+    parser.add_argument("--workload", action="store_true",
+                        help="add the work-done-so-far predicate (needs robot_distance_m in features)")
     parser.add_argument("--pooled", action="store_true",
                         help="multi-teacher demonstrations: runs of several strategies, each its own labels")
     parser.add_argument("--outcome-objective", choices=COMMON_OBJECTIVES, default="jw2",
@@ -808,6 +830,7 @@ def main() -> int:
         outcome_rollouts=rollouts,
         outcome_mode=args.outcome_mode,
         battery=args.battery,
+        workload=args.workload,
         only_decisions=only,
         outcome_objective=args.outcome_objective,
         pooled=args.pooled,

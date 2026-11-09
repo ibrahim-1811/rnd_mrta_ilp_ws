@@ -57,6 +57,7 @@ from simulation_env.failures import (
     failure_record,
     write_failure,
 )
+from simulation_env.playback import Player
 from simulation_env.run_metrics import run_metrics, write_metrics
 from simulation_env.fleet import build_fleet, home_stations
 from simulation_env.grid_robot import GridRobotStatus
@@ -102,6 +103,18 @@ class FleetNode(Node):
 
         self.config = load_sim_config(self.config_path)
 
+        # Another order file for this run only, as run_workload.py's
+        # --orders-file (e.g. an experiment's workloads/orders_s116.csv), so a
+        # Gazebo run can replay exactly a recorded headless run. Empty keeps
+        # the config's order file.
+        self.declare_parameter("orders_file", "")
+        orders_file = str(self.get_parameter("orders_file").value).strip()
+        if orders_file:
+            path = Path(orders_file).expanduser()
+            if not path.is_file():
+                raise FileNotFoundError(f"orders_file {orders_file}: no such file")
+            self.config = replace(self.config, orders_path=path)
+
         # Fleet size for this run. 0 keeps fleet.robot_count; a positive
         # value overrides it. Gazebo is then given exactly these robots
         # when the run starts, so one config and one world serve every
@@ -119,6 +132,14 @@ class FleetNode(Node):
         self.declare_parameter("publish_hz", config.robot_state_publish_hz)
         self.declare_parameter("wait_for_gazebo", 0.0)
         self.declare_parameter("gazebo_playback_hz", DEFAULT_PLAYBACK_HZ)
+        # Smooth playback (display only): the simulation computes up to this many
+        # wall seconds ahead while a separate thread draws the frames, so the
+        # robots no longer freeze while an allocation decision is computed.
+        # 0 draws on the simulation thread, as before.
+        self.declare_parameter("playback_buffer_s", 30.0)
+        # strategy ilp: explain up to this many picks of each decision on the
+        # terminal (the rule that fired and why); 0 turns it off.
+        self.declare_parameter("explain", 2)
         self.declare_parameter("load_orders", False)
         self.declare_parameter("run_workload", False)
         self.declare_parameter("strategy", "nearest_astar")
@@ -150,6 +171,10 @@ class FleetNode(Node):
         # Allocation seed for stochastic strategies. Negative keeps the
         # configured simulation.seed.
         self.declare_parameter("allocation_seed", -1)
+        # A learned rule set for strategy "ilp", exactly as run_workload.py's
+        # --rule-artifact / --rule-matching; empty for every other strategy.
+        self.declare_parameter("rule_artifact", "")
+        self.declare_parameter("rule_matching", "")
 
         def get(name):
             return self.get_parameter(name).value
@@ -158,9 +183,16 @@ class FleetNode(Node):
         self.publish_hz = float(get("publish_hz"))
         self.wait_for_gazebo = float(get("wait_for_gazebo"))
         self.gazebo_playback_hz = float(get("gazebo_playback_hz"))
+        self.playback_buffer_s = float(get("playback_buffer_s"))
+        self.explain = int(get("explain"))
+        self.player = None
+        self.allocator = None
+        self._explained = 0
         self.load_orders = bool(get("load_orders"))
         self.run_workload = bool(get("run_workload"))
         self.strategy_name = str(get("strategy"))
+        self.rule_artifact = str(get("rule_artifact")).strip()
+        self.rule_matching = str(get("rule_matching")).strip()
         self.progress_interval_s = float(get("progress_interval_s"))
         self.verbose = bool(get("verbose"))
 
@@ -573,6 +605,13 @@ class FleetNode(Node):
         self.events_pub.publish(String(data=line.strip()))
 
         if self.verbose or alert:
+            self.say(line)
+
+    def say(self, line: str) -> None:
+        """A terminal line, in step with the Gazebo playback when it is buffered."""
+        if self.player is not None:
+            self.player.say(line)
+        else:
             print(line, flush=True)
 
     def load_workload(self) -> OrderQueue | None:
@@ -644,10 +683,21 @@ class FleetNode(Node):
         config = self.config
 
         try:
+            # Only the learned strategy takes these, so every other strategy
+            # is constructed exactly as before (run_workload.py does the same).
+            options = {}
+            if self.strategy_name == "ilp":
+                if not self.rule_artifact:
+                    raise ValueError("strategy ilp needs rule_artifact:=<rule_artifact.json>")
+                options["rule_artifact"] = self.rule_artifact
+                if self.rule_matching:
+                    options["matching"] = self.rule_matching
+            elif self.rule_artifact or self.rule_matching:
+                raise ValueError("rule_artifact and rule_matching are for strategy ilp")
             allocator = get_batch_strategy(
-                self.strategy_name, seed=self.allocation_seed
+                self.strategy_name, seed=self.allocation_seed, **options
             )
-        except KeyError as error:
+        except (KeyError, ValueError) as error:
             self.get_logger().error(str(error))
             return
 
@@ -754,13 +804,24 @@ class FleetNode(Node):
 
         self.engine = executor.engine
         self.workload = executor
+        self.allocator = allocator
+
+        if self.use_gazebo and self.gazebo_sink is not None and self.playback_buffer_s > 0.0:
+            self.player = Player(
+                lambda poses: self._emit_gazebo_poses(0.0, poses),
+                say=lambda line: print(line, flush=True),
+                buffer_s=self.playback_buffer_s,
+                hz=self.gazebo_playback_hz,
+            )
 
         started = perf_counter()
 
         try:
             result = executor.run()
+            self._finish_playback()
 
         except Exception as error:
+            self._finish_playback()
             # The same classification as the headless runner, and the
             # same failure.json when a dataset was asked for.
             kind = classify(error)
@@ -821,15 +882,29 @@ class FleetNode(Node):
             return
 
         status = self.fleet_status()
+        robots = self.engine.robots.values()
+        waiting = sum(r.waiting_time_s for r in robots)
+        driven = sum(r.distance_m for r in robots) / 1000.0
+        done = max(progress.completed, 1)
 
-        print(
+        lines = [
             f"[t={progress.sim_time:7.0f} s] orders {progress.completed}/"
             f"{progress.total} done, {progress.in_progress + progress.assigned} "
             f"active, {progress.pending} pending | robots {progress.busy} busy, "
             f"{progress.available} free, {status.robots_in_charging} charging or "
             f"queued | SOC min {status.soc_min:.1f}% mean {status.soc_mean:.1f}%",
-            flush=True,
-        )
+            f"             decisions {self.workload.result.decisions} | driven {driven:.1f} km "
+            f"| traffic waiting {waiting:,.0f} s in total ({waiting / done:.1f} s per delivered order)",
+        ]
+        trace = getattr(self.allocator, "rule_trace", None)
+        if trace:
+            by_rule = sum(1 for row in trace if row["matched_by_rule"])
+            lines.append(
+                f"             ILP picks so far: {by_rule} by learned rules ({by_rule / len(trace):.0%}), "
+                f"{len(trace) - by_rule} by the fallback ({(len(trace) - by_rule) / len(trace):.0%})"
+            )
+        for line in lines:
+            self.say(line)
 
     def announce_dispatch(self, record) -> None:
         """One robot-order assignment, as it is dispatched."""
@@ -1029,6 +1104,14 @@ class FleetNode(Node):
         begun = perf_counter()
         span = end_sim - start_sim
 
+        if self.player is not None:
+            # Buffered: compute every frame now, let the playback thread pace them.
+            for index in range(1, frames + 1):
+                sim_time = start_sim + span * index / frames
+                self.player.frame(wall_seconds / frames if wall_seconds > 0.0 else 0.0,
+                                  self._live_poses(sim_time))
+            return
+
         for index in range(1, frames + 1):
             fraction = index / frames
 
@@ -1132,8 +1215,47 @@ class FleetNode(Node):
             self.gazebo_sink = None
             self.use_gazebo = False
 
+    def _finish_playback(self) -> None:
+        """Let Gazebo and the terminal catch up with the finished simulation."""
+        if self.player is not None:
+            player, self.player = self.player, None
+            player.finish()
+            if player.stalls:
+                self.get_logger().info(
+                    f"playback waited for the simulation {player.stalls} time(s); "
+                    "raise playback_buffer_s to avoid it"
+                )
+
+    def explain_decisions(self) -> None:
+        """For strategy ilp: say which rule made each new pick and why (display only)."""
+        if self.explain <= 0:
+            return
+        last = getattr(self.allocator, "last_decision", None)
+        if last is None or last["decision_id"] < self._explained:
+            return
+        self._explained = last["decision_id"] + 1
+        from ilp_learning.explain import explain_decision
+
+        picks = explain_decision(last["program"], last["pairs"], last["picks"])
+        robots = len({p.robot_id for p in last["pairs"]})
+        orders = len({p.order_id for p in last["pairs"]})
+        by_rule = sum(1 for p in picks if p["rule"] is not None)
+        self.say(
+            f"  decision {last['decision_id']} at t={self.engine.sim_time:.1f} s: "
+            f"{robots} free robot(s) x {orders} order(s) -> {len(picks)} pick(s), "
+            f"{by_rule} by learned rules, {len(picks) - by_rule} by the fallback"
+        )
+        for p in picks[: self.explain]:
+            rule = f"rule {p['rule']}" if p["rule"] is not None else "fallback"
+            self.say(f"    {p['robot']} -> {p['order']}  [{rule}] {p['text']}")
+        if len(picks) > self.explain:
+            self.say(f"    ... and {len(picks) - self.explain} more pick(s)")
+
     def on_tick(self, sim_time: float, batch) -> None:
         """Observe the new state. Never advances the clock."""
+
+        if self.strategy_name == "ilp":
+            self.explain_decisions()
 
         # At publish_hz of wall time, not once per event batch: a run
         # has hundreds of thousands of batches.

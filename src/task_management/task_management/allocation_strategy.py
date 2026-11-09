@@ -1151,7 +1151,8 @@ class ILPAllocationStrategy(BatchAllocationStrategy):
         load = {}
 
         needs_battery = self._program.needs_battery
-        if self._program.needs_congestion or self._program.needs_load or needs_battery:
+        needs_workload = self._program.needs_workload
+        if self._program.needs_congestion or self._program.needs_load or needs_battery or needs_workload:
             if self._executor is None:
                 raise ValueError("ilp: this rule needs the executor's fleet state")
 
@@ -1172,7 +1173,7 @@ class ILPAllocationStrategy(BatchAllocationStrategy):
         self._decisions += 1
 
         by_pair = {(c.robot_id, c.order_id): c for c in eligible}
-        picks = self._matcher.match_pairs(
+        pairs = (
             [
                 CandidatePair(
                     c.robot_id,
@@ -1182,6 +1183,11 @@ class ILPAllocationStrategy(BatchAllocationStrategy):
                     c.fifo_position,
                     **congestion.get((c.robot_id, c.order_id), {}),
                     **load,
+                    **(
+                        {"robot_distance_m": float(self._executor.engine.robots[c.robot_id].distance_m)}
+                        if needs_workload
+                        else {}
+                    ),
                     **(
                         {
                             "energy_margin_percent": float(c.energy.energy_margin_percent),
@@ -1194,9 +1200,12 @@ class ILPAllocationStrategy(BatchAllocationStrategy):
                     ),
                 )
                 for c in eligible
-            ],
-            self._program,
+            ]
         )
+        picks = self._matcher.match_pairs(pairs, self._program)
+        # The last decision, for live explanations (display only, never read back).
+        self.last_decision = {"decision_id": decision_id, "pairs": pairs, "picks": picks,
+                              "program": self._program}
 
         maximum = maximum_cardinality(by_pair)
 

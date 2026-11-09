@@ -63,6 +63,13 @@ BATTERY_PREDICATES = [
 ]
 
 
+# Approved 2026-11-07: work done so far, for fairness between robots and for
+# explanations. Read from features.parquet (robot_distance_m), never from robot_id.
+WORKLOAD_PREDICATES = [
+    ("least_driven_robot", 2, "(decision,robot)", "(in,in)"),
+]
+
+
 def generate_bias_pl(
     include_tier_b: bool = True,
     exclude: tuple[str, ...] = (),
@@ -71,6 +78,7 @@ def generate_bias_pl(
     max_clauses: int = 5,
     include_extended: bool = False,
     include_battery: bool = False,
+    include_workload: bool = False,
 ) -> str:
     """Generate validated Popper v4.4.0 bias.pl contents."""
     lines: list[str] = [
@@ -94,6 +102,8 @@ def generate_bias_pl(
         preds.extend(EXTENDED_PREDICATES)
     if include_battery:
         preds.extend(BATTERY_PREDICATES)
+    if include_workload:
+        preds.extend(WORKLOAD_PREDICATES)
 
     for name, arity, types, dirs in preds:
         lines.append(f"body_pred({name},{arity}).")

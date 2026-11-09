@@ -29,7 +29,14 @@ Outcome-corrected labels for group D (2026-11-09, uncommitted; DECISIONS.md "Lon
 - 300-order experiment A, development outputs in the campaign checkout (`runs/teachers/dev/corrected/o300`): all 9 rule sets non-empty (before: 6 of 9 empty), using congestion, battery and load predicates; about 70% of probed decisions corrected.
 - Closed loop on validation seeds 116-120 (20 paired runs each): no corrected policy beats its teacher except random (-40.2 s); nearest_astar +8.3 s, multi_criteria +17.3 s, the others within noise. Problem A gate: rules non-empty, but fallback above 50% for auction, hungarian and milp, and no gain.
 - Explanation prototype (`runs/teachers/analysis/explain_picks.py` in the campaign checkout): every pick of a run in words, clause re-checked against the pairs left at that round.
-- Next: an oracle rollout policy at 300 orders to measure the reachable gain before cluster runs.
+- Oracle rollout policy (`ilp_learning.m6_oracle`, 2026-11-09): the teacher drives the run, and at every decision the mp1 candidates are simulated from the identical state and the decisive jw2-best pair is taken; no rules. Upper bound for outcome-aware rules. 3 tests (pause/resume replays exactly; an oracle that decides nothing is the teacher; overrides are the pairs the run then makes). Results: see below.
+- Workload vocabulary (`train_rules --workload`, predicate `least_driven_robot(D,R)`): the robot's cumulative distance at the decision, recorded as `robot_distance_m` in features.parquet (new recordings only) and read live by the ilp strategy. 7 tests incl. online/offline parity. Not used in any trained artifact yet.
+- ROS fleet node takes `rule_artifact:=` and `rule_matching:=` with `strategy:=ilp` (as run_workload.py); checked headless with 100 robots, 300/300 orders. The ROS Python needs pandas (`sudo apt install python3-pandas`).
+- Demo (`scripts/demo_compare.py`, `scripts/demo_deeper.py`): every teacher and rule set once on one unseen workload, with copy-vs-teacher, crossover results, crossover choices, eight question-driven graphs, an optional oracle (`--oracle`) and a battery/workload-length section; one self-contained report.html.
+- Explanations (`ilp_learning/explain.py`): every pick of a learned policy in words, clause re-checked against the pairs left at that round; used live by the ROS node (`explain:=N`).
+- ROS node: `orders_file:=` and `seed:=` replay a recorded run exactly (checked: identical makespan, distance and waiting); smooth Gazebo playback on its own thread with a pre-roll (`simulation_env/playback.py`, `playback_buffer_s:=`); richer status lines (decisions, distance, traffic waiting, ILP rule/fallback share). Display only: results unchanged.
+- Oracle on demo seed 116 (nearest_astar, 100 robots): 431.7 s vs teacher 425.3 s (+6.3 s), 13 overrides: a 120 s window gain does not always shorten the whole run. Next: oracle on validation seeds 116-120 for nearest_astar, multi_criteria and milp, and a whole-run objective at 300 orders.
+- Research suite 1074 passed; ruff clean.
 
 ### Dashboard control plane — 6 November 2026 (uncommitted)
 

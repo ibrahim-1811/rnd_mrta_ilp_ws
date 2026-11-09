@@ -225,6 +225,9 @@ def pair_features(engine, warehouse, robots, orders, candidates) -> list[dict]:
             {
                 "robot_id": candidate.robot_id,
                 "order_id": candidate.order_id,
+                # Work done so far (workload vocabulary): the robot's cumulative
+                # distance at this decision. Past only; never its identity.
+                "robot_distance_m": float(robot.distance_m),
                 **candidate_features(
                     state,
                     candidate.robot_id,

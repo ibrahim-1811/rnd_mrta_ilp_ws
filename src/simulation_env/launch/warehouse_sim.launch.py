@@ -87,6 +87,19 @@ def generate_launch_description():
             # imply orders:=true; naming a strategy without it still runs
             # no workload.
             DeclareLaunchArgument("strategy", default_value="nearest_astar"),
+            # strategy:=ilp only: the learned rule set and its matcher
+            # (iterative, cardinality or greedy; empty = iterative).
+            DeclareLaunchArgument("rule_artifact", default_value=""),
+            DeclareLaunchArgument("rule_matching", default_value=""),
+            # Replay a recorded run exactly: its order file and its seed
+            # (empty / negative keep the config's).
+            DeclareLaunchArgument("orders_file", default_value=""),
+            DeclareLaunchArgument("seed", default_value="-1"),
+            # Display only: seconds the simulation may compute ahead of the
+            # Gazebo playback (0 = draw on the simulation thread), and how
+            # many picks of each ilp decision to explain on the terminal.
+            DeclareLaunchArgument("playback_buffer_s", default_value="30.0"),
+            DeclareLaunchArgument("explain", default_value="2"),
             # 0.0 keeps fleet.speed_mps from the YAML; any positive
             # value overrides it for this run only.
             DeclareLaunchArgument("speed", default_value="0.0"),
@@ -147,6 +160,12 @@ def generate_launch_description():
                         "load_orders": LaunchConfiguration("orders"),
                         "run_workload": LaunchConfiguration("orders"),
                         "strategy": LaunchConfiguration("strategy"),
+                        "rule_artifact": LaunchConfiguration("rule_artifact"),
+                        "rule_matching": LaunchConfiguration("rule_matching"),
+                        "orders_file": LaunchConfiguration("orders_file"),
+                        "allocation_seed": LaunchConfiguration("seed"),
+                        "playback_buffer_s": LaunchConfiguration("playback_buffer_s"),
+                        "explain": LaunchConfiguration("explain"),
                         "speed_mps": LaunchConfiguration("speed"),
                         "window": LaunchConfiguration("window"),
                         "dispatch_quantum_s": LaunchConfiguration("quantum"),
