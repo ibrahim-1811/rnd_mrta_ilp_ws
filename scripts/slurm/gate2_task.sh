@@ -9,6 +9,9 @@ set -uo pipefail
 cd "$(dirname "$0")/../.."
 INDEX=${1:?task index}
 TSV=${GATE2_TSV:-scripts/slurm/gate2.tsv}
+# A batch job inherits the submitting shell's PATH; the cluster keeps pixi beside the repo.
+command -v pixi >/dev/null || export PATH="${PIXI_BIN:-$(cd .. && pwd)/.pixi_home/bin}:$PATH"
+command -v pixi >/dev/null || { echo "task $INDEX: pixi not found; set PIXI_BIN"; exit 2; }
 read -r OBJECTIVE ORDERS TEACHER ROBOTS SEED HORIZON < <(sed -n "$((INDEX + 1))p" "$TSV")
 [ -n "${HORIZON:-}" ] || { echo "task $INDEX: no line $((INDEX + 1)) in $TSV"; exit 2; }
 TAG="o${ORDERS}/${OBJECTIVE}/${TEACHER}/r${ROBOTS}_s${SEED}"

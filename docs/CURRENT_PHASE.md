@@ -1,6 +1,6 @@
 # Current Development Phase
 
-## Status — 6 November 2026
+## Status — 10 November 2026
 
 Active milestone: **M6 Outcome-Aware ILP**, chosen by the researcher on 2026-11-06. Deadline 2026-12-20.
 
@@ -9,14 +9,18 @@ Active milestone: **M6 Outcome-Aware ILP**, chosen by the researcher on 2026-11-
 | M0-M2 | done, committed |
 | M3 | built; validated once from tag `m3-evidence-1` with mixed gates ([validation_gates.md](../.scratch/m3-popper-learner/validation_gates.md)) |
 | Tier B online | done, committed `56f495f` |
-| M4 Single-Teacher | built, committed; exploratory on training seeds only; no gate run; validation seeds 116-120 unused |
+| M4 Single-Teacher | built, committed; exploratory; no gate run |
 | M5 Multi-Teacher | built (majority, plurality), committed `9757d28`; exploratory only; no gate run |
-| M6 Outcome-Aware | M6-1, M6-2 and M6-MP built and tested, uncommitted: corpus-aligned rollouts, multi-pair candidates, jw2 objective (validated on 24 decisions), battery predicates, stratified sampling, multi-policy continuation with cross-policy labels, Slurm workflow (not submitted). Cross-policy pilot (2026-11-07): 0 positives at 70 and 100 robots; best candidate agrees across the three continuation policies in 1 of 12 decisions; gate not passed; resolved 2026-11-07: agreement is a sensitivity experiment, primary D is pooled per-teacher outcome learning (`--continuation behaviour`), `nearest_astar` continuation a controlled baseline. Groups A-D pipeline smoke-tested end to end. No outcome-aware rule learned yet |
-| M7 explanations | not built; rule trace exists |
-| M8 statistics | Friedman, Wilcoxon, Holm not implemented (F9) |
+| M6 Outcome-Aware | outcome-corrected labels (2026-11-09): rules learned, no closed-loop gain on 116-120 (development-stage result). **Gate 1 passed** (2026-11-10): the oracle beats nearest_astar, multi_criteria and milp in 60/60 runs at 300 orders (makespan -7.9 %) and 56/60 at 1500 (-3.7 %), waiting -31 % / -42 %, distance flat; gain grows with fleet size. Oracle demonstrations are now the primary group-D label (DECISIONS.md, "Gate 2 Pass Criterion and Order"). **Gate 2 in progress**: oracle runs as training folders (`b8207b9`), cluster tasks on seeds 104-110 (`360a3ea`), `train_rules --oracle-labels` and the same-state imitation control, `gate2_verdict` (uncommitted). No outcome-aware rule has beaten its teacher yet |
+| M7 explanations | prototype (`ilp_learning/explain.py`); not evaluated |
+| M8 statistics | paired Wilcoxon + Holm for Gate 2 (`ilp_learning.gate2_verdict`); Friedman not implemented; final-campaign primary test still open (F9) |
 | M9 report | not started |
 
-Next (2026-11-07, DECISIONS.md "Campaign Decisions Before the 300-Order Run"): commit the research version without the GUI work, then the 300-order teacher corpus, single- and multi-teacher training, outcome labels, and a first closed-loop comparison. Cluster-scale training is decided after that.
+Gate 1 results: `runs/gate1/summary.txt` (cluster jobs 477088-477091). Gate 2 plan: [.scratch/gate2-oracle-distillation/plan.md](../.scratch/gate2-oracle-distillation/plan.md).
+
+Next (2026-11-10): Gate 2 option A on the cluster (84 oracle runs, 300 orders, seeds 104-110), then per teacher an oracle-label and an imitation-label rule set, closed loop on 116-120, verdict by the frozen criterion. Option B (1500 orders) only if A gives rules that fire.
+
+Earlier next step (2026-11-07, DECISIONS.md "Campaign Decisions Before the 300-Order Run"): commit the research version without the GUI work, then the 300-order teacher corpus, single- and multi-teacher training, outcome labels, and a first closed-loop comparison. Done; see below.
 
 Two fixes found by the 300-order campaign (2026-11-07, after `551b6bf`; training and rollouts unaffected):
 

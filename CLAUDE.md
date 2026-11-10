@@ -208,16 +208,16 @@ No future-outcome leakage.
 
 ## ILP Rules
 
-ILP is not yet implemented in this repo.
+ILP is implemented in `src/ilp_learning` (Popper; rules compiled to Python and run as the `ilp` strategy). Current state: docs/CURRENT_PHASE.md.
 
-Planned order:
+Order and state (2026-11-10):
 
 ```text
-reproduce simple teacher rule
-Single-Teacher ILP
-Multi-Teacher ILP
-Outcome-Aware ILP
-explanations
+reproduce simple teacher rule      done (M3)
+Single-Teacher ILP                 built, exploratory (M4)
+Multi-Teacher ILP                  built, exploratory (M5)
+Outcome-Aware ILP                  in progress (M6): Gate 1 passed, Gate 2 running
+explanations                       prototype (M7)
 ```
 
 The final learner should produce symbolic rules that can be inspected and used to explain allocation decisions.

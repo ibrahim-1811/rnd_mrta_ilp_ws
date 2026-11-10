@@ -1,6 +1,6 @@
 # Gate 2: can ILP rules learn the oracle's gain?
 
-Status: needs-info (2026-11-10: pass criterion and A-then-B order approved, recorded in DECISIONS.md; decision 1 = option P, oracle labels primary for group D; nothing built or submitted)
+Status: ready-for-agent (2026-11-10: decisions 1-3 made; step 1 b8207b9, cluster tasks 360a3ea, --oracle-labels and gate2_verdict built and tested, uncommitted; option A submission failed on PATH, awaiting resubmit)
 
 ## Where this comes from
 

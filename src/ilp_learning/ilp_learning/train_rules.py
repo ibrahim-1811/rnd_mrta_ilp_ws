@@ -307,6 +307,7 @@ def train(
     continuation: str | None = None,
     outcome_correct: bool = False,
     workload: bool = False,
+    oracle_labels: bool = False,
 ) -> dict[str, Any]:
     """Runs -> thresholds, BK, bias, examples, Popper, compile, artifact.
 
@@ -334,8 +335,25 @@ def train(
     outcome_correct (group D) keeps the teacher's own picks of the probed decisions and
     corrects them where the run's own continuation shows the teacher's pair lost by delta
     (supervision.outcome_corrected); it needs mp1 rollouts and continuation "behaviour".
+    oracle_labels (Gate 2, group D) learns the picks of oracle runs (ilp_learning.m6_oracle,
+    label_source "oracle"): the pairs the oracle's run made. On the same oracle runs,
+    label_teacher (or label_policy) is the same-state imitation control. Oracle runs and
+    teacher runs never share a corpus, and oracle runs need one of those label choices.
     """
     runs = [load_induction_run(path) for path in run_dirs]
+    sources = {run.manifest.get("label_source", "teacher") for run in runs}
+    if len(sources) > 1:
+        raise TrainingError(f"one corpus takes one kind of run, got label sources {sorted(sources)}")
+    oracle_runs = sources == {"oracle"}
+    if oracle_labels and not oracle_runs:
+        raise TrainingError("--oracle-labels needs oracle runs (ilp_learning.m6_oracle output)")
+    if oracle_runs and not (oracle_labels or label_teacher or label_policy):
+        raise TrainingError(
+            "these are oracle runs: --oracle-labels learns the oracle's picks, "
+            "--label-teacher T the same-state imitation control")
+    if oracle_labels and (label_teacher or label_policy or outcome_rollouts is not None
+                          or relabel_finish or permute_seed is not None):
+        raise TrainingError("--oracle-labels takes the oracle's own picks; no other labels")
     if outcome_correct and (outcome_rollouts is None or continuation != BEHAVIOUR):
         raise TrainingError(
             f"--outcome-correct needs --outcome-rollouts and --continuation {BEHAVIOUR}: "
@@ -653,7 +671,9 @@ def train(
 
     artifact = {
         "schema_version": SCHEMA_VERSION,
-        "teacher": ("outcome_corrected:" + "+".join(sorted({r.manifest["strategy"] for r in runs})))
+        "teacher": ("oracle:" + "+".join(sorted({r.manifest["strategy"] for r in runs})))
+        if oracle_labels
+        else ("outcome_corrected:" + "+".join(sorted({r.manifest["strategy"] for r in runs})))
         if outcome_correct
         else "outcome_aware"
         if outcome
@@ -729,6 +749,13 @@ def train(
     }
     if supervision is not None:
         artifact["supervision"] = supervision
+    if oracle_runs:
+        # The states are the oracle's; the labels its picks, or a teacher's on those states.
+        artifact["oracle"] = {
+            "labels": "oracle" if oracle_labels else (label_teacher or f"panel_{label_policy}"),
+            "objectives": sorted({r.manifest["oracle"]["objective"] for r in runs}),
+            "source_run_ids": sorted(r.manifest["oracle"]["source_run_id"] for r in runs),
+        }
     if pooled:
         artifact["pool"] = _pool_provenance(runs, chosen, examples, tracker)
     if tier_b or extended or battery:
@@ -785,9 +812,13 @@ def main() -> int:
         help="group D: the teacher's picks, corrected where its own continuation shows its pair "
         "lost by delta (needs --outcome-rollouts and --continuation behaviour)",
     )
+    parser.add_argument(
+        "--oracle-labels", action="store_true",
+        help="Gate 2 group D: learn the picks of oracle runs (ilp_learning.m6_oracle output)",
+    )
     args = parser.parse_args()
 
-    given = {json.loads((Path(r) / "run.json").read_text())["run_id"] for r in args.runs}
+    given ={json.loads((Path(r) / "run.json").read_text())["run_id"] for r in args.runs}
 
     def probes(root):
         found: dict[str, list[Path]] = {}
@@ -831,6 +862,7 @@ def main() -> int:
         outcome_mode=args.outcome_mode,
         battery=args.battery,
         workload=args.workload,
+        oracle_labels=args.oracle_labels,
         only_decisions=only,
         outcome_objective=args.outcome_objective,
         pooled=args.pooled,

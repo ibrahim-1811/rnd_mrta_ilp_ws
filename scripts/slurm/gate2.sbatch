@@ -16,6 +16,8 @@
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?submit from the repository root}"
 : "${FIRST:?FIRST task line (0-based)}" "${COUNT:?COUNT task lines}"
+command -v pixi >/dev/null || export PATH="${PIXI_BIN:-$(cd .. && pwd)/.pixi_home/bin}:$PATH"
+command -v pixi >/dev/null || { echo "pixi not found; set PIXI_BIN or put pixi on PATH"; exit 2; }
 echo "gate2 job $SLURM_JOB_ID on $(hostname): tasks $FIRST..$((FIRST + COUNT - 1)), start $(date +%T)"
 FAILED=0
 seq "$FIRST" $((FIRST + COUNT - 1)) | xargs -P "$COUNT" -I{} scripts/slurm/gate2_task.sh {} || FAILED=1

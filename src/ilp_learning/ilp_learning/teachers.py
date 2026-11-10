@@ -35,8 +35,9 @@ def matching_for(teacher: str) -> str:
         return "cardinality" if teacher in ONE_SHOT else DEFAULT_MATCHING
     if teacher.startswith(("pooled", "panel_")) or teacher == "outcome_aware":
         return DEFAULT_MATCHING
-    if teacher.startswith("outcome_corrected:"):
-        # The teacher's own picks, corrected: its matcher; pooled teachers, the default.
+    if teacher.startswith(("outcome_corrected:", "oracle:")):
+        # The teacher's own picks, corrected (by its continuation, or by the oracle at
+        # every decision of the oracle's run): its matcher; pooled teachers, the default.
         base = teacher.split(":", 1)[1]
         return matching_for(base) if base in TEACHERS else DEFAULT_MATCHING
     raise ValueError(f"unknown label source {teacher!r}; teachers: {TEACHERS}")
