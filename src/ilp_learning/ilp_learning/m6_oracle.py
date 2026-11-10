@@ -25,12 +25,18 @@ A branch beats the teacher's branch only by at least delta (2 s), as the labels 
 
 RUN_DIR is a recorded corpus run; its manifest rebuilds the identical workload. The
 output holds oracle.json (both runs' metrics, every decision's verdict) and the
-oracle's decision and outcome tables.
+oracle's run as a run folder train_rules can read (Gate 2, DECISIONS.md "Gate 2 Pass
+Criterion and Order"): run.json, decisions.parquet (selected = the pairs the oracle's
+run made), outcomes.parquet, features.parquet and teacher_labels.parquet (every panel
+teacher's picks at the oracle's own decisions, the same-state imitation control). The
+features and the panel come from one replay of the oracle's run with its overrides
+forced, which must reproduce the oracle's decision and outcome tables exactly.
 """
 
 from __future__ import annotations
 
 import argparse
+from hashlib import sha256
 import json
 import sys
 import time
@@ -40,9 +46,11 @@ import pandas as pd
 
 from ilp_learning.bk_builder import derive_est_finish_s
 from ilp_learning.m6_candidates import DEFAULT_MAX_ACTIONS, select_candidates
-from ilp_learning.m6_rollouts import corpus_builder
+from ilp_learning.m6_rollouts import AlignmentError, corpus_builder
 from ilp_learning.supervision.outcome_common import JW2, label_decision, window_orders
-from simulation_env.rollout import ForcedPair, _Stop, _fleet_waiting, branch_pair, clone, resume
+from simulation_env.congestion import FeatureObserver
+from simulation_env.rollout import ForcedPair, _Stop, _fleet_waiting, branch_pair, clone, resume, tables
+from simulation_env.teacher_panel import PANEL_FILE, TeacherPanel
 from simulation_env.workload_executor import PerfBudget, WorkloadStalledError
 
 ORACLE_SEED = 20261109
@@ -211,6 +219,7 @@ def oracle_run(build, *, run_id: str, behaviour: str, horizon_s: float = JW2.hor
                 scores.append((score, rank, c, "behaviour" in c.sources))
             teacher = next((s for s in scores if s[3]), None)
             verdict["teacher_score"] = list(teacher[0]) if teacher else None
+            verdict["teacher_pair"] = f"{teacher[2].robot_id}:{teacher[2].order_id}" if teacher else None
             best = min(scores, key=lambda s: (s[0], s[1])) if scores else None
             better = False
             if best is not None and teacher is not None and best is not teacher:
@@ -244,6 +253,8 @@ def oracle_run(build, *, run_id: str, behaviour: str, horizon_s: float = JW2.hor
             best = labelled[labelled["label"] == "pos"]
             teacher = labelled[labelled["candidate_sources"].str.split("+").map(lambda s: "behaviour" in s)]
             verdict["teacher_j_w_s"] = float(teacher["j_w_s"].iloc[0]) if len(teacher) else float("nan")
+            own = candidates[int(teacher["candidate_rank"].iloc[0])] if len(teacher) else None
+            verdict["teacher_pair"] = f"{own.robot_id}:{own.order_id}" if own else None
             if len(best) and len(teacher) and best.index[0] != teacher.index[0]:
                 row = best.iloc[0]
                 pick = candidates[int(row["candidate_rank"])]
@@ -263,6 +274,82 @@ def oracle_run(build, *, run_id: str, behaviour: str, horizon_s: float = JW2.hor
         if isinstance(executor.allocator, ForcedPair):
             executor.allocator = executor.allocator.inner
     return executor, verdicts
+
+
+class _ScheduledPairs:
+    """The wrapped strategy, with the oracle's override forced at each overridden decision."""
+
+    def __init__(self, inner, executor, overrides: dict[int, tuple[str, str]]):
+        self.inner = inner
+        self.executor = executor
+        self.overrides = overrides
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    def assign(self, warehouse, robots, orders, fifo_position, cache=None, battery=None, timing=None):
+        decision_id = self.executor.result.decisions - 1
+        pair = self.overrides.get(decision_id)
+        strategy = self.inner if pair is None else ForcedPair(self.inner, self.executor, decision_id, *pair)
+        return strategy.assign(warehouse, robots, orders, fifo_position, cache, battery=battery, timing=timing)
+
+
+def overrides_of(verdicts: list[dict]) -> dict[int, tuple[str, str]]:
+    """decision_id -> (robot_id, order_id) the oracle forced."""
+    return {v["decision_id"]: tuple(v["pair"].split(":", 1)) for v in verdicts if v.get("verdict") == "override"}
+
+
+def replay_with_labels(build, verdicts: list[dict], seed: int):
+    """The oracle's run once more, its overrides forced, recording features and the panel.
+
+    (executor, feature rows, panel rows). The observers decide nothing, so the replay's
+    tables equal the oracle's; replay_checked enforces that.
+    """
+    executor = build()
+    panel = TeacherPanel(executor.allocator, executor, seed=seed)
+    observer = FeatureObserver(panel, executor)
+    executor.allocator = _ScheduledPairs(observer, executor, overrides_of(verdicts))
+    executor.run()
+    return executor, observer.rows, panel.rows
+
+
+def replay_checked(build, oracle_executor, verdicts: list[dict], seed: int):
+    """replay_with_labels, refused unless it reproduces the oracle's run exactly."""
+    replay, features, panel = replay_with_labels(build, verdicts, seed)
+    if tables(replay) != tables(oracle_executor):
+        raise AlignmentError("the replay with features and panel differs from the oracle's run")
+    return replay, features, panel
+
+
+def oracle_run_id(source_run_id: str, objective: str, horizon_s: float) -> str:
+    """The oracle run's own id: never the teacher run's, so both can sit in one corpus."""
+    key = f"{source_run_id}|oracle|{objective}|{horizon_s}|{DELTA_S}"
+    return sha256(key.encode()).hexdigest()[:16]
+
+
+def write_trainable_run(out: Path, source_manifest: dict, replay, features: list, panel: list,
+                        *, objective: str, horizon_s: float, verdicts: list[dict]) -> dict:
+    """The oracle's run as a recorded run folder; returns its manifest."""
+    run_id = oracle_run_id(source_manifest["run_id"], objective, horizon_s)
+    manifest = {
+        **source_manifest,
+        "run_id": run_id,
+        "label_source": "oracle",
+        "oracle": {
+            "source_run_id": source_manifest["run_id"], "objective": objective,
+            "horizon_s": horizon_s, "delta_s": DELTA_S,
+            "overrides": sum(v.get("verdict") == "override" for v in verdicts),
+            "kept": sum(v.get("verdict") == "keep" for v in verdicts),
+        },
+    }
+    out.mkdir(parents=True, exist_ok=True)
+    decisions, outcomes = (pd.DataFrame(rows).assign(run_id=run_id) for rows in tables(replay))
+    decisions.to_parquet(out / "decisions.parquet")
+    outcomes.to_parquet(out / "outcomes.parquet")
+    pd.DataFrame(features).to_parquet(out / "features.parquet")
+    pd.DataFrame(panel).to_parquet(out / PANEL_FILE)
+    (out / "run.json").write_text(json.dumps(manifest, indent=1), encoding="utf-8")
+    return manifest
 
 
 def main() -> int:
@@ -296,10 +383,12 @@ def main() -> int:
                                     max_decisions=args.max_decisions, progress=progress,
                                     objective=args.objective, horizon_s=args.horizon, manifest=manifest)
     oracle = _metrics(executor)
-    args.out.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(executor.recorder.decisions).to_parquet(args.out / "decisions.parquet")
-    pd.DataFrame(executor.recorder.outcomes).to_parquet(args.out / "outcomes.parquet")
+    print(f"[{label}] replaying the oracle's run with features and teacher panel", flush=True)
+    replay, features, panel = replay_checked(build, executor, verdicts, int(manifest["seed"]))
+    trained = write_trainable_run(args.out, manifest, replay, features, panel, objective=args.objective,
+                                  horizon_s=args.horizon, verdicts=verdicts)
     report = {
+        "oracle_run_id": trained["run_id"],
         "corpus_run": str(args.run), "run_id": manifest["run_id"], "behaviour": behaviour,
         "robots": manifest["robot_count"], "workload_seed": manifest.get("orders_path"),
         "objective": args.objective, "mode": "conservative", "horizon_s": args.horizon,

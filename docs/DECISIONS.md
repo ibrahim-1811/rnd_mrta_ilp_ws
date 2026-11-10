@@ -2007,3 +2007,32 @@ cluster         hpc1/hpc3 partitions; the cluster allows 5 tasks per job array,
 
 The jw2 oracle at 1500 orders is not affordable (about 4.5 min per decision on
 hpc1, about 450 decisions per run).
+
+## Gate 2 Pass Criterion and Order (2026-11-10)
+
+Decided by the researcher after Gate 1 (oracle beat its teacher in 60/60 runs at 300
+orders and 56/60 at 1500; `runs/gate1/summary.txt`) and before any Gate 2 data exists.
+Plan: `.scratch/gate2-oracle-distillation/plan.md`.
+
+```text
+question     does an ILP policy trained on oracle choices beat its teacher closed loop
+             on validation seeds 116-120? Training data only from induction seeds 104-110.
+pass         per teacher (nearest_astar, multi_criteria, milp), on the same 20 paired
+             runs (70/80/90/100 robots x seeds 116-120):
+               1. Problem A gate: non-empty program, rules fire, fallback_rate <= 0.5
+               2. mean order makespan below the teacher's: paired Wilcoxon signed-rank,
+                  Holm over the three teachers, alpha 0.05
+reported     recovered share = (teacher - student) / (teacher - oracle), flow time,
+             waiting, distance, charging, rule count and length, decision time
+order        option A (300 orders, wholerun oracle) first; option B (1500 orders,
+             horizon oracle) only if A gives non-empty rules with fallback <= 0.5
+```
+
+Group D labels (decided 2026-11-10, option P, before any Gate 2 data): oracle
+demonstrations, the oracle's own picks along its own run (`m6_oracle`), replace the
+outcome-corrected labels as the primary group-D label. Amends "Long Workload, Workload
+Fact and Outcome-Corrected Labels" (2026-11-07), group D labels. Why: corrected labels
+gave no closed-loop gain on validation seeds 116-120 (nearest_astar +8.3 s,
+multi_criteria +17.3 s), and Gate 1 shows the oracle's choices do beat every teacher.
+Selection used validation seeds only; evaluation seeds 201-230 stay sealed. The
+corrected-label result is reported as a development-stage finding and is not re-run.
