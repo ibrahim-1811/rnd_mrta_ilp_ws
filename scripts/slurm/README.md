@@ -55,3 +55,21 @@ sbatch --array=0-3 --dependency=afterok${T} --export=ALL,ORDERS=300,EXPERIMENT=A
 - `run_experiment.py --rules` refuses an artifact trained on any evaluated seed. Final
   seeds (201-230) need `SEEDS=... PURPOSE=final` and are meant to be run once.
 - `summary.csv` gives `rule_picks`, `fallback_picks`, `fallback_rate` for each learned run.
+
+# Gate 2: oracle demonstrations (DECISIONS.md, "Gate 2 Pass Criterion and Order")
+
+```bash
+scripts/slurm/make_gate2_tasks.sh A          # 84 tasks: 3 teachers x 70-100 robots x seeds 104-110, 300 orders
+for FIRST in 0 28 56; do
+  sbatch -p hpc1 --cpus-per-task=28 --export=ALL,FIRST=$FIRST,COUNT=28 scripts/slurm/gate2.sbatch
+done
+```
+
+- One oracle run per task (`--objective wholerun` for A, `horizon` for B), written as a run
+  folder `train_rules` reads: `runs/gate2/o<orders>/<objective>/<teacher>/r<N>_s<S>/` with
+  `run.json` (`label_source: oracle`), decisions, outcomes, features, teacher_labels and
+  `oracle.json`. Live log per task: `runs/gate2/logs/<tag>.log`.
+- Induction seeds only: `run_experiment.py --purpose induction` refuses any other seed.
+- Option B (`make_gate2_tasks.sh B`) reuses the 1500-order teacher corpus in
+  `runs/teachers/o1500/`; submit it with `--time=18:00:00 --mem=96G`, only after A.
+- A task whose `oracle.json` exists is skipped, so a job can be resubmitted after a failure.
