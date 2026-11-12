@@ -73,3 +73,20 @@ done
 - Option B (`make_gate2_tasks.sh B`) reuses the 1500-order teacher corpus in
   `runs/teachers/o1500/`; submit it with `--time=18:00:00 --mem=96G`, only after A.
 - A task whose `oracle.json` exists is skipped, so a job can be resubmitted after a failure.
+
+## Robust oracle (DECISIONS.md, "Robust Oracle Labels and the Combined Campaign")
+
+`GATE2_CONTINUATIONS` makes each task a robust oracle: every candidate is rolled out under
+each listed continuation policy, and a pick is taken only if it beats the teacher's pair in
+all of them. Output goes to `runs/gate2/o<orders>/<objective>_robust/...`, never over the
+plain oracle's folders. About 3x the plain oracle's time. Pilot (7 tasks, one job):
+
+```bash
+mkdir -p runs/gate2/logs
+for S in 104 105 106 107 108 109 110; do printf "wholerun\t300\tnearest_astar\t100\t%s\t120\n" $S; done \
+  > runs/gate2/pilot_robust.tsv
+export GATE2_CONTINUATIONS="nearest_astar multi_criteria milp"
+sbatch -p hpc1 --cpus-per-task=7 --time=04:00:00 --job-name=g2-robust-pilot \
+  --export=ALL,FIRST=0,COUNT=7,GATE2_TSV=runs/gate2/pilot_robust.tsv \
+  scripts/slurm/gate2.sbatch
+```

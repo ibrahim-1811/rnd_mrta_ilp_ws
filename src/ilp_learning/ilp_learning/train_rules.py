@@ -114,6 +114,11 @@ class InductionRun:
         return self.manifest["run_id"]
 
 
+def _oracle_continuations(run: InductionRun) -> tuple[str, ...]:
+    """The continuation policies an oracle run's picks had to win under (plain oracle: behaviour)."""
+    return tuple(run.manifest["oracle"].get("continuations", ["behaviour"]))
+
+
 def load_induction_run(run_dir: Path | str) -> InductionRun:
     """A recorded run, after it has proved it is induction data and finished."""
     path = Path(run_dir)
@@ -345,6 +350,9 @@ def train(
     if len(sources) > 1:
         raise TrainingError(f"one corpus takes one kind of run, got label sources {sorted(sources)}")
     oracle_runs = sources == {"oracle"}
+    oracle_kinds = {_oracle_continuations(run) for run in runs} if oracle_runs else set()
+    if len(oracle_kinds) > 1:
+        raise TrainingError(f"one corpus takes one oracle kind, got continuations {sorted(oracle_kinds)}")
     if oracle_labels and not oracle_runs:
         raise TrainingError("--oracle-labels needs oracle runs (ilp_learning.m6_oracle output)")
     if oracle_runs and not (oracle_labels or label_teacher or label_policy):
@@ -754,6 +762,7 @@ def train(
         artifact["oracle"] = {
             "labels": "oracle" if oracle_labels else (label_teacher or f"panel_{label_policy}"),
             "objectives": sorted({r.manifest["oracle"]["objective"] for r in runs}),
+            "continuations": list(next(iter(oracle_kinds))),
             "source_run_ids": sorted(r.manifest["oracle"]["source_run_id"] for r in runs),
         }
     if pooled:

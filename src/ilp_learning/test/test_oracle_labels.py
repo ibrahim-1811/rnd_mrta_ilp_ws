@@ -74,3 +74,16 @@ def test_oracle_and_imitation_arms_differ_in_labels_only(oracle_dir, tmp_path):
         assert oracle[key] == control[key]
     assert oracle["sampling"]["decisions"] == control["sampling"]["decisions"]
     assert matching_of_artifact(tmp_path / "oracle" / "rule_artifact.json") == "iterative"
+
+
+@needs_run
+def test_plain_and_robust_oracle_runs_never_share_a_corpus(oracle_dir, tmp_path):
+    import shutil
+    robust = tmp_path / "robust"
+    shutil.copytree(oracle_dir, robust)
+    manifest = json.loads((robust / "run.json").read_text())
+    manifest["oracle"]["continuations"] = ["nearest_astar", "multi_criteria", "milp"]
+    manifest["run_id"] = "robust-" + manifest["run_id"]
+    (robust / "run.json").write_text(json.dumps(manifest))
+    with pytest.raises(TrainingError, match="one oracle kind"):
+        train([oracle_dir, robust], tmp_path / "out", oracle_labels=True)

@@ -9,6 +9,7 @@ then continues from that choice and the next decision is treated the same way. T
 one-step rollout policy improvement (Bertsekas): no rule, no learning, only simulation.
 
     python -m ilp_learning.m6_oracle RUN_DIR --out DIR [--objective jw2|wholerun|horizon]
+        [--continuations NAME [NAME ...]]
 
 How a branch is judged (--objective):
   jw2       the group-D labels: window orders' flow + 0.5 x fleet waiting over 120 s, the
@@ -22,6 +23,13 @@ How a branch is judged (--objective):
             decision (an optimistic remaining time), plus 0.5 x fleet waiting in H.
             Approximate, but its cost does not grow with the workload (1500, 5000 orders)
 A branch beats the teacher's branch only by at least delta (2 s), as the labels require.
+
+Robust labels (--continuations, wholerun or horizon; DECISIONS.md "Robust Oracle Labels
+and the Combined Campaign"): every candidate, the teacher's pair included, is rolled out
+once per continuation policy (the policy deciding everything after the forced pair; the
+behaviour's own name is the behaviour policy itself). The candidate with the best mean
+score is taken only if it beats the teacher's pair under every continuation, so a pair
+that is lucky in one future is not a label. One continuation is the plain oracle.
 
 RUN_DIR is a recorded corpus run; its manifest rebuilds the identical workload. The
 output holds oracle.json (both runs' metrics, every decision's verdict) and the
@@ -49,7 +57,9 @@ from ilp_learning.m6_candidates import DEFAULT_MAX_ACTIONS, select_candidates
 from ilp_learning.m6_rollouts import AlignmentError, corpus_builder
 from ilp_learning.supervision.outcome_common import JW2, label_decision, window_orders
 from simulation_env.congestion import FeatureObserver
-from simulation_env.rollout import ForcedPair, _Stop, _fleet_waiting, branch_pair, clone, resume, tables
+from simulation_env.rollout import (
+    ForcedPair, _Stop, _fleet_waiting, branch_pair, clone, continuation_policy, resume, tables,
+)
 from simulation_env.teacher_panel import PANEL_FILE, TeacherPanel
 from simulation_env.workload_executor import PerfBudget, WorkloadStalledError
 
@@ -58,10 +68,15 @@ OBJECTIVES = ("jw2", "wholerun", "horizon")
 DELTA_S = JW2.delta_s
 
 
-def _forced_branch(base, decision_id, robot_id, order_id, stop_after_s):
-    """A ForcedPair branch from a copy of base, run to the end or for stop_after_s after the decision."""
+def _forced_branch(base, decision_id, robot_id, order_id, stop_after_s, continuation=None):
+    """A ForcedPair branch from a copy of base, run to the end or for stop_after_s after the decision.
+
+    continuation: a strategy instance deciding every decision after the forced one
+    (None: the behaviour policy, as in the plain oracle).
+    """
     rollout = clone(base, rows=False)
-    forced = ForcedPair(rollout.allocator, rollout, decision_id, robot_id, order_id)
+    forced = ForcedPair(rollout.allocator, rollout, decision_id, robot_id, order_id,
+                        continuation=continuation)
     rollout.allocator = forced
     state = {}
 
@@ -94,6 +109,34 @@ def _score_horizon(rollout, decided, rows, est, horizon_s, state):
     cost = sum(done[o] if o in done else horizon_s + est.get(o, horizon_s) for o in window)
     waiting = state.get("waiting_end", _fleet_waiting(rollout)) - decided["waiting_at_decision"]
     return cost + JW2.lambda_wait * waiting
+
+
+def _beats(best: tuple, teacher: tuple, objective: str) -> bool:
+    """best is decisively better than teacher: lower by delta, or (wholerun) an equal
+    makespan with a sum of completion times lower by delta."""
+    (bm, bf), (tm, tf) = best, teacher
+    return bm <= tm - DELTA_S or (objective == "wholerun" and bm <= tm + 1e-9 and bf <= tf - DELTA_S)
+
+
+def _mean_score(scores: list[tuple]) -> tuple:
+    """Componentwise mean of one candidate's scores over the continuations."""
+    return tuple(sum(s[i] for s in scores) / len(scores) for i in range(len(scores[0])))
+
+
+def robust_choice(scores: dict[int, list[tuple]], teacher_rank: int | None, objective: str):
+    """(rank to take or None, best rank or None) from rank -> one score per continuation.
+
+    Only candidates scored under every continuation take part. The best mean score
+    (ties: lower rank) is taken when it is not the teacher's and beats the teacher's
+    pair under each continuation; with one continuation this is the plain oracle.
+    """
+    if not scores:
+        return None, None
+    best = min(scores, key=lambda rank: (_mean_score(scores[rank]), rank))
+    if teacher_rank is None or teacher_rank not in scores or best == teacher_rank:
+        return None, best
+    beats = all(_beats(b, t, objective) for b, t in zip(scores[best], scores[teacher_rank]))
+    return (best if beats else None), best
 
 
 def _metrics(executor) -> dict:
@@ -169,7 +212,8 @@ def _next_decision(executor):
 
 def oracle_run(build, *, run_id: str, behaviour: str, horizon_s: float = JW2.horizon_s,
                max_decisions: int | None = None, max_actions: int = DEFAULT_MAX_ACTIONS,
-               progress=None, objective: str = "jw2", manifest: dict | None = None
+               progress=None, objective: str = "jw2", manifest: dict | None = None,
+               continuations: tuple = (None,), seed: int | None = None
                ) -> tuple[object, list[dict]]:
     """The run with every decision replaced by its rollout-best pair; (executor, verdicts).
 
@@ -177,11 +221,20 @@ def oracle_run(build, *, run_id: str, behaviour: str, horizon_s: float = JW2.hor
     before it, the candidates are branched from that state, and the decision is made
     with the best pair forced (rollout.ForcedPair) or left to the behaviour policy.
     Pausing and resuming a run replays it exactly (checked in the tests).
+
+    continuations: policy names for the robust labels (None or the behaviour's own name:
+    the behaviour policy); the default (None,) is the plain oracle.
     """
     if objective not in OBJECTIVES:
         raise ValueError(f"unknown objective {objective!r}; known: {OBJECTIVES}")
     if objective == "horizon" and manifest is None:
         raise ValueError("the horizon objective needs the run manifest for finish estimates")
+    continuations = tuple(None if name in (None, behaviour) else name for name in continuations)
+    if not continuations:
+        raise ValueError("at least one continuation is needed")
+    robust = len(continuations) > 1
+    if robust and objective == "jw2":
+        raise ValueError("robust continuations need --objective wholerun or horizon")
     executor = build()
     verdicts: list[dict] = []
     started = time.perf_counter()
@@ -202,33 +255,40 @@ def oracle_run(build, *, run_id: str, behaviour: str, horizon_s: float = JW2.hor
                                        behaviour=behaviour, max_actions=max_actions)
         verdict = {"decision_id": decision_id, "t": float(executor.engine.time), "candidates": len(candidates)}
         if len(candidates) >= 2 and objective != "jw2":
-            scores = []
             est = {}
             if objective == "horizon":
                 eligible = rows[rows["eligible"]]
                 est = (eligible.assign(f=derive_est_finish_s(eligible, manifest))
                        .groupby("order_id")["f"].min().to_dict())
+            scores: dict[int, list[tuple]] = {}
             for rank, c in enumerate(candidates):
-                rollout, decided, status, state = _forced_branch(
-                    executor, decision_id, c.robot_id, c.order_id,
-                    None if objective == "wholerun" else horizon_s)
-                if decided is None or status != "complete":
-                    continue
-                score = (_score_wholerun(rollout, decided) if objective == "wholerun"
-                         else (_score_horizon(rollout, decided, rows, est, horizon_s, state), 0.0))
-                scores.append((score, rank, c, "behaviour" in c.sources))
-            teacher = next((s for s in scores if s[3]), None)
-            verdict["teacher_score"] = list(teacher[0]) if teacher else None
-            verdict["teacher_pair"] = f"{teacher[2].robot_id}:{teacher[2].order_id}" if teacher else None
-            best = min(scores, key=lambda s: (s[0], s[1])) if scores else None
-            better = False
-            if best is not None and teacher is not None and best is not teacher:
-                (bm, bf), (tm, tf) = best[0], teacher[0]
-                better = bm <= tm - DELTA_S or (objective == "wholerun" and bm <= tm + 1e-9 and bf <= tf - DELTA_S)
-            if better:
-                pick = best[2]
+                per = []
+                for name in continuations:
+                    rollout, decided, status, state = _forced_branch(
+                        executor, decision_id, c.robot_id, c.order_id,
+                        None if objective == "wholerun" else horizon_s,
+                        continuation_policy(name, seed))
+                    if decided is None or status != "complete":
+                        break
+                    per.append(_score_wholerun(rollout, decided) if objective == "wholerun"
+                               else (_score_horizon(rollout, decided, rows, est, horizon_s, state), 0.0))
+                if len(per) == len(continuations):
+                    scores[rank] = per
+            teacher_rank = next((r for r in scores if "behaviour" in candidates[r].sources), None)
+            own = candidates[teacher_rank] if teacher_rank is not None else None
+            verdict["teacher_score"] = list(_mean_score(scores[teacher_rank])) if own else None
+            verdict["teacher_pair"] = f"{own.robot_id}:{own.order_id}" if own else None
+            take, best_rank = robust_choice(scores, teacher_rank, objective)
+            if robust:
+                verdict["teacher_scores"] = [list(s) for s in scores[teacher_rank]] if own else None
+                if best_rank is not None:
+                    verdict["best_pair"] = f"{candidates[best_rank].robot_id}:{candidates[best_rank].order_id}"
+                    verdict["best_scores"] = [list(s) for s in scores[best_rank]]
+            if take is not None:
+                pick, best = candidates[take], _mean_score(scores[take])
                 verdict.update(verdict="override", pair=f"{pick.robot_id}:{pick.order_id}",
-                               best_score=list(best[0]), gain_s=float(teacher[0][0] - best[0][0]))
+                               pair_sources="+".join(pick.sources),
+                               best_score=list(best), gain_s=float(verdict["teacher_score"][0] - best[0]))
                 executor.allocator = ForcedPair(executor.allocator, executor, decision_id,
                                                 pick.robot_id, pick.order_id)
             else:
@@ -321,16 +381,23 @@ def replay_checked(build, oracle_executor, verdicts: list[dict], seed: int):
     return replay, features, panel
 
 
-def oracle_run_id(source_run_id: str, objective: str, horizon_s: float) -> str:
-    """The oracle run's own id: never the teacher run's, so both can sit in one corpus."""
+def oracle_run_id(source_run_id: str, objective: str, horizon_s: float,
+                  continuations: tuple = ()) -> str:
+    """The oracle run's own id: never the teacher run's, so both can sit in one corpus.
+
+    A robust oracle (more than one continuation) gets its own id; the plain one keeps its old id.
+    """
     key = f"{source_run_id}|oracle|{objective}|{horizon_s}|{DELTA_S}"
+    if len(continuations) > 1:
+        key += "|continuations=" + "+".join(str(name) for name in continuations)
     return sha256(key.encode()).hexdigest()[:16]
 
 
 def write_trainable_run(out: Path, source_manifest: dict, replay, features: list, panel: list,
-                        *, objective: str, horizon_s: float, verdicts: list[dict]) -> dict:
+                        *, objective: str, horizon_s: float, verdicts: list[dict],
+                        continuations: tuple = ()) -> dict:
     """The oracle's run as a recorded run folder; returns its manifest."""
-    run_id = oracle_run_id(source_manifest["run_id"], objective, horizon_s)
+    run_id = oracle_run_id(source_manifest["run_id"], objective, horizon_s, continuations)
     manifest = {
         **source_manifest,
         "run_id": run_id,
@@ -338,6 +405,7 @@ def write_trainable_run(out: Path, source_manifest: dict, replay, features: list
         "oracle": {
             "source_run_id": source_manifest["run_id"], "objective": objective,
             "horizon_s": horizon_s, "delta_s": DELTA_S,
+            "continuations": [str(name) for name in continuations] or ["behaviour"],
             "overrides": sum(v.get("verdict") == "override" for v in verdicts),
             "kept": sum(v.get("verdict") == "keep" for v in verdicts),
         },
@@ -359,6 +427,9 @@ def main() -> int:
     parser.add_argument("--max-decisions", type=int, default=None)
     parser.add_argument("--objective", choices=OBJECTIVES, default="jw2")
     parser.add_argument("--horizon", type=float, default=JW2.horizon_s, help="seconds, for --objective horizon")
+    parser.add_argument("--continuations", nargs="+", default=None, metavar="NAME",
+                        help="robust labels: continuation policies a pick must win under "
+                             "(the behaviour's own name, or 'behaviour', is the behaviour policy)")
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
@@ -366,6 +437,8 @@ def main() -> int:
     build = corpus_builder(manifest)
     behaviour = manifest["strategy"]
     label = f"{behaviour} r{manifest['robot_count']}"
+    names = tuple(behaviour if n == "behaviour" else n for n in (args.continuations or ()))
+    continuations = names or (None,)
 
     teacher = build()
     teacher.run()
@@ -373,26 +446,32 @@ def main() -> int:
     print(f"[{label}] teacher replay: makespan {baseline['order_makespan_s']:.1f} s, "
           f"{baseline['decisions']} decisions", flush=True)
 
+    tally = {"override": 0, "keep": 0}
+
     def progress(v, elapsed):
+        tally[v["verdict"]] = tally.get(v["verdict"], 0) + 1
         if not args.quiet:
-            extra = f" -> {v['pair']} gains {v['gain_s']:.0f} s" if v["verdict"] == "override" else ""
+            extra = (f" -> {v['pair']} ({v.get('pair_sources', '')}) gains {v['gain_s']:.0f} s"
+                     if v["verdict"] == "override" else "")
             print(f"[{label} {elapsed / 60:5.1f} min] decision {v['decision_id']:3d} t={v['t']:6.1f} s "
-                  f"{v['verdict']}{extra}", flush=True)
+                  f"{v['verdict']}{extra}  (overrides {tally['override']}, kept {tally['keep']})",
+                  flush=True)
 
     executor, verdicts = oracle_run(build, run_id=manifest["run_id"], behaviour=behaviour,
                                     max_decisions=args.max_decisions, progress=progress,
-                                    objective=args.objective, horizon_s=args.horizon, manifest=manifest)
+                                    objective=args.objective, horizon_s=args.horizon, manifest=manifest,
+                                    continuations=continuations, seed=int(manifest["seed"]))
     oracle = _metrics(executor)
     print(f"[{label}] replaying the oracle's run with features and teacher panel", flush=True)
     replay, features, panel = replay_checked(build, executor, verdicts, int(manifest["seed"]))
     trained = write_trainable_run(args.out, manifest, replay, features, panel, objective=args.objective,
-                                  horizon_s=args.horizon, verdicts=verdicts)
+                                  horizon_s=args.horizon, verdicts=verdicts, continuations=names)
     report = {
         "oracle_run_id": trained["run_id"],
         "corpus_run": str(args.run), "run_id": manifest["run_id"], "behaviour": behaviour,
         "robots": manifest["robot_count"], "workload_seed": manifest.get("orders_path"),
         "objective": args.objective, "mode": "conservative", "horizon_s": args.horizon,
-        "delta_s": DELTA_S,
+        "delta_s": DELTA_S, "continuations": list(names) or ["behaviour"],
         "max_decisions": args.max_decisions, "teacher": baseline, "oracle": oracle,
         "overrides": sum(v.get("verdict") == "override" for v in verdicts),
         "kept": sum(v.get("verdict") == "keep" for v in verdicts),

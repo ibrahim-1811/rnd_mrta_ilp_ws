@@ -1,6 +1,6 @@
 # Gate 2: can ILP rules learn the oracle's gain?
 
-Status: ready-for-human (2026-11-12: code committed 248aee0; option A oracle runs done, 84/84, jobs 477249-477251; decided: --workload in, no pooled arm, one-sided test; next: owner submits the 6 training jobs, commands in status-2026-11-12.md)
+Status: ready-for-human (2026-11-12: option A done and FAILED for all three teachers, results-option-a.md; next step awaits the researcher)
 
 ## Where this comes from
 

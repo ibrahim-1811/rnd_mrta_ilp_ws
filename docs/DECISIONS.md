@@ -2055,3 +2055,41 @@ test         one-sided paired Wilcoxon signed-rank, alternative "student makespa
 
 Why one-sided: the research question and criterion 2 ("makespan below the teacher's")
 are directional, and the direction is fixed before any Gate 2 result exists.
+
+## Robust Oracle Labels and the Combined Campaign (2026-11-12)
+
+Decided by the researcher after Gate 2 option A failed and before any robust oracle run.
+Why: in option A the uniformly random control candidate won 49 % of the decisive overrides
+and carried 54 % of the oracle's gain (`.scratch/gate2-oracle-distillation/results-option-a.md`),
+so single-future oracle labels are largely luck of one deterministic, chaotic future.
+
+```text
+robust oracle   ilp_learning.m6_oracle --continuations nearest_astar multi_criteria milp:
+                every candidate of a decision, the teacher's pair included, is rolled
+                out (objective wholerun) once per continuation policy; the behaviour's
+                own name continues with the behaviour policy itself, as before. The
+                candidate with the best mean score is taken only if it beats the
+                teacher's pair under EVERY continuation by the existing criterion
+                (makespan lower by delta 2 s, or equal makespan and sum of completion
+                times lower by delta); otherwise the teacher's pair is kept. One
+                continuation is exactly the option-A oracle.
+pilot           nearest_astar, 100 robots, 300 orders, induction seeds 104-110 (7 runs)
+stop rule       fewer than 8 decisive robust overrides (makespan gain >= 2 s) in the
+                7 pilot runs (the bar of 30 per teacher over 28 runs, scaled to 7 runs):
+                the outcome-aware arm is reported as "learnable headroom about zero" and
+                dropped; the rest of the campaign goes on without it. Reported either way:
+                the random control's share of the robust winners and the robust oracle's
+                makespan against the teacher's.
+if it passes    robust oracle for nearest_astar, multi_criteria and milp at 70-100 robots
+                on 104-110 (84 runs), then rule training and the closed-loop test exactly
+                as Gate 2 (oracle labels and same-state imitation control, same
+                vocabulary, one-sided Wilcoxon, Holm, alpha 0.05, fallback <= 0.5).
+                116-120 has now been used for selection twice: a pass there is development
+                evidence; the claim comes only from seeds never used before.
+campaign        one evaluation of all arms on unseen seeds: the teachers, single-teacher
+                ILP, multi-teacher ILP and outcome-aware ILP (if it survives), at 300, 1500
+                and 5000 orders and 70-100 robots. Rules are trained on 104-110 only; the
+                300- and 1500-order teacher corpora are reused (no simulator change since
+                789a66c). 5000 orders is evaluation only (no oracle there). Seeds, lengths
+                and statistics of the campaign are decided before it runs.
+```
