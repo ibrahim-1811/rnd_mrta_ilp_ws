@@ -2036,3 +2036,22 @@ gave no closed-loop gain on validation seeds 116-120 (nearest_astar +8.3 s,
 multi_criteria +17.3 s), and Gate 1 shows the oracle's choices do beat every teacher.
 Selection used validation seeds only; evaluation seeds 201-230 stay sealed. The
 corrected-label result is reported as a development-stage finding and is not re-run.
+
+Gate 2 training and test details (decided 2026-11-12, after the 84 option-A oracle runs
+finished and before any rule set was trained or evaluated):
+
+```text
+vocabulary   --extended --tier-b --battery --workload for every Gate 2 rule set
+             (oracle-label and same-state imitation arms alike)
+arms         per teacher: oracle labels (--oracle-labels) and imitation control
+             (--label-teacher T on the same oracle runs); 6 rule sets in total.
+             No pooled arm: it is not part of the pass criterion.
+test         one-sided paired Wilcoxon signed-rank, alternative "student makespan lower
+             than teacher" (gate2_verdict --alternative less), Holm over the three
+             teachers, alpha 0.05. The oracle-vs-imitation contrast uses the same
+             direction and is reported only. A student slower than its teacher is
+             reported descriptively (mean difference, wins) and cannot pass.
+```
+
+Why one-sided: the research question and criterion 2 ("makespan below the teacher's")
+are directional, and the direction is fixed before any Gate 2 result exists.

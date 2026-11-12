@@ -1,6 +1,6 @@
 # Gate 2: can ILP rules learn the oracle's gain?
 
-Status: ready-for-agent (2026-11-10: decisions 1-3 made; step 1 b8207b9, cluster tasks 360a3ea, --oracle-labels and gate2_verdict built and tested, uncommitted; option A submission failed on PATH, awaiting resubmit)
+Status: ready-for-human (2026-11-12: code committed 248aee0; option A oracle runs done, 84/84, jobs 477249-477251; decided: --workload in, no pooled arm, one-sided test; next: owner submits the 6 training jobs, commands in status-2026-11-12.md)
 
 ## Where this comes from
 
@@ -70,7 +70,7 @@ A first; B only after A shows a student can learn anything.
 
 Per teacher, both label sources, `--extended --tier-b --battery --workload`,
 Popper 300 s (unchanged). Closed loop on 116-120, 300 orders (A) / 1500 (B).
-Pooled (all three teachers) as a secondary arm.
+Pooled (all three teachers) as a secondary arm: dropped 2026-11-12 (not part of the pass criterion).
 
 ## Decisions needed
 
