@@ -18,10 +18,10 @@ TEACHERS="random nearest_manhattan nearest_astar earliest_finish multi_criteria 
 mkdir -p "$OUT" runs/campaign/logs
 export PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management:src/ilp_learning
 
-submit() {  # submit NAME "train_rules arguments"
-  local name=$1 args=$2
+submit() {  # submit NAME "train_rules arguments" [memory]
+  local name=$1 args=$2 mem=${3:-32G}
   if [ -f "$OUT/$name/rule_artifact.json" ]; then echo "$name: trained already"; return; fi
-  sbatch -p hpc1 --cpus-per-task=1 --mem=32G --time=06:00:00 --job-name="c8-$name" \
+  sbatch -p hpc1 --cpus-per-task=1 --mem="$mem" --time=06:00:00 --job-name="c8-$name" \
     --output="runs/campaign/logs/train_${name}_%j.out" \
     --wrap="pixi run python -m ilp_learning.train_rules $args --out $OUT/$name $VOCAB"
 }
@@ -29,7 +29,8 @@ submit() {  # submit NAME "train_rules arguments"
 for T in $TEACHERS; do
   submit "single_$T" "$CORPUS/$T/r*_s*/$T/r*_s* --teacher $T"
 done
-submit pooled "$CORPUS/*/r*_s*/*/r*_s* --pooled"
+# pooled loads all 224 runs: about 28 GB was not enough at 32 GB (job 479967, out of memory)
+submit pooled "$CORPUS/*/r*_s*/*/r*_s* --pooled" 128G
 for P in majority plurality; do
   submit "$P" "$CORPUS/nearest_astar/r*_s*/nearest_astar/r*_s* --teacher nearest_astar --label-policy $P"
 done
