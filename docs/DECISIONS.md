@@ -2093,3 +2093,60 @@ campaign        one evaluation of all arms on unseen seeds: the teachers, single
                 789a66c). 5000 orders is evaluation only (no oracle there). Seeds, lengths
                 and statistics of the campaign are decided before it runs.
 ```
+
+## M6 Closed (2026-11-13)
+
+Decided by the researcher after the robust-label Gate 2 and the separability test.
+
+```text
+result      the oracle beats its teacher (plain -6 to -8 %; robust, a pick must win in
+            three futures, -4 to -6 %, 27/28 runs per teacher, 300 orders), but no rule
+            set trained on oracle or robust-oracle labels beats its teacher on 116-120
+            (Gate 2 failed twice, all three teachers). Only multi_criteria's robust rules
+            differ from the imitation control (-11.8 s vs imitation, not significant).
+why         about half of the plain oracle's gain is luck (the random control candidate
+            wins 49 % of decisive overrides); the robust improvements are about 3 per run
+            among about 150 picks; and a flexible classifier on all decision-time
+            features cannot tell which alternative is the improvement (within-decision
+            top-1 39 % vs chance 35 %; pair-difference AUC 0.52-0.56; held out by seed).
+            The limit is the information in the decision-time state, not the learner.
+record      .scratch/gate2-oracle-distillation/results-option-a.md, results-robust.md,
+            audit-2026-11-13.md
+next        M8 final campaign (decided separately before it runs). No further M6 label
+            schemes; the robust multi_criteria rule set may enter the campaign as the
+            outcome-aware arm if the campaign decision includes it.
+```
+
+## M8 Final Campaign (2026-11-13)
+
+Decided by the researcher before any campaign run. Everything runs on the cluster.
+
+```text
+arms (20)    A  the eight conventional strategies: random, nearest_manhattan,
+                nearest_astar, earliest_finish, multi_criteria, auction, hungarian, milp
+             B  single-teacher ILP for each of the eight (that teacher's runs and picks,
+                its own matcher)
+             C  multi-teacher ILP: pooled (all eight teachers' runs, each run labelled by
+                its own picks), panel majority and panel plurality (votes of the panel on
+                nearest_astar states, as M5)
+             D  outcome-aware ILP: the robust multi_criteria rule set from Gate 2
+                (runs/gate2/rules/o300_robust/oracle_multi_criteria, trained at 300 orders)
+training     B and C on the 1500-order teacher corpus (runs/teachers/o1500), induction
+             seeds 104-110, 70-100 robots; vocabulary --extended --tier-b --battery
+             --workload (as Gate 2); Popper 300 s, decision cap 800, unchanged
+lengths      1500 and 5000 orders (both with charging); 70, 80, 90, 100 robots;
+             quantum 3, window fleet_size (the primary condition)
+seeds        dry run on 1-3 (--purpose evaluation) to catch failures, nothing chosen from
+             it; then the final on the sealed 201-230 (--purpose final), run once
+statistics   per length and fleet size: Friedman over the 20 arms, blocks = seeds;
+             post hoc two-sided paired Wilcoxon, Holm within each family per length:
+               ILP family    each B arm vs its teacher; each C arm vs nearest_astar;
+                             D vs multi_criteria and D vs B multi_criteria (13 x 4 fleets)
+               conventional  each A arm vs nearest_astar (7 x 4 fleets)
+             beside them: mean difference with its paired 95 % t-interval, d_z, wins/losses
+primary      order_makespan_s
+secondary    mean_completion_time_s, total_distance_m, total_waiting_s,
+             energy_consumed_percent, charge_sessions, charger_wait_time_s; each its own
+             Holm family, reported as secondary
+failures     a failed or stalled run is a missing pair, never imputed; counted per arm
+```

@@ -1,8 +1,8 @@
 # Current Development Phase
 
-## Status — 12 November 2026
+## Status — 13 November 2026
 
-Active milestone: **M6 Outcome-Aware ILP**, chosen by the researcher on 2026-11-06. Deadline 2026-12-20.
+Active milestone: **M8 final campaign (planning)**. M6 closed on 2026-11-13 (DECISIONS.md, "M6 Closed"). Deadline 2026-12-20.
 
 | Milestone | State |
 |---|---|
@@ -11,14 +11,14 @@ Active milestone: **M6 Outcome-Aware ILP**, chosen by the researcher on 2026-11-
 | Tier B online | done, committed `56f495f` |
 | M4 Single-Teacher | built, committed; exploratory; no gate run |
 | M5 Multi-Teacher | built (majority, plurality), committed `9757d28`; exploratory only; no gate run |
-| M6 Outcome-Aware | outcome-corrected labels (2026-11-09): rules learned, no closed-loop gain on 116-120 (development-stage result). **Gate 1 passed** (2026-11-10): the oracle beats nearest_astar, multi_criteria and milp in 60/60 runs at 300 orders (makespan -7.9 %) and 56/60 at 1500 (-3.7 %), waiting -31 % / -42 %, distance flat; gain grows with fleet size. Oracle demonstrations are now the primary group-D label (DECISIONS.md, "Gate 2 Pass Criterion and Order"). **Gate 2 in progress**: oracle runs as training folders (`b8207b9`), cluster tasks on seeds 104-110 (`360a3ea`), `train_rules --oracle-labels` and the same-state imitation control, `gate2_verdict` (`248aee0`). Option A oracle runs done (jobs 477249-477251, 84/84, oracle beats its teacher 28/28 per teacher on 104-110). **Gate 2 option A failed** (2026-11-12, jobs 477697-477709): oracle-label rules are clause-for-clause identical to the imitation controls; vs teacher on 116-120 nearest_astar +0.7 s, multi_criteria +17.1 s, milp +13.3 s (fallback 0.61); p_holm 1.0 for all. Overrides look worse at decision time (longer route, more overlap) and mostly reshuffle pairs within one dispatch round ([results-option-a.md](../.scratch/gate2-oracle-distillation/results-option-a.md)). No outcome-aware rule has beaten its teacher yet |
+| M6 Outcome-Aware | outcome-corrected labels (2026-11-09): rules learned, no closed-loop gain on 116-120 (development-stage result). **Gate 1 passed** (2026-11-10): the oracle beats nearest_astar, multi_criteria and milp in 60/60 runs at 300 orders (makespan -7.9 %) and 56/60 at 1500 (-3.7 %), waiting -31 % / -42 %, distance flat; gain grows with fleet size. Oracle demonstrations are now the primary group-D label (DECISIONS.md, "Gate 2 Pass Criterion and Order"). **Gate 2 in progress**: oracle runs as training folders (`b8207b9`), cluster tasks on seeds 104-110 (`360a3ea`), `train_rules --oracle-labels` and the same-state imitation control, `gate2_verdict` (`248aee0`). Option A oracle runs done (jobs 477249-477251, 84/84, oracle beats its teacher 28/28 per teacher on 104-110). **Gate 2 option A failed** (2026-11-12, jobs 477697-477709): oracle-label rules are clause-for-clause identical to the imitation controls; vs teacher on 116-120 nearest_astar +0.7 s, multi_criteria +17.1 s, milp +13.3 s (fallback 0.61); p_holm 1.0 for all. Overrides look worse at decision time (longer route, more overlap) and mostly reshuffle pairs within one dispatch round ([results-option-a.md](../.scratch/gate2-oracle-distillation/results-option-a.md)). Robust oracle (2026-11-12, a pick must win in 3 futures): -4.3/-4.3/-5.9 % vs teacher, 27/28 each; trained on it, Gate 2 fails again (+0.7 / +5.3 / +13.3 s); only multi_criteria's rules changed, 11.8 s better than its imitation control, not significant ([results-robust.md](../.scratch/gate2-oracle-distillation/results-robust.md)). No outcome-aware rule has beaten its teacher yet |
 | M7 explanations | prototype (`ilp_learning/explain.py`); not evaluated |
 | M8 statistics | paired Wilcoxon + Holm for Gate 2 (`ilp_learning.gate2_verdict`); Friedman not implemented; final-campaign primary test still open (F9) |
 | M9 report | not started |
 
 Gate 1 results: `runs/gate1/summary.txt` (cluster jobs 477088-477091). Gate 2 plan: [.scratch/gate2-oracle-distillation/plan.md](../.scratch/gate2-oracle-distillation/plan.md).
 
-Next (2026-11-12, decided after the option A verdict; DECISIONS.md "Robust Oracle Labels and the Combined Campaign"): robust oracle pilot (`m6_oracle --continuations nearest_astar multi_criteria milp`: a pick counts only if it beats the teacher's pair in all three futures), nearest_astar, 100 robots, seeds 104-110; stop rule: fewer than 8 decisive robust overrides drops the outcome-aware arm. Then one evaluation campaign of all arms (teachers, single-, multi-teacher and outcome-aware ILP) at 300/1500/5000 orders on unseen seeds. Option A run log and commands: [status-2026-11-12.md](../.scratch/gate2-oracle-distillation/status-2026-11-12.md).
+Next (2026-11-13): M6 closed with a negative, explained result (DECISIONS.md, "M6 Closed"; [audit-2026-11-13.md](../.scratch/gate2-oracle-distillation/audit-2026-11-13.md)). Plan and freeze the M8 final campaign: arms, training corpus, lengths, seeds and statistics; build Friedman + Wilcoxon-Holm (F9) and the campaign task scripts.
 
 Earlier next step (2026-11-07, DECISIONS.md "Campaign Decisions Before the 300-Order Run"): commit the research version without the GUI work, then the 300-order teacher corpus, single- and multi-teacher training, outcome labels, and a first closed-loop comparison. Done; see below.
 

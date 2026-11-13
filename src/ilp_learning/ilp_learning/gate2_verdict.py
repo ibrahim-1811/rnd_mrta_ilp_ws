@@ -35,7 +35,7 @@ import sys
 from typing import Iterable, Mapping
 
 import pandas as pd
-from scipy.stats import wilcoxon
+from simulation_env.campaign_stats import holm, paired_wilcoxon
 
 PRIMARY = "order_makespan_s"
 REPORTED = ("mean_completion_time_s", "total_waiting_s", "total_distance_m")
@@ -46,17 +46,6 @@ MAX_FALLBACK = 0.5
 
 class VerdictError(ValueError):
     """The runs cannot be paired as the criterion requires."""
-
-
-def holm(pvalues: Mapping[str, float]) -> dict[str, float]:
-    """Holm-Bonferroni adjusted p-values (step-down, monotone, capped at 1)."""
-    ordered = sorted(pvalues.items(), key=lambda item: item[1])
-    m = len(ordered)
-    adjusted, running = {}, 0.0
-    for rank, (name, p) in enumerate(ordered):
-        running = max(running, min(1.0, (m - rank) * p))
-        adjusted[name] = running
-    return adjusted
 
 
 def _paired(rows: pd.DataFrame, a: str, b: str) -> pd.DataFrame:
@@ -75,9 +64,7 @@ def _paired(rows: pd.DataFrame, a: str, b: str) -> pd.DataFrame:
 
 
 def _test(diff: pd.Series, alternative: str) -> float:
-    if (diff == 0).all():
-        return 1.0
-    return float(wilcoxon(diff, alternative=alternative, zero_method="wilcox").pvalue)
+    return paired_wilcoxon(diff, alternative)
 
 
 def compare(rows: pd.DataFrame, student: str, teacher: str, alternative: str,

@@ -90,3 +90,26 @@ sbatch -p hpc1 --cpus-per-task=7 --time=04:00:00 --job-name=g2-robust-pilot \
   --export=ALL,FIRST=0,COUNT=7,GATE2_TSV=runs/gate2/pilot_robust.tsv \
   scripts/slurm/gate2.sbatch
 ```
+
+# M8 final campaign (DECISIONS.md, "M8 Final Campaign")
+
+Twenty arms: the 8 conventional strategies, single-teacher ILP for each (8), pooled,
+majority and plurality multi-teacher ILP, and the robust outcome-aware multi_criteria rule
+set from Gate 2. 1500 and 5000 orders, 70-100 robots.
+
+```bash
+# 1. Train the 11 rule sets on the 1500-order teacher corpus (about 10 min each)
+scripts/slurm/campaign_train.sh                       # -> runs/campaign/rules/<arm>/
+# 2. Dry run, seeds 1-3 (catches failures; nothing is chosen from it)
+for O in 1500 5000; do for N in 70 80 90 100; do
+  sbatch -p hpc1 --export=ALL,STAGE=dry,ORDERS=$O,ROBOTS=$N scripts/slurm/campaign_eval.sbatch
+done; done
+# 3. Final, sealed seeds 201-230, once: the same loop with STAGE=final
+# 4. Statistics: Friedman, paired Wilcoxon with Holm, t-interval, d_z, failures
+pixi run python -m simulation_env.campaign_stats runs/campaign/final/o*/r*/summary.csv \
+  --out runs/campaign/final/stats
+```
+
+- Evaluation output: `runs/campaign/<stage>/o<orders>/r<robots>/summary.csv`; live log
+  `runs/campaign/logs/eval_c8-eval_<job>.out`. Resubmitting the same job resumes.
+- The evaluation job refuses to start unless all 12 rule sets exist.
