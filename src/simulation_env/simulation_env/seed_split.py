@@ -15,6 +15,9 @@ workload it is later evaluated on, so every seed has at most one role
     final        201-230   the sealed final evaluation set (adopted by
                            the researcher 2026-10-27); refused unless an
                            experiment declares --purpose final
+    transfer     301-330   the sealed held-out map evaluation (adopted by
+                           the researcher 2026-11-13, step 3b); refused
+                           unless an experiment declares --purpose transfer
 
 Training is further split (DECISIONS.md, "Seed Partition Freeze"): rules
 are induced on 104-110; 101-103 stay exploratory after M1 inspected them.
@@ -38,6 +41,7 @@ VALIDATION = range(111, 116)
 EVALUATION = range(1, 31)
 BACKUP_RESERVED = range(116, 121)       # Fresh validation pool, researcher approval only
 FINAL_RESERVED = range(201, 231)
+TRANSFER_RESERVED = range(301, 331)    # Held-out map only (H100), run once
 
 ROLES = {
     "training": TRAINING,
@@ -45,6 +49,7 @@ ROLES = {
     "evaluation": EVALUATION,
     "backup": BACKUP_RESERVED,
     "final": FINAL_RESERVED,
+    "transfer": TRANSFER_RESERVED,
 }
 
 SUBROLES = {
@@ -109,7 +114,7 @@ def check_purpose(seeds, purpose: str | None) -> None:
     """Refuse seeds that do not belong to the experiment's purpose.
 
     ``purpose`` None is development work: any seed except the reserved
-    final and backup sets. Otherwise every seed must belong to that role or sub-role.
+    final, transfer and backup sets. Otherwise every seed must belong to that role or sub-role.
     """
 
     if purpose is None:
@@ -119,6 +124,14 @@ def check_purpose(seeds, purpose: str | None) -> None:
             raise SeedLeakageError(
                 f"seeds {sealed} are reserved for the final evaluation; "
                 "declare --purpose final to use them"
+            )
+
+        transfer = sorted(seed for seed in seeds if seed in TRANSFER_RESERVED)
+
+        if transfer:
+            raise SeedLeakageError(
+                f"seeds {transfer} are reserved for the held-out map evaluation; "
+                "declare --purpose transfer to use them"
             )
 
         backup = sorted(seed for seed in seeds if seed in BACKUP_RESERVED)
@@ -145,7 +158,7 @@ def check_purpose(seeds, purpose: str | None) -> None:
         )
 
 
-SEALED = ("validation", "backup", "evaluation", "final")
+SEALED = ("validation", "backup", "evaluation", "final", "transfer")
 
 _WORKLOAD_FILE = re.compile(r"orders_s(\d+)\.csv$")
 

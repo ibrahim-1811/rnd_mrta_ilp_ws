@@ -23,7 +23,7 @@ import traceback
 
 from mrta_core.order_queue import OrderQueue
 from mrta_core.orders import describe_order_selection, load_orders_csv, select_orders
-from mrta_core.sim_config import load_sim_config
+from mrta_core.sim_config import load_sim_config, resolve_map_name
 from mrta_core.warehouse_map import ZoneType
 from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 from simulation_env.battery_ledger import battery_report_lines
@@ -64,6 +64,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument("--config", default=CONFIG)
+    parser.add_argument(
+        "--map",
+        default=None,
+        help=(
+            "run on this map instead of the config's (held-out transfer "
+            "map); found like warehouse.map. Needs --orders-file made from "
+            "this map: the config's order file belongs to the config's map"
+        ),
+    )
     parser.add_argument("--strategy", default="nearest_astar")
     parser.add_argument(
         "--orders",
@@ -225,6 +234,18 @@ def main() -> int:
             parser.error(f"--orders-file {args.orders_file}: no such file")
 
         config = replace(config, orders_path=orders_file)
+
+    if args.map:
+        # The config's order file names the config's map's shelves; on any
+        # other map the same ids are other cells, or missing. Refuse
+        # rather than run a workload the map was never given.
+        if not args.orders_file:
+            parser.error("--map needs --orders-file generated from that map")
+
+        try:
+            config = replace(config, map_path=resolve_map_name(args.map, config.config_path))
+        except FileNotFoundError as error:
+            parser.error(f"--map {args.map}: {error}")
 
     warehouse = load_warehouse_xlsx(config.map_path)
 

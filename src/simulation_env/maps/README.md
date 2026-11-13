@@ -8,6 +8,20 @@ W100.xlsx    the current map: 40 x 54 cells, 100 parking, 552 shelves,
 The config (`config/warehouse.yaml`) names the current map, and the one
 Gazebo world (`worlds/warehouse.world`) is built from it.
 
+```text
+H100.xlsx    the held-out transfer map (2026-11-13): 76 x 28 cells,
+             100 parking, 512 shelves, 36 drop-offs (left and right
+             walls), 24 chargers + 12 holding in one top-right block,
+             horizontal racking, no rotaries. Never trained on; used
+             only to test whether rules learned on W100 transfer
+             (DECISIONS.md, "Warehouse Scalability")
+```
+
+H100 is not the current map and the config does not name it. It is
+built by `scripts/make_heldout_map.py` and run with
+`run_experiment.py --map H100.xlsx`, which generates each seed's
+orders from H100; its sealed seeds are 301-330 (`--purpose transfer`).
+
 ## A new map
 
 Draw it in Excel with [docs/MAKE_A_MAP.md](../../../docs/MAKE_A_MAP.md)

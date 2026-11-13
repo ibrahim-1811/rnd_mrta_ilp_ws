@@ -133,6 +133,20 @@ def resolve_map_path(path: str | Path) -> Path:
     )
 
 
+def resolve_map_name(name: str | Path, config_path: str | Path) -> Path:
+    """A map named on the command line, found by the config's own rule.
+
+    ``--map H100.xlsx`` means what ``warehouse.map: H100.xlsx`` would
+    mean in that config: an absolute path, a file beside the config, or
+    one in maps/. Used by the held-out transfer map (DECISIONS.md,
+    "Warehouse Scalability"), so the one config stays on the main map.
+    """
+
+    config_dir = Path(config_path).parent
+
+    return _resolve(str(name), config_dir, (config_dir.parent / "maps",)).resolve()
+
+
 def load_sim_config(path: str | Path) -> SimConfig:
 
     path = Path(path)

@@ -75,6 +75,12 @@ Each run's run.json records the effective values and they are part of
 the settings signature, so two conditions can never be paired; run them
 as separate experiments (EXPERIMENT_PROTOCOL.md, "Dispatch Conditions").
 
+--map X.xlsx runs every run on another map than the one config's (the
+held-out transfer map, DECISIONS.md "Warehouse Scalability"): each
+seed's workload is generated from that map, every run gets --map, and
+the map's name and sha256 are part of the spec. The one config stays on
+the main map. --purpose transfer (the sealed held-out seeds) requires it.
+
 --purpose training | validation | evaluation | final declares which
 seed role the experiment serves, and refuses any seed outside it; with
 no purpose, the reserved final seeds are refused (docs/DECISIONS.md,
@@ -113,6 +119,7 @@ for package in PACKAGES:
     if str(ROOT / "src" / package) not in sys.path:
         sys.path.insert(0, str(ROOT / "src" / package))
 
+from mrta_core.sim_config import resolve_map_name  # noqa: E402
 from simulation_env.dataset import git_state  # noqa: E402
 from simulation_env.failures import read_failure  # noqa: E402
 from simulation_env.paired import settings_signature  # noqa: E402
@@ -226,8 +233,8 @@ def runs_for(strategies, robots, seeds, paired=True):
                 yield strategy, count, seed
 
 
-def write_workloads(out, seeds, orders=WORKLOAD_ORDERS) -> dict:
-    """One order file per seed, from the current map; seed -> path.
+def write_workloads(out, seeds, orders=WORKLOAD_ORDERS, map_name=None) -> dict:
+    """One order file per seed, from the current map (or ``map_name``); seed -> path.
 
     Rewriting an existing experiment's files is harmless while they come
     out the same: same seed, map and size, same bytes. If a recorded
@@ -241,7 +248,7 @@ def write_workloads(out, seeds, orders=WORKLOAD_ORDERS) -> dict:
     index_path = folder / "workloads.json"
     recorded = json.loads(index_path.read_text()) if index_path.exists() else {}
 
-    shelves, dropoffs = generate_orders.stations_of(generate_orders.DEFAULT_CONFIG)
+    shelves, dropoffs = generate_orders.stations_of(generate_orders.DEFAULT_CONFIG, map_name)
     paths, index = {}, dict(recorded)
 
     for seed in seeds:
@@ -269,6 +276,10 @@ def write_workloads(out, seeds, orders=WORKLOAD_ORDERS) -> dict:
     index_path.write_text(json.dumps(index, indent=2))
 
     return paths
+
+
+def file_sha256(path) -> str:
+    return sha256(Path(path).read_bytes()).hexdigest()
 
 
 def run_dir_of(out, strategy, robots, seed) -> Path:
@@ -340,7 +351,7 @@ def strategy_identities(strategies, rules=None) -> dict:
 def workload_command(
     run_dir, strategy, robots, seed, orders, export,
     orders_file=None, quantum=None, window=None, purpose=None, features=False,
-    teacher_panel=False, rule=None,
+    teacher_panel=False, rule=None, map_path=None,
 ) -> list:
     """The run_workload.py command line of one run.
 
@@ -375,6 +386,9 @@ def workload_command(
     if orders_file is not None:
         cmd += ["--orders-file", str(orders_file)]
 
+    if map_path is not None:
+        cmd += ["--map", str(map_path)]
+
     if export:
         cmd.append("--export")
 
@@ -393,14 +407,14 @@ def workload_command(
 def run_one(
     out, strategy, robots, seed, orders, export,
     orders_file=None, quantum=None, window=None, purpose=None, features=False,
-    teacher_panel=False, rule=None,
+    teacher_panel=False, rule=None, map_path=None,
 ):
     run_dir = run_dir_of(out, strategy, robots, seed)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = workload_command(
         run_dir, strategy, robots, seed, orders, export, orders_file, quantum, window, purpose,
-        features, teacher_panel, rule,
+        features, teacher_panel, rule, map_path,
     )
 
     started = time.perf_counter()
@@ -482,6 +496,12 @@ def main() -> int:
         metavar="LABEL=ARTIFACT",
         help="learned rule sets to run as arms ilp_<LABEL> beside --strategies",
     )
+    parser.add_argument(
+        "--map",
+        default=None,
+        help="run every run on this map instead of the one config's "
+        "(held-out transfer map); seeded workloads only",
+    )
     parser.add_argument("--resume", action="store_true", help="run only what is missing or failed")
     parser.add_argument("--force", action="store_true", help="start again; the old directory is kept, renamed")
     args = parser.parse_args()
@@ -497,6 +517,20 @@ def main() -> int:
             WorkloadExecutor.resolve_window(args.window, 1)
         except ValueError as error:
             parser.error(f"--window {args.window}: {error}")
+
+    map_path = None
+
+    if args.map is not None:
+        if args.workloads != "seeded":
+            parser.error("--map needs --workloads seeded: the reference order file belongs to the one config's map")
+
+        try:
+            map_path = resolve_map_name(args.map, generate_orders.DEFAULT_CONFIG)
+        except FileNotFoundError as error:
+            parser.error(f"--map {args.map}: {error}")
+
+    if args.purpose == "transfer" and map_path is None:
+        parser.error("--purpose transfer is the held-out map evaluation; it needs --map")
 
     if "ilp" in args.strategies:
         parser.error("a learned strategy runs through --rules LABEL=ARTIFACT, not --strategies ilp")
@@ -538,6 +572,9 @@ def main() -> int:
         # None without --rules, so an experiment recorded before this key
         # existed still resumes.
         "rules": rules or None,
+        # None without --map, so an experiment recorded before this key
+        # existed still resumes.
+        "map": {"file": map_path.name, "sha256": file_sha256(map_path)} if map_path else None,
     }
 
     refusal = prepare(out, spec, args.resume, args.force)
@@ -564,7 +601,7 @@ def main() -> int:
 
     record_path.write_text(json.dumps(record, indent=2))
 
-    files = write_workloads(out, args.seeds, args.workload_orders) if paired else {}
+    files = write_workloads(out, args.seeds, args.workload_orders, map_path) if paired else {}
     pending = [run for run in grid if not finished(run_dir_of(out, *run))]
 
     print(
@@ -585,6 +622,7 @@ def main() -> int:
                         quantum=args.quantum, window=args.window,
                         purpose=args.purpose, features=args.features,
                         teacher_panel=args.teacher_panel, rule=rules.get(run[0]),
+                        map_path=map_path,
                     ),
                     pending,
                 ),

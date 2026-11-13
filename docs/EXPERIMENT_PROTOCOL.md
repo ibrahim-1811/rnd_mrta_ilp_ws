@@ -130,7 +130,8 @@ experiment.json) and reported, not refused.
 Seed roles (DECISIONS.md, "Seed Split"; M0): training 101-110,
 validation 111-115, evaluation 1-30, a proposed sealed final set
 201-230. `--purpose` declares an experiment's role and refuses any other
-seed.
+seed. The held-out map H100 has its own sealed set, 301-330
+(`--purpose transfer`, which also requires `--map`; added 2026-11-13).
 
 ## Dispatch Conditions
 

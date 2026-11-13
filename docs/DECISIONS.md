@@ -2150,3 +2150,38 @@ secondary    mean_completion_time_s, total_distance_m, total_waiting_s,
              Holm family, reported as secondary
 failures     a failed or stalled run is a missing pair, never imputed; counted per arm
 ```
+
+## Held-out Transfer Campaign (2026-11-13)
+
+Decided by the researcher after the M8 final run and before any run on the held-out map.
+Builds the map that "Warehouse Scalability" planned (deferred 2026-10-27, now step 3b).
+
+```text
+map          H100 (src/simulation_env/maps/H100.xlsx, scripts/make_heldout_map.py):
+             76 x 28 cells, horizontal racking, drop-offs on the left and right walls,
+             24 chargers + 12 holding in one top-right block, 100 parking (top-left and
+             bottom walls), 512 shelves, 1412 road cells (W100: 1424). Never trained on.
+             Gates passed 2026-11-13: map_tool check OK; check_map_topology OK (strongly
+             connected, 0 two-way core edges, all 684 terminals enter/leave, 467,172 legs,
+             0 unreachable, 0 through a terminal); 10 smoke runs (100 robots, 1500 orders,
+             dev seed 42, 8 teachers + 2 rule sets) complete, 0 reservation violations
+selection    run_experiment.py --map H100.xlsx (each seed's workload generated from H100;
+             map name and sha256 in the spec; map_path/map_sha256 in every run.json and
+             the settings signature, so H100 runs never pair with W100 runs). The one
+             config stays on W100
+arms         the same 20 as "M8 Final Campaign", the same rule files, unchanged (trained
+             on W100 seeds 104-110 only); thresholds in metres are applied as trained
+lengths      1500 and 5000 orders (option a, kept equal to M8 so the tables compare one to
+             one). Measured: at 1500 orders on H100 the better policies charge 0-14 times
+             per run (W100 about 81), because orders are shorter (108 vs 121 m); this is
+             part of the transfer result, not corrected
+fleets       70, 80, 90, 100 robots; quantum 3, window fleet_size
+seeds        dry run 1-3 (--purpose evaluation, nothing chosen from it), then the sealed
+             transfer set 301-330 (--purpose transfer, new role, refused otherwise), run once
+statistics   exactly as "M8 Final Campaign": Friedman over the 20 arms per length and fleet;
+             two-sided paired Wilcoxon, Holm per family x length x metric; same families,
+             primary order_makespan_s, same secondary metrics
+transfer     a W100 comparison transfers if H100 shows a significant difference in the same
+             direction; reported comparison by comparison, never pooled across maps
+failures     a failed or stalled run is a missing pair, never imputed
+```

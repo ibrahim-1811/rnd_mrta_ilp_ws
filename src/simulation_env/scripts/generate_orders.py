@@ -50,12 +50,13 @@ MAX_LINES = 3
 MAX_QUANTITY = 4
 
 
-def stations_of(config_path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+def stations_of(config_path, map_name=None) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Shelf and drop-off ids, read from the map a config names.
 
     In the map's own numbering order, which for V2 is exactly SHELVES
     and DROPOFFS above, so a V2 workload generated either way is
-    byte-identical.
+    byte-identical. ``map_name`` reads another map instead, found as
+    ``--map`` finds it (the held-out transfer map).
     """
 
     root = Path(__file__).resolve().parents[3]
@@ -64,13 +65,16 @@ def stations_of(config_path) -> tuple[tuple[str, ...], tuple[str, ...]]:
         if str(root / "src" / package) not in sys.path:
             sys.path.insert(0, str(root / "src" / package))
 
-    from mrta_core.sim_config import resolve_map_path
+    from mrta_core.sim_config import resolve_map_name, resolve_map_path
     from mrta_core.warehouse_map import ZoneType
     from mrta_core.warehouse_map_xlsx import load_warehouse_xlsx
 
     # Only the map: the order file this script is about to write need
     # not exist yet.
-    map_path = resolve_map_path(config_path)
+    if map_name is None:
+        map_path = resolve_map_path(config_path)
+    else:
+        map_path = resolve_map_name(map_name, config_path)
     warehouse = load_warehouse_xlsx(map_path)
 
     shelves = tuple(z.zone_id for z in warehouse.zones_of_type(ZoneType.SHELF))
@@ -131,10 +135,15 @@ def main() -> None:
         help="read shelf and drop-off ids from this config's map "
         "(default: the one config, so the current map)",
     )
+    parser.add_argument(
+        "--map",
+        default=None,
+        help="read them from this map instead (held-out transfer map)",
+    )
 
     args = parser.parse_args()
 
-    shelves, dropoffs = stations_of(args.config)
+    shelves, dropoffs = stations_of(args.config, args.map)
     text = build(args.orders, args.seed, shelves, dropoffs)
 
     args.output.write_text(text)
