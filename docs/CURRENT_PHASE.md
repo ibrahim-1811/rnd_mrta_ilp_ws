@@ -1,6 +1,61 @@
 # Current Development Phase
 
-## Status — 13 November 2026
+## Status — 14 November 2026
+
+Active milestone: **M7 explanations, then M9 report**. M8 final campaign (W100) and the held-out transfer campaign (H100) are both run, complete and analysed (DECISIONS.md, "M8 and Transfer Results"). Deadline 2026-12-20.
+
+| Milestone | State |
+|---|---|
+| M0-M6 | as in the 13 November status below; M6 closed with a negative, explained result |
+| M7 explanations | evaluated 2026-11-14 (Stage 1, uncommitted): `ilp_learning/explain_eval.py` replays and explains every pick of D's final runs on both maps; see "M7 explanation evaluation" below |
+| M8 final campaign | done 2026-11-13: 20 arms, W100, 1500/5000 orders x 70-100 robots, sealed seeds 201-230, 4800/4800 runs, 0 missing pairs, 0 reservation violations (jobs 479988-479995, code `fb0a6bd`). Statistics `simulation_env.campaign_stats` (Friedman + Wilcoxon-Holm, `b4d0b0f`) |
+| Held-out transfer (3b) | done 2026-11-14: same 20 arms and rule files on H100, sealed seeds 301-330, 4800/4800 runs, 0 missing pairs, 0 reservation violations, no robot below 0 % (jobs 480047-480054, code `da921a9`, H100 sha256 `1443fa016eb6...`) |
+| M9 report | not started |
+
+Results, primary metric order makespan (Holm-corrected, paired over 30 seeds):
+
+| Comparison | W100 (seeds 201-230) | H100 (seeds 301-330) |
+|---|---|---|
+| D (outcome-aware ILP) vs plain ILP copy of multi_criteria | -1.4 to -5.3 %, significant 8/8 | -1.4 to -3.0 %, significant 8/8 (transfers 8/8) |
+| D vs multi_criteria (its teacher) | +0.1 to +1.9 % worse; significant at 1500 x 70-90 (+0.6/+1.2/+1.9 %), tied in the other 5 | -0.4 to -1.5 % better, significant at 1500 x 90 and all four 5000 settings |
+| Best Friedman mean rank | multi_criteria in all 8 settings | D in all 8 settings (1.00 at 5000 x 70 and 80: fastest on every seed) |
+| multi_criteria vs nearest_astar | -0.5 to -1.2 % | -0.3 to +0.9 % (lead mostly gone) |
+| D vs nearest_astar (descriptive, not pre-registered) | -0.7 to +0.8 % | -0.6 to -1.3 % |
+
+Frozen transfer test (W100 significant -> H100 significant, same direction), all 160 primary comparisons: of 96 significant on W100, 81 transfer, 4 reverse, 11 do not hold. Reversals: D vs multi_criteria at 1500 x 90; ILP nearest_manhattan copy vs its teacher at 5000 x 70 and 80 (now 1.5-3.4 % worse everywhere); multi_criteria vs nearest_astar at 1500 x 90.
+
+What can be claimed: outcome-derived labels beat plain imitation on both maps; on W100 the outcome-aware rules come within 0.1-1.9 % of their teacher but do not beat it; on the held-out H100 they beat it, partly because the teacher's hand-set weighting loses its edge on the new layout while the rules keep theirs. One new layout only; not a general claim that the rules beat the teacher. Caveats: D and its B counterpart were trained on different corpora (300-order robust oracle vs 1500-order teacher corpus); four arms are identical to auction (ILP auction, pooled, plurality) and majority is identical to ILP earliest_finish on both maps.
+
+Data (git-ignored, copied from the cluster): `runs/campaign/final/` and `runs/campaign/transfer/` (`o*/r*/summary.csv`, `stats/{friedman,pairs,failures}.csv`). Report: `runs/campaign/final/report/build_report.py` rebuilds `m8_final_campaign.html` from that data after checking it and reproducing both stats files:
+
+```bash
+PYTHONPATH=src/mrta_core:src/simulation_env:src/task_management:src/ilp_learning \
+  pixi run python runs/campaign/final/report/build_report.py
+```
+
+### M7 explanation evaluation (2026-11-14, uncommitted)
+
+`python -m ilp_learning.explain_eval <campaign> --rules <rule_artifact.json> --out <dir>` rebuilds every decision's eligible pairs from `decisions.parquet` (decision-time values only; est_finish_s from run.json), re-runs the iterative matcher with the rule artifact the run used (sha256 checked against run.json), and requires the replay to equal `rule_trace.parquet` pick for pick (robot, order, round, rule or fallback, clause). Only a reproduced pick is explained: the clause's conditions with their numbers (`explain.py`), and for a rule pick the runner-up robot for the same order with the condition it failed, or the tie-break it lost. Rules on congestion or workload features are refused (not recorded in decisions.parquet), so worded explanations exist for D only; every arm gets rule/fallback and clause shares from its trace.
+
+| D, outcome-aware ILP | W100 (201-230) | H100 (301-330) |
+|---|---|---|
+| runs / decisions / picks | 240 / 243,920 / 780,000 | 240 / 221,231 / 780,000 |
+| picks not reproduced by the replay | **0** | **0** |
+| picks decided by a rule (rest: fallback) | 90.2 % (89.1-92.3 % per setting) | 95.1 % (94.1-96.8 %) |
+| clause 1 / 2 / 3 (oldest order / battery / charger) | 25 / 55 / 20 % | 12 / 63 / 25 % |
+| rule size | 3 clauses, 9 conditions, 6 predicates | same rules |
+| words per explanation (mean) | 38 | 39 |
+| runner-up fails "finishes the order soonest" | 97.6 % of contested picks | 98.6 % |
+| runner-up loses only on the tie-break | 0.6 % | 0.3 % |
+| median finish-time lead over the runner-up | 4.0 s | 4.7 s |
+
+Reading: the rules' choice of robot is almost always the one that finishes the order soonest, typically by a few seconds; the battery, charger, closeness and order-age conditions decide which orders are served first in a round. Rule sizes and rule shares of the other arms (`trace_all_arms.csv`): the nearest_astar, earliest_finish, auction, pooled, majority and plurality copies decide 100 % by rule (one clause fires every time); single multi_criteria 98 %; milp 59 %, hungarian 59 %, nearest_manhattan 45 %, random 39 %.
+
+Outputs (git-ignored): `runs/campaign/{final,transfer}/explain/` with `summary.json`, `runs.csv`, `trace_all_arms.csv`, `examples.md` and `logs/o*_r*_s{201,301}.{jsonl,md}` (every pick of seed 201 / 301 in each setting). `explain.py` wording: numbers keep a decimal when rounding would hide a difference, the battery margin and the closeness condition state their numbers. Tests: `test_explain_eval.py` (13 with `test_explain.py`), including a real headless run replayed pick for pick and a tampered trace caught.
+
+Next: Stage 2 (Gazebo demo of D with live explanations), Stage 3 (multi-page R&D site), then the M9 report. Optional: quantum 0 condition (needs an amendment naming new seeds; 201-230 and 301-330 are spent).
+
+## Status — 13 November 2026 (superseded by 14 November above)
 
 Active milestone: **M8 final campaign (planning)**. M6 closed on 2026-11-13 (DECISIONS.md, "M6 Closed"). Deadline 2026-12-20.
 

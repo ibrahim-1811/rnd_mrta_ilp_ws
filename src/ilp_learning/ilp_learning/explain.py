@@ -19,6 +19,15 @@ FALLBACK_TEXT = ("no learned rule covered any remaining pair, so the fixed fallb
                  "waiting order and the nearest free robot")
 
 
+def pair_text(a: float, b: float, unit: str = "") -> tuple[str, str]:
+    """Two numbers with just enough decimals (0-2) that unequal values do not print equal."""
+    for d in (0, 1, 2):
+        sa, sb = f"{a:.{d}f}", f"{b:.{d}f}"
+        if sa != sb or a == b:
+            break
+    return sa + unit, sb + unit
+
+
 def _next_best(pairs, pick, field, by):
     """The best value of field among the other robots (by='order_id') or orders (by='robot_id')."""
     other = "robot_id" if by == "order_id" else "order_id"
@@ -32,8 +41,10 @@ def statement(name: str, p: CandidatePair, pairs: Sequence[CandidatePair]) -> st
     R, O = p.robot_id, p.order_id  # noqa: E741 (robot, order, as in the clauses)
     if name == "best_finish_for_order":
         nxt = _next_best(pairs, p, "est_finish_s", "order_id")
-        tail = f", next best {nxt:.0f} s" if nxt is not None else ", no other robot could take it"
-        return f"{R} finishes {O} soonest ({p.est_finish_s:.0f} s{tail})"
+        if nxt is None:
+            return f"{R} finishes {O} soonest ({p.est_finish_s:.0f} s, no other robot could take it)"
+        mine, theirs = pair_text(p.est_finish_s, nxt, " s")
+        return f"{R} finishes {O} soonest ({mine}, next best {theirs})"
     if name == "nearest_static":
         return f"{O} is {R}'s closest order ({p.c_static_m:.0f} m on the one-way lanes)"
     if name == "earliest_static_finish":
@@ -53,7 +64,11 @@ def statement(name: str, p: CandidatePair, pairs: Sequence[CandidatePair]) -> st
     if name == "oldest_eligible_for_robot":
         return f"{O} is the oldest order {R} may take"
     if name == "near_best_cost_for_robot":
-        return f"{O} is almost as close to {R} as its closest order"
+        best = min(x.c_static_m for x in pairs if x.robot_id == R)
+        if best == p.c_static_m:
+            return f"{O} is {R}'s closest order ({p.c_static_m:.0f} m)"
+        mine, theirs = pair_text(p.c_static_m, best, " m")
+        return f"{O} is almost as close to {R} as its closest order ({mine} against {theirs})"
     if name == "batch_contention":
         return f"{p.free_robots:.0f} free robots compete for {p.window_orders:.0f} waiting orders"
     if name == "high_fleet_busy_ratio":
@@ -75,7 +90,8 @@ def statement(name: str, p: CandidatePair, pairs: Sequence[CandidatePair]) -> st
     if name == "low_local_density":
         return f"few robots are near {R} right now (density {p.local_density:.2f})"
     if name == "best_margin_for_order":
-        return f"{R} has the most battery to spare for {O} ({p.energy_margin_percent:.0f}% above what the trip needs)"
+        return (f"{R} has the most battery to spare for {O} ({p.energy_margin_percent:.0f}% left after "
+                f"the trip, the way to a charger and the reserve)")
     if name == "low_energy_margin":
         return f"{R} would have little battery to spare after {O} ({p.energy_margin_percent:.0f}%)"
     if name == "near_charger_after_order":

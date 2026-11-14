@@ -2185,3 +2185,43 @@ transfer     a W100 comparison transfers if H100 shows a significant difference 
              direction; reported comparison by comparison, never pooled across maps
 failures     a failed or stalled run is a missing pair, never imputed
 ```
+
+## M8 and Transfer Results (2026-11-14)
+
+Recorded after both sealed runs and their statistics. Nothing below changes a frozen design;
+it records the outcome and the claim the report may make.
+
+```text
+runs         M8 final: W100, seeds 201-230, jobs 479988-479995, code fb0a6bd
+             transfer: H100, seeds 301-330, jobs 480047-480054, code da921a9
+             each 4800/4800 runs, 0 missing pairs, 0 reservation violations; both
+             seed sets are now spent and must not be re-run
+statistics   simulation_env.campaign_stats on each campaign's summaries; stats/ in
+             runs/campaign/{final,transfer}; reproduced exactly by
+             runs/campaign/final/report/build_report.py
+W100         D vs plain ILP copy of multi_criteria: -1.4 to -5.3 % makespan, significant
+             in 8/8. D vs multi_criteria: worse at 1500 x 70-90 (+0.6/+1.2/+1.9 %,
+             significant), tied in the other 5. multi_criteria has the best Friedman
+             mean rank in all 8 settings
+H100         D vs plain copy: -1.4 to -3.0 %, significant 8/8. D vs multi_criteria:
+             -0.4 to -1.5 %, significant at 1500 x 90 and at all four 5000 settings.
+             D has the best Friedman mean rank of the 20 arms in all 8 settings
+transfer     of 96 primary comparisons significant on W100: 81 transfer, 4 reverse,
+             11 do not hold. D's gain over plain imitation transfers 8/8. D's W100
+             deficit against multi_criteria does not transfer (reverses at 1500 x 90,
+             gone at 70 and 80); its H100 wins at 5000 orders are new on H100
+reading      multi_criteria's lead over nearest_astar shrinks from -0.5..-1.2 % (W100) to
+             -0.3..+0.9 % (H100), while D vs nearest_astar moves from -0.7..+0.8 % to
+             -0.6..-1.3 % (descriptive, not a pre-registered test). Why the teacher
+             weakens on H100 was not tested
+claim        outcome labels beat plain imitation on both maps; the outcome-aware rules do
+             not beat their teacher on the training map and do beat it on one held-out
+             layout. No general claim that learned rules beat the teacher
+caveats      D (300-order robust-oracle labels) and its B counterpart (1500-order teacher
+             corpus) differ in training data as well as label type. auction = ILP auction
+             = pooled = plurality and majority = ILP earliest_finish on both maps
+correction   "Held-out Transfer Campaign" quotes 0-14 charge sessions per run at 1500
+             orders on H100; that was measured with 100 robots only. In the final run the
+             strong policies charge about once per robot at 70-90 robots and about 2 times
+             per run at 100 robots (W100: about 81 per run)
+```
